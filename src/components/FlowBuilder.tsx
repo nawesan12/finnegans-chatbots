@@ -959,7 +959,11 @@ function Topbar({
       </div>
     </div>
   );
-}
+});
+
+FlowBuilder.displayName = "FlowBuilder";
+
+export default FlowBuilder;
 
 // ---------------------------------------------
 // Palette
@@ -1056,31 +1060,27 @@ function Palette({ onAdd }) {
 // ---------------------------------------------
 // Main Component
 // ---------------------------------------------
-export default function FlowBuilder() {
+const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
   // nodes / edges
   const [nodes, setNodes, onNodesChange] = useNodesState(defaultNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(defaultEdges);
   const [selected, setSelected] = useState(null);
   const rfRef = useRef(null);
 
-  // persistence
+  // Load initial flow from prop
   useEffect(() => {
-    const saved = localStorage.getItem("wa-flow-builder");
-    if (saved) {
-      try {
-        const { nodes: n, edges: e } = JSON.parse(saved);
-        if (Array.isArray(n) && Array.isArray(e)) {
-          setNodes(n);
-          setEdges(e);
-        }
-      } catch {}
+    if (initialFlow && initialFlow.nodes && initialFlow.edges) {
+      setNodes(initialFlow.nodes);
+      setEdges(initialFlow.edges);
     }
-  }, [setNodes, setEdges]);
+  }, [initialFlow, setNodes, setEdges]);
 
-  useEffect(() => {
-    const payload = JSON.stringify({ nodes, edges });
-    localStorage.setItem("wa-flow-builder", payload);
-  }, [nodes, edges]);
+  // Expose a function to get the current flow data
+  React.useImperativeHandle(ref, () => ({
+    getFlowData: () => {
+      return { nodes, edges };
+    },
+  }));
 
   // add node
   const addNode = (type) => {
