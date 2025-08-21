@@ -23,11 +23,13 @@ const modalContentVariants = {
 const ImportContactsModal = ({
   isOpen,
   onClose,
+  onImportSuccess,
 }: {
   isOpen: boolean;
   onClose: () => void;
+  onImportSuccess: () => void;
 }) => {
-  const [file, setFile] = useState();
+  const [file, setFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState("idle"); // idle, uploading, success, error
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -46,18 +48,36 @@ const ImportContactsModal = ({
     maxFiles: 1,
   });
 
-  const handleImport = () => {
+  const handleImport = async () => {
     if (!file) return;
     setUploadStatus("uploading");
-    // Simulate upload process
-    setTimeout(() => {
-      // Here you would typically parse the file and add contacts
-      console.log("Importing file:", file.name);
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const token = localStorage.getItem("jwt");
+      const response = await fetch("/api/contacts/import", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Import failed");
+      }
+
       setUploadStatus("success");
+      onImportSuccess();
       setTimeout(() => {
         handleClose();
       }, 1500);
-    }, 2000);
+    } catch (error) {
+      console.error(error);
+      setUploadStatus("error");
+    }
   };
 
   const handleClose = () => {
@@ -168,6 +188,7 @@ const ImportContactsModal = ({
                 {uploadStatus === "success" && (
                   <CheckCircle className="h-5 w-5" />
                 )}
+                {uploadStatus === "error" && "Error"}
               </button>
             </div>
           </motion.div>

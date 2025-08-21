@@ -23,139 +23,14 @@ import {
   Search,
   ArrowRight,
   BarChart2,
-  Filter,
-  FileUp,
   Save,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-
 import Image from "next/image";
 import CreateNewDropdown from "@/components/CreateNewDropdown";
 import ImportContactsModal from "@/components/ImportContactsModal";
 import FlowBuilder from "@/components/FlowBuilder";
-
-// Mock Data
-const initialMetrics = {
-  totalContacts: 1250,
-  activeConversations: 82,
-  messagesSent: 25430,
-  messagesReceived: 19870,
-  avgResponseTime: "45s",
-  flowSuccessRate: "88%",
-};
-const chartData = [
-  { name: "Mon", sent: 400, received: 240 },
-  { name: "Tue", sent: 300, received: 139 },
-  { name: "Wed", sent: 200, received: 980 },
-  { name: "Thu", sent: 278, received: 390 },
-  { name: "Fri", sent: 189, received: 480 },
-  { name: "Sat", sent: 239, received: 380 },
-  { name: "Sun", sent: 349, received: 430 },
-];
-const initialFlows = [
-  {
-    id: 1,
-    name: "Welcome Flow",
-    trigger: "/welcome",
-    status: "Active",
-    lastModified: "2024-08-20",
-  },
-  {
-    id: 2,
-    name: "Support Ticket",
-    trigger: "support",
-    status: "Draft",
-    lastModified: "2024-08-18",
-  },
-  {
-    id: 3,
-    name: "Product Inquiry",
-    trigger: "product",
-    status: "Active",
-    lastModified: "2024-08-15",
-  },
-  {
-    id: 4,
-    name: "Appointment Booking",
-    trigger: "book",
-    status: "Inactive",
-    lastModified: "2024-07-30",
-  },
-];
-const initialLogs = [
-  {
-    id: 1,
-    contact: "John Doe (+1...1234)",
-    flow: "Welcome Flow",
-    timestamp: "2024-08-21 10:30 AM",
-    status: "Completed",
-  },
-  {
-    id: 2,
-    contact: "Jane Smith (+44...5678)",
-    flow: "Support Ticket",
-    timestamp: "2024-08-21 10:25 AM",
-    status: "In Progress",
-  },
-  {
-    id: 3,
-    contact: "Peter Jones (+1...9012)",
-    flow: "Product Inquiry",
-    timestamp: "2024-08-21 10:15 AM",
-    status: "Error",
-  },
-  {
-    id: 4,
-    contact: "Mary Williams (+1...3456)",
-    flow: "Welcome Flow",
-    timestamp: "2024-08-21 10:05 AM",
-    status: "Completed",
-  },
-  {
-    id: 5,
-    contact: "David Brown (+44...7890)",
-    flow: "Appointment Booking",
-    timestamp: "2024-08-21 09:55 AM",
-    status: "Completed",
-  },
-];
-const initialContacts = [
-  {
-    id: 1,
-    name: "John Doe",
-    phone: "+1 555-123-1234",
-    tags: ["VIP", "New"],
-    lastContact: "2024-08-21",
-  },
-  {
-    id: 2,
-    name: "Jane Smith",
-    phone: "+44 20-7946-0958",
-    tags: ["Support"],
-    lastContact: "2024-08-21",
-  },
-  {
-    id: 3,
-    name: "Peter Jones",
-    phone: "+1 555-901-9012",
-    tags: ["Lead"],
-    lastContact: "2024-08-20",
-  },
-  {
-    id: 4,
-    name: "Mary Williams",
-    phone: "+1 555-345-3456",
-    tags: [],
-    lastContact: "2024-08-19",
-  },
-  {
-    id: 5,
-    name: "David Brown",
-    phone: "+44 20-7946-0123",
-    tags: ["Customer"],
-    lastContact: "2024-08-18",
-  },
-];
+import { fetcher } from "@/lib/api";
 
 // Animation Variants
 const pageVariants = {
@@ -222,7 +97,9 @@ const Sidebar = ({
               e.preventDefault();
               setActivePage(item.id);
             }}
-            className={`flex items-center p-3 rounded-lg transition-colors ${activePage === item.id ? "bg-[#4bc3fe]" : "hover:bg-gray-700"}`}
+            className={`flex items-center p-3 rounded-lg transition-colors ${
+              activePage === item.id ? "bg-[#4bc3fe]" : "hover:bg-gray-700"
+            }`}
           >
             <item.icon className="h-5 w-5" />
             {!isCollapsed && (
@@ -240,10 +117,12 @@ const Sidebar = ({
       </nav>
       <div className="p-4 border-t border-gray-700">
         <div className="flex items-center">
-          <img
+          <Image
             className="h-10 w-10 rounded-full object-cover"
             src="https://placehold.co/100x100/6366f1/white?text=A"
             alt="Admin"
+            width={40}
+            height={40}
           />
           {!isCollapsed && (
             <motion.div
@@ -330,36 +209,42 @@ const MetricCard = ({ title, value, change, icon: Icon }) => (
   </motion.div>
 );
 
-const Dashboard = () => {
-  const metrics = useMemo(
-    () => [
-      {
-        title: "Contactos Totales",
-        value: initialMetrics.totalContacts,
-        change: "+5% this month",
-        icon: Users,
-      },
-      {
-        title: "Conversaciones Activas",
-        value: initialMetrics.activeConversations,
-        change: "-2% today",
-        icon: MessageSquare,
-      },
-      {
-        title: "Mensajes Enviados",
-        value: initialMetrics.messagesSent,
-        change: "+12% this week",
-        icon: ArrowRight,
-      },
-      {
-        title: "Ratio de Exito",
-        value: initialMetrics.flowSuccessRate,
-        change: "+1.2% this month",
-        icon: Bot,
-      },
-    ],
-    [],
-  );
+const Dashboard = ({ logs, contacts }) => {
+    const metrics = useMemo(() => {
+        const totalContacts = contacts.length;
+        const activeConversations = logs.filter(log => log.status === 'In Progress').length;
+        // These would need more complex logic/data
+        const messagesSent = 0;
+        const flowSuccessRate = 'N/A';
+
+        return [
+          {
+            title: "Contactos Totales",
+            value: totalContacts,
+            icon: Users,
+          },
+          {
+            title: "Conversaciones Activas",
+            value: activeConversations,
+            icon: MessageSquare,
+          },
+          {
+            title: "Mensajes Enviados",
+            value: messagesSent,
+            icon: ArrowRight,
+          },
+          {
+            title: "Ratio de Exito",
+            value: flowSuccessRate,
+            icon: Bot,
+          },
+        ];
+    }, [logs, contacts]);
+
+    const chartData = useMemo(() => {
+        // This would need to be calculated from logs
+        return [];
+    }, []);
 
   return (
     <div className="p-6 space-y-6">
@@ -422,14 +307,14 @@ const Dashboard = () => {
             Actividad Reciente
           </h3>
           <ul className="space-y-4">
-            {initialLogs.slice(0, 4).map((log) => (
+            {logs.slice(0, 4).map((log) => (
               <li key={log.id} className="flex items-center justify-between">
                 <div>
-                  <p className="font-medium text-gray-700">{log.contact}</p>
-                  <p className="text-sm text-gray-500">{log.flow}</p>
+                  <p className="font-medium text-gray-700">{log.contact.name}</p>
+                  <p className="text-sm text-gray-500">{log.flow.name}</p>
                 </div>
                 <span className="text-sm text-gray-400">
-                  {log.timestamp.split(" ")[1]} {log.timestamp.split(" ")[2]}
+                  {new Date(log.createdAt).toLocaleTimeString()}
                 </span>
               </li>
             ))}
@@ -482,11 +367,11 @@ const Table = ({ columns, data }) => (
   </div>
 );
 
-const Logs = () => {
+const Logs = ({ logs }) => {
   const columns = [
-    { key: "contact", label: "Contact" },
-    { key: "flow", label: "Flow" },
-    { key: "timestamp", label: "Timestamp" },
+    { key: "contact", label: "Contact", render: (row) => row.contact.name },
+    { key: "flow", label: "Flow", render: (row) => row.flow.name },
+    { key: "timestamp", label: "Timestamp", render: (row) => new Date(row.createdAt).toLocaleString() },
     {
       key: "status",
       label: "Status",
@@ -498,7 +383,9 @@ const Logs = () => {
         };
         return (
           <span
-            className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${colors[row.status]}`}
+            className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+              colors[row.status] || 'bg-gray-100 text-gray-800'
+            }`}
           >
             {row.status}
           </span>
@@ -521,13 +408,13 @@ const Logs = () => {
         variants={itemVariants}
         className="bg-white rounded-lg shadow-md"
       >
-        <Table columns={columns} data={initialLogs} />
+        <Table columns={columns} data={logs} />
       </motion.div>
     </div>
   );
 };
 
-const Contacts = ({ onImportClick }) => {
+const Contacts = ({ contacts, onImportClick }) => {
   const columns = [
     { key: "name", label: "Name" },
     { key: "phone", label: "Phone" },
@@ -538,16 +425,16 @@ const Contacts = ({ onImportClick }) => {
         <div className="flex space-x-1">
           {row.tags.map((tag) => (
             <span
-              key={tag}
+              key={tag.tag.id}
               className="px-2 text-xs font-semibold rounded-full bg-gray-200 text-gray-700"
             >
-              {tag}
+              {tag.tag.name}
             </span>
           ))}
         </div>
       ),
     },
-    { key: "lastContact", label: "Last Contact" },
+    { key: "lastContact", label: "Last Contact", render: (row) => new Date(row.updatedAt).toLocaleDateString() },
     {
       key: "actions",
       label: "Actions",
@@ -575,15 +462,50 @@ const Contacts = ({ onImportClick }) => {
             <span>Importar Contactos</span>
           </motion.button>
         </div>
-        <Table columns={columns} data={initialContacts} />
+        <Table columns={columns} data={contacts} />
       </motion.div>
     </div>
   );
 };
 
-const Flows = () => {
-  const [flows, setFlows] = useState(initialFlows);
+import { useNodesState, useEdgesState, addEdge } from "reactflow";
+import { toast } from "sonner";
+
+const Flows = ({ flows, setFlows }) => {
   const [editingFlow, setEditingFlow] = useState(null);
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+
+  const onConnect = useCallback(
+    (params) => setEdges((eds) => addEdge(params, eds)),
+    [setEdges]
+  );
+
+  useEffect(() => {
+    if (editingFlow && editingFlow.definition) {
+      setNodes(editingFlow.definition.nodes || []);
+      setEdges(editingFlow.definition.edges || []);
+    }
+  }, [editingFlow, setNodes, setEdges]);
+
+  const handleSaveFlow = async () => {
+    if (!editingFlow) return;
+
+    const definition = { nodes, edges };
+    try {
+      await fetcher(`/api/flows/${editingFlow.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ definition }),
+      });
+      toast.success("Flow saved successfully");
+      // refetch flows
+      fetcher("/api/flows").then(setFlows);
+      setEditingFlow(null);
+    } catch {
+      toast.error("Failed to save flow");
+    }
+  };
+
   const columns = [
     { key: "name", label: "Flow Name" },
     { key: "trigger", label: "Trigger Keyword" },
@@ -598,14 +520,16 @@ const Flows = () => {
         };
         return (
           <span
-            className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${colors[row.status]}`}
+            className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+              colors[row.status] || 'bg-gray-100 text-gray-800'
+            }`}
           >
             {row.status}
           </span>
         );
       },
     },
-    { key: "lastModified", label: "Last Modified" },
+    { key: "lastModified", label: "Last Modified", render: (row) => new Date(row.updatedAt).toLocaleDateString() },
     {
       key: "actions",
       label: "Actions",
@@ -646,12 +570,21 @@ const Flows = () => {
             <h2 className="text-xl font-semibold text-gray-800">
               {editingFlow.name}
             </h2>
-            <button className="flex items-center gap-2 bg-[#4bc3fe] text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-indigo-700">
+            <button
+              onClick={handleSaveFlow}
+              className="flex items-center gap-2 bg-[#4bc3fe] text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-indigo-700"
+            >
               <Save className="h-5 w-5 mr-1" /> Guardar Flujo
             </button>
           </div>
           <div className="flex-1">
-            <FlowBuilder />
+            <FlowBuilder
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+            />
           </div>
         </motion.div>
       ) : (
@@ -674,6 +607,34 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
+  const [contacts, setContacts] = useState([]);
+  const [flows, setFlows] = useState([]);
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        setLoading(true);
+        const [contactsData, flowsData, logsData] = await Promise.all([
+          fetcher("/api/contacts"),
+          fetcher("/api/flows"),
+          fetcher("/api/logs"),
+        ]);
+        setContacts(contactsData);
+        setFlows(flowsData);
+        setLogs(logsData);
+      } catch (err) {
+        console.error("Failed to fetch data", err);
+        // Here you might want to redirect to a login page
+        // if the error status is 401
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, []);
+
   const pageTitles = {
     dashboard: "Panel de Control",
     flows: "Flujos de Mensajes",
@@ -688,15 +649,24 @@ export default function App() {
   };
 
   const renderPage = () => {
+    if (loading) {
+        return <div className="p-6">Loading...</div>;
+    }
+
     switch (activePage) {
       case "dashboard":
-        return <Dashboard />;
+        return <Dashboard logs={logs} contacts={contacts} />;
       case "flows":
-        return <Flows />;
+        return <Flows flows={flows} setFlows={setFlows} />;
       case "logs":
-        return <Logs />;
+        return <Logs logs={logs} />;
       case "contacts":
-        return <Contacts onImportClick={() => setIsImportModalOpen(true)} />;
+        return (
+          <Contacts
+            contacts={contacts}
+            onImportClick={() => setIsImportModalOpen(true)}
+          />
+        );
       case "settings":
         return (
           <div className="p-6">
@@ -704,7 +674,7 @@ export default function App() {
           </div>
         );
       default:
-        return <Dashboard />;
+        return <Dashboard logs={logs} contacts={contacts} />;
     }
   };
 
@@ -739,6 +709,10 @@ export default function App() {
       <ImportContactsModal
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
+        onImportSuccess={() => {
+            // Refetch contacts after import
+            fetcher("/api/contacts").then(setContacts);
+        }}
       />
     </div>
   );

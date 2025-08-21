@@ -13,3 +13,74 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  contacts Contact[]
+  flows    Flow[]
+}
+
+model Contact {
+  id        String   @id @default(cuid())
+  phone     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  tags TagsOnContacts[]
+  logs Log[]
+}
+
+model Tag {
+  id   String @id @default(cuid())
+  name String @unique
+
+  contacts TagsOnContacts[]
+}
+
+model TagsOnContacts {
+  contact   Contact @relation(fields: [contactId], references: [id])
+  contactId String
+  tag       Tag     @relation(fields: [tagId], references: [id])
+  tagId     String
+
+  @@id([contactId, tagId])
+}
+
+model Flow {
+  id          String   @id @default(cuid())
+  name        String
+  trigger     String
+  status      String   @default("Draft") // e.g., Draft, Active, Inactive
+  definition  Json?    // For react-flow JSON
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  logs Log[]
+}
+
+model Log {
+  id        String   @id @default(cuid())
+  status    String // e.g., "Completed", "In Progress", "Error"
+  context   Json?    // To store session variables
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  contactId String
+  contact   Contact @relation(fields: [contactId], references: [id])
+
+  flowId String
+  flow   Flow   @relation(fields: [flowId], references: [id])
+}
