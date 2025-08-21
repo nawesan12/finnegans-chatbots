@@ -102,7 +102,7 @@ const ConditionDataSchema = BaseDataSchema.extend({
 const APICallDataSchema = BaseDataSchema.extend({
   url: z.string().url(),
   method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]).default("POST"),
-  headers: z.record(z.string()).default({}),
+  headers: z.record(z.string(), z.string()).default({}),
   body: z.string().default(""),
   assignTo: z.string().default("apiResult"),
 });
@@ -136,7 +136,13 @@ const nodeHeight = 100;
 const dagreGraph = new dagre.graphlib.Graph();
 dagreGraph.setDefaultEdgeLabel(() => ({}));
 
-const getLayoutedElements = (nodes, edges, direction = "TB") => {
+import { Node, Edge } from "reactflow";
+
+const getLayoutedElements = (
+  nodes: Node[],
+  edges: Edge[],
+  direction = "TB"
+) => {
   const isHorizontal = direction === "LR";
   dagreGraph.setGraph({ rankdir: direction, nodesep: 40, ranksep: 80 });
 
@@ -160,7 +166,17 @@ const makeId = () => Math.random().toString(36).slice(2, 9);
 // ---------------------------------------------
 // Node Renderers
 // ---------------------------------------------
-const Shell = ({ icon: Icon, title, children, color }) => (
+const Shell = ({
+  icon: Icon,
+  title,
+  children,
+  color,
+}: {
+  icon: React.ElementType;
+  title: string;
+  children: React.ReactNode;
+  color: string;
+}) => (
   <div className={`w-[280px] rounded-2xl shadow-sm border ${color} bg-white`}>
     <div className="flex items-center gap-2 px-4 py-2 border-b">
       <Icon className="h-4 w-4" />
