@@ -1,15 +1,61 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MoreVertical, ChevronLeft, Save } from "lucide-react";
-import { initialFlows } from "@/data/mock-data";
 import { itemVariants } from "@/lib/animations";
 import Table from "@/components/dashboard/Table";
 import FlowBuilder from "@/components/FlowBuilder";
+import { toast } from "sonner";
 
 const FlowsPage = () => {
-  const [flows, setFlows] = useState(initialFlows);
+  const [flows, setFlows] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [editingFlow, setEditingFlow] = useState(null);
+  const flowBuilderRef = useRef(null);
+
+  const fetchFlows = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch("/api/flows");
+      if (!response.ok) throw new Error("Failed to fetch flows");
+      const data = await response.json();
+      setFlows(data);
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchFlows();
+  }, []);
+
+  const handleSaveFlow = async () => {
+    if (!editingFlow || !flowBuilderRef.current) return;
+
+    try {
+      const flowData = flowBuilderRef.current.getFlowData();
+      const response = await fetch(`/api/flows/${editingFlow.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editingFlow.name, // Name can be updated in a form
+          definition: flowData,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to save flow");
+
+      const updatedFlow = await response.json();
+      setEditingFlow(updatedFlow);
+      toast.success("Flow saved successfully!");
+      fetchFlows(); // Refresh the list
+    } catch (error) {
+      toast.error(error.message);
+    }
+  };
+
   const columns = [
     { key: "name", label: "Flow Name" },
     { key: "trigger", label: "Trigger Keyword" },
@@ -25,7 +71,7 @@ const FlowsPage = () => {
         return (
           <span
             className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-              colors[row.status]
+              colors[row.status] || "bg-gray-100 text-gray-800"
             }`}
           >
             {row.status}
@@ -33,7 +79,7 @@ const FlowsPage = () => {
         );
       },
     },
-    { key: "lastModified", label: "Last Modified" },
+    { key: "updatedAt", label: "Last Modified", render: (row) => new Date(row.updatedAt).toLocaleString() },
     {
       key: "actions",
       label: "Actions",
@@ -53,6 +99,10 @@ const FlowsPage = () => {
     },
   ];
 
+  if (loading && !editingFlow) {
+    return <div>Loading flows...</div>;
+  }
+
   return (
     <AnimatePresence>
       {editingFlow ? (
@@ -62,7 +112,7 @@ const FlowsPage = () => {
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: 300 }}
           transition={{ duration: 0.4 }}
-          className="h-full flex flex-col absolute top-0 left-0 w-full"
+          className="h-full flex flex-col absolute top-0 left-0 w-full bg-white"
         >
           <div className="p-4 bg-white border-b flex items-center justify-between z-10">
             <button
@@ -74,12 +124,18 @@ const FlowsPage = () => {
             <h2 className="text-xl font-semibold text-gray-800">
               {editingFlow.name}
             </h2>
-            <button className="flex items-center gap-2 bg-[#4bc3fe] text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-indigo-700">
+            <button
+              onClick={handleSaveFlow}
+              className="flex items-center gap-2 bg-[#4bc3fe] text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-indigo-700"
+            >
               <Save className="h-5 w-5 mr-1" /> Guardar Flujo
             </button>
           </div>
           <div className="flex-1">
-            <FlowBuilder />
+            <FlowBuilder
+              ref={flowBuilderRef}
+              initialFlow={editingFlow.definition}
+            />
           </div>
         </motion.div>
       ) : (

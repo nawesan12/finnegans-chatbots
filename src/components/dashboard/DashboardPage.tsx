@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   BarChart,
   Bar,
@@ -17,40 +17,84 @@ import {
   ArrowRight,
   Bot,
 } from "lucide-react";
-import { initialMetrics, chartData, initialLogs } from "@/data/mock-data";
 import { containerVariants, itemVariants } from "@/lib/animations";
 import MetricCard from "@/components/dashboard/MetricCard";
+import { toast } from "sonner";
+
+const chartData = [
+  { name: "Mon", sent: 400, received: 240 },
+  { name: "Tue", sent: 300, received: 139 },
+  { name: "Wed", sent: 200, received: 980 },
+  { name: "Thu", sent: 278, received: 390 },
+  { name: "Fri", sent: 189, received: 480 },
+  { name: "Sat", sent: 239, received: 380 },
+  { name: "Sun", sent: 349, received: 430 },
+];
 
 const DashboardPage = () => {
-  const metrics = useMemo(
-    () => [
+  const [metrics, setMetrics] = useState(null);
+  const [recentLogs, setRecentLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [metricsRes, logsRes] = await Promise.all([
+          fetch("/api/metrics"),
+          fetch("/api/logs?limit=4"), // Assuming API supports limit
+        ]);
+
+        if (!metricsRes.ok) throw new Error("Failed to fetch metrics");
+        if (!logsRes.ok) throw new Error("Failed to fetch recent logs");
+
+        const metricsData = await metricsRes.json();
+        const logsData = await logsRes.json();
+
+        setMetrics(metricsData);
+        setRecentLogs(logsData);
+      } catch (error) {
+        toast.error(error.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const metricCards = useMemo(
+    () => metrics ? [
       {
         title: "Contactos Totales",
-        value: initialMetrics.totalContacts,
+        value: metrics.totalContacts,
         change: "+5% this month",
         icon: Users,
       },
       {
         title: "Conversaciones Activas",
-        value: initialMetrics.activeConversations,
+        value: metrics.activeConversations,
         change: "-2% today",
         icon: MessageSquare,
       },
       {
         title: "Mensajes Enviados",
-        value: initialMetrics.messagesSent,
+        value: metrics.messagesSent,
         change: "+12% this week",
         icon: ArrowRight,
       },
       {
         title: "Ratio de Exito",
-        value: initialMetrics.flowSuccessRate,
+        value: metrics.flowSuccessRate,
         change: "+1.2% this month",
         icon: Bot,
       },
-    ],
-    []
+    ] : [],
+    [metrics]
   );
+
+  if (loading) {
+    return <div>Loading dashboard...</div>
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -60,7 +104,7 @@ const DashboardPage = () => {
         initial="hidden"
         animate="visible"
       >
-        {metrics.map((metric) => (
+        {metricCards.map((metric) => (
           <MetricCard key={metric.title} {...metric} />
         ))}
       </motion.div>
@@ -113,14 +157,14 @@ const DashboardPage = () => {
             Actividad Reciente
           </h3>
           <ul className="space-y-4">
-            {initialLogs.slice(0, 4).map((log) => (
+            {recentLogs.map((log) => (
               <li key={log.id} className="flex items-center justify-between">
                 <div>
-                  <p className="font-medium text-gray-700">{log.contact}</p>
-                  <p className="text-sm text-gray-500">{log.flow}</p>
+                  <p className="font-medium text-gray-700">{log.contact.name}</p>
+                  <p className="text-sm text-gray-500">{log.flow.name}</p>
                 </div>
                 <span className="text-sm text-gray-400">
-                  {log.timestamp.split(" ")[1]} {log.timestamp.split(" ")[2]}
+                  {new Date(log.createdAt).toLocaleTimeString()}
                 </span>
               </li>
             ))}

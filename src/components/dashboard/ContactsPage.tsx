@@ -1,12 +1,34 @@
 "use client";
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { MoreVertical, Upload } from "lucide-react";
-import { initialContacts } from "@/data/mock-data";
 import { itemVariants } from "@/lib/animations";
 import Table from "@/components/dashboard/Table";
+import { toast } from "sonner";
 
 const ContactsPage = ({ onImportClick }) => {
+  const [contacts, setContacts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchContacts = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch("/api/contacts");
+        if (!response.ok) {
+          throw new Error("Failed to fetch contacts");
+        }
+        const data = await response.json();
+        setContacts(data);
+      } catch (error) {
+        toast.error(error.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchContacts();
+  }, []);
+
   const columns = [
     { key: "name", label: "Name" },
     { key: "phone", label: "Phone" },
@@ -15,18 +37,18 @@ const ContactsPage = ({ onImportClick }) => {
       label: "Tags",
       render: (row) => (
         <div className="flex space-x-1">
-          {row.tags.map((tag) => (
+          {row.tags?.map((t) => (
             <span
-              key={tag}
+              key={t.tag.id}
               className="px-2 text-xs font-semibold rounded-full bg-gray-200 text-gray-700"
             >
-              {tag}
+              {t.tag.name}
             </span>
           ))}
         </div>
       ),
     },
-    { key: "lastContact", label: "Last Contact" },
+    { key: "updatedAt", label: "Last Contact", render: (row) => new Date(row.updatedAt).toLocaleDateString() },
     {
       key: "actions",
       label: "Actions",
@@ -37,6 +59,11 @@ const ContactsPage = ({ onImportClick }) => {
       ),
     },
   ];
+
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+
   return (
     <div className="p-6">
       <motion.div
@@ -54,7 +81,7 @@ const ContactsPage = ({ onImportClick }) => {
             <span>Importar Contactos</span>
           </motion.button>
         </div>
-        <Table columns={columns} data={initialContacts} />
+        <Table columns={columns} data={contacts} />
       </motion.div>
     </div>
   );
