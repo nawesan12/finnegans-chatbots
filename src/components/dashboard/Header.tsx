@@ -1,10 +1,14 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Search, Plus } from "lucide-react";
+import { Search, Plus, LogOut } from "lucide-react";
 import CreateNewDropdown from "@/components/CreateNewDropdown";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 const Header = ({ title, onImportClick }) => {
+  const router = useRouter();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -23,6 +27,19 @@ const Header = ({ title, onImportClick }) => {
   const handleImportAndCloseDropdown = () => {
     onImportClick();
     setIsDropdownOpen(false);
+  };
+
+  const handleLogout = async () => {
+    const response = await fetch("/api/auth/logout", {
+      method: "POST",
+    });
+
+    if (response.ok) {
+      toast.success("Logged out successfully");
+      router.push("/login");
+    } else {
+      toast.error("Logout failed");
+    }
   };
 
   return (
@@ -51,6 +68,9 @@ const Header = ({ title, onImportClick }) => {
             onImportClick={handleImportAndCloseDropdown}
           />
         </div>
+        <Button onClick={handleLogout} variant="outline" size="icon">
+          <LogOut className="h-4 w-4" />
+        </Button>
       </div>
     </header>
   );
