@@ -1,10 +1,10 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MoreVertical, ChevronLeft, Save } from "lucide-react";
+import { MoreVertical, ChevronLeft, Save, Plus } from "lucide-react";
 import { itemVariants } from "@/lib/animations";
 import Table from "@/components/dashboard/Table";
-import FlowBuilder from "@/components/FlowBuilder";
+import FlowBuilder from "@/components/flow-builder";
 import { toast } from "sonner";
 
 const FlowsPage = () => {
@@ -31,25 +31,37 @@ const FlowsPage = () => {
     fetchFlows();
   }, []);
 
+  const handleCreateNewFlow = () => {
+    setEditingFlow({
+      id: null, // No ID for a new flow
+      name: "New Flow",
+      definition: null, // Start with a blank canvas
+    });
+  };
+
   const handleSaveFlow = async () => {
     if (!editingFlow || !flowBuilderRef.current) return;
 
     try {
       const flowData = flowBuilderRef.current.getFlowData();
-      const response = await fetch(`/api/flows/${editingFlow.id}`, {
-        method: "PUT",
+      const isNewFlow = !editingFlow.id;
+      const url = isNewFlow ? "/api/flows" : `/api/flows/${editingFlow.id}`;
+      const method = isNewFlow ? "POST" : "PUT";
+
+      const response = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: editingFlow.name, // Name can be updated in a form
+          name: editingFlow.name,
           definition: flowData,
         }),
       });
 
-      if (!response.ok) throw new Error("Failed to save flow");
+      if (!response.ok) throw new Error(`Failed to ${isNewFlow ? 'create' : 'save'} flow`);
 
       const updatedFlow = await response.json();
       setEditingFlow(updatedFlow);
-      toast.success("Flow saved successfully!");
+      toast.success(`Flow ${isNewFlow ? 'created' : 'saved'} successfully!`);
       fetchFlows(); // Refresh the list
     } catch (error) {
       toast.error(error.message);
@@ -140,6 +152,16 @@ const FlowsPage = () => {
         </motion.div>
       ) : (
         <motion.div key="flow-list" className="p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h1 className="text-2xl font-bold text-gray-800">Flows</h1>
+            <button
+              onClick={handleCreateNewFlow}
+              className="flex items-center gap-2 bg-[#4bc3fe] text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-indigo-700"
+            >
+              <Plus className="h-5 w-5" />
+              Create New Flow
+            </button>
+          </div>
           <motion.div
             variants={itemVariants}
             className="bg-white rounded-lg shadow-md"
