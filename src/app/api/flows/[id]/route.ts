@@ -32,7 +32,7 @@ export async function PUT(
 ) {
   try {
     const body = await request.json();
-    const { name, trigger, status, definition } = body;
+    const { name, trigger, status, definition, phoneNumber } = body;
 
     const updatedFlow = await prisma.flow.update({
       where: { id: params.id },
@@ -41,6 +41,7 @@ export async function PUT(
         trigger,
         status,
         definition,
+        phoneNumber,
         updatedAt: new Date(),
       },
     });
