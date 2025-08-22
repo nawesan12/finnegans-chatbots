@@ -177,6 +177,37 @@ const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
     const onNodeClick = (_, node) => setSelected(node);
     const onPaneClick = () => setSelected(null);
 
+    const handleEdit = (node) => {
+        setSelected(node);
+    };
+
+    const handleDuplicate = (node) => {
+        const newNode = {
+            ...node,
+            id: makeId(),
+            position: {
+                x: node.position.x + 20,
+                y: node.position.y + 20,
+            },
+        };
+        setNodes((nds) => nds.concat(newNode));
+    };
+
+    const handleDelete = (nodeId) => {
+        setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+        setEdges((eds) =>
+            eds.filter(
+                (ed) => ed.source !== nodeId && ed.target !== nodeId,
+            ),
+        );
+    };
+
+    const handleCopyWebhook = (node) => {
+        const webhookUrl = `${window.location.origin}/api/webhook?flowId=${node.id}`;
+        navigator.clipboard.writeText(webhookUrl);
+        toast.success("Webhook URL copied to clipboard!");
+    };
+
     const updateSelected = (patch) => {
         if (!selected) return;
         setNodes((nds) =>
@@ -416,6 +447,22 @@ const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
         URL.revokeObjectURL(url);
     };
 
+    const memoizedNodeTypes = React.useMemo(() => {
+        const customNodeTypes = {};
+        for (const [key, NodeType] of Object.entries(nodeTypes)) {
+            customNodeTypes[key] = (props) => (
+                <NodeType
+                    {...props}
+                    onEdit={() => handleEdit(props)}
+                    onDuplicate={() => handleDuplicate(props)}
+                    onDelete={() => handleDelete(props.id)}
+                    onCopyWebhook={() => handleCopyWebhook(props)}
+                />
+            );
+        }
+        return customNodeTypes;
+    }, [handleEdit, handleDuplicate, handleDelete, handleCopyWebhook]);
+
     return (
         <div className="h-screen w-full grid grid-cols-12 gap-0">
             <div className="col-span-12">
@@ -489,7 +536,7 @@ const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
                     onNodesChange={onNodesChange}
                     onEdgesChange={onEdgesChange}
                     onConnect={onConnect}
-                    nodeTypes={nodeTypes}
+                    nodeTypes={memoizedNodeTypes}
                     fitView
                     onNodeClick={onNodeClick}
                     onPaneClick={onPaneClick}

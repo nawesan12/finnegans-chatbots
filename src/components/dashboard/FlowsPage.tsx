@@ -5,6 +5,7 @@ import { MoreVertical, ChevronLeft, Save, Plus } from "lucide-react";
 import { itemVariants } from "@/lib/animations";
 import Table from "@/components/dashboard/Table";
 import FlowBuilder from "@/components/flow-builder";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
 const FlowsPage = () => {
@@ -54,6 +55,7 @@ const FlowsPage = () => {
         body: JSON.stringify({
           name: editingFlow.name,
           definition: flowData,
+          phoneNumber: editingFlow.phoneNumber,
         }),
       });
 
@@ -70,6 +72,7 @@ const FlowsPage = () => {
 
   const columns = [
     { key: "name", label: "Flow Name" },
+    { key: "phoneNumber", label: "Phone Number" },
     { key: "trigger", label: "Trigger Keyword" },
     {
       key: "status",
@@ -136,12 +139,22 @@ const FlowsPage = () => {
             <h2 className="text-xl font-semibold text-gray-800">
               {editingFlow.name}
             </h2>
-            <button
-              onClick={handleSaveFlow}
-              className="flex items-center gap-2 bg-[#4bc3fe] text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-indigo-700"
-            >
-              <Save className="h-5 w-5 mr-1" /> Guardar Flujo
-            </button>
+            <div className="flex items-center gap-4">
+              <Input
+                placeholder="Phone Number"
+                value={editingFlow.phoneNumber || ""}
+                onChange={(e) =>
+                  setEditingFlow({ ...editingFlow, phoneNumber: e.target.value })
+                }
+                className="w-64"
+              />
+              <button
+                onClick={handleSaveFlow}
+                className="flex items-center gap-2 bg-[#4bc3fe] text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-indigo-700"
+              >
+                <Save className="h-5 w-5 mr-1" /> Guardar Flujo
+              </button>
+            </div>
           </div>
           <div className="flex-1">
             <FlowBuilder

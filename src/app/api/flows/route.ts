@@ -23,7 +23,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, trigger, status, definition, userId } = body;
+    const { name, trigger, status, definition, userId, phoneNumber } = body;
 
     if (!name || !userId) {
       return NextResponse.json(
@@ -38,6 +38,7 @@ export async function POST(request: Request) {
         trigger: trigger || "default",
         status: status || "Draft",
         definition: definition || {},
+        phoneNumber: phoneNumber,
         user: { connect: { id: userId } },
       },
     });
