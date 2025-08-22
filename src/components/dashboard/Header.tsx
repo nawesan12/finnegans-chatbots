@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useAuthStore } from "@/lib/store";
 import { motion } from "framer-motion";
 import { Search, Plus, LogOut } from "lucide-react";
 import CreateNewDropdown from "@/components/CreateNewDropdown";
@@ -29,17 +30,12 @@ const Header = ({ title, onImportClick }) => {
     setIsDropdownOpen(false);
   };
 
-  const handleLogout = async () => {
-    const response = await fetch("/api/auth/logout", {
-      method: "POST",
-    });
+  const { logout } = useAuthStore();
 
-    if (response.ok) {
-      toast.success("Logged out successfully");
-      router.push("/login");
-    } else {
-      toast.error("Logout failed");
-    }
+  const handleLogout = () => {
+    logout();
+    toast.success("Logged out successfully");
+    router.push("/login");
   };
 
   return (

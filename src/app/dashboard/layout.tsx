@@ -1,11 +1,12 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useRouter, usePathname } from "next/navigation";
+import { useAuthStore } from "@/lib/store";
 import { AnimatePresence, motion } from "framer-motion";
 import Sidebar from "@/components/dashboard/Sidebar";
 import Header from "@/components/dashboard/Header";
 import ImportContactsModal from "@/components/ImportContactsModal";
 import { pageVariants, pageTransition } from "@/lib/animations";
-import { usePathname } from "next/navigation";
 
 export default function DashboardLayout({
   children,
@@ -15,6 +16,18 @@ export default function DashboardLayout({
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
+  const { token, user } = useAuthStore();
+
+  useEffect(() => {
+    if (!token) {
+      router.push("/login");
+    }
+  }, [token, router]);
+
+  if (!user) {
+    return null;
+  }
 
   const pageTitles: { [key: string]: string } = {
     "/dashboard": "Panel de Control",
