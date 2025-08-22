@@ -16,6 +16,11 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  metaVerifyToken   String?
+  metaAppSecret     String?
+  metaAccessToken   String?
+  metaPhoneNumberId String?
+
   contacts Contact[]
   flows    Flow[]
 }
@@ -57,6 +62,7 @@ model Flow {
   status      String   @default("Draft") // e.g., Draft, Active, Inactive
   definition  Json? // For react-flow JSON
   phoneNumber String?
+  channel     String   @default("whatsapp")
   createdAt   DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
