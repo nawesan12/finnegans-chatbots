@@ -3,7 +3,10 @@ import type { NextRequest } from "next/server";
 import { verifyToken } from "@/lib/auth";
 
 export function middleware(request: NextRequest) {
+  console.log("Middleware running for path:", request.nextUrl.pathname);
+  console.log("All cookies:", request.cookies.getAll());
   const token = request.cookies.get("token")?.value;
+  console.log("Token found:", token);
   const { pathname } = request.nextUrl;
 
   // Allow requests to auth pages and the root page
