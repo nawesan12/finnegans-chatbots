@@ -11,12 +11,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { motion } from "framer-motion";
-import {
-  MessageSquare,
-  Users,
-  ArrowRight,
-  Bot,
-} from "lucide-react";
+import { MessageSquare, Users, ArrowRight, Bot } from "lucide-react";
 import { containerVariants, itemVariants } from "@/lib/animations";
 import MetricCard from "@/components/dashboard/MetricCard";
 import { toast } from "sonner";
@@ -63,37 +58,40 @@ const DashboardPage = () => {
   }, []);
 
   const metricCards = useMemo(
-    () => metrics ? [
-      {
-        title: "Contactos Totales",
-        value: metrics.totalContacts,
-        change: "+5% this month",
-        icon: Users,
-      },
-      {
-        title: "Conversaciones Activas",
-        value: metrics.activeConversations,
-        change: "-2% today",
-        icon: MessageSquare,
-      },
-      {
-        title: "Mensajes Enviados",
-        value: metrics.messagesSent,
-        change: "+12% this week",
-        icon: ArrowRight,
-      },
-      {
-        title: "Ratio de Exito",
-        value: metrics.flowSuccessRate,
-        change: "+1.2% this month",
-        icon: Bot,
-      },
-    ] : [],
-    [metrics]
+    () =>
+      metrics
+        ? [
+            {
+              title: "Contactos Totales",
+              value: metrics.totalContacts,
+              change: "+5% this month",
+              icon: Users,
+            },
+            {
+              title: "Conversaciones Activas",
+              value: metrics.activeConversations,
+              change: "-2% today",
+              icon: MessageSquare,
+            },
+            {
+              title: "Mensajes Enviados",
+              value: metrics.messagesSent,
+              change: "+12% this week",
+              icon: ArrowRight,
+            },
+            {
+              title: "Ratio de Exito",
+              value: metrics.flowSuccessRate,
+              change: "+1.2% this month",
+              icon: Bot,
+            },
+          ]
+        : [],
+    [metrics],
   );
 
   if (loading) {
-    return <div>Loading dashboard...</div>
+    return <div>Loading dashboard...</div>;
   }
 
   return (
@@ -160,7 +158,9 @@ const DashboardPage = () => {
             {recentLogs.map((log) => (
               <li key={log.id} className="flex items-center justify-between">
                 <div>
-                  <p className="font-medium text-gray-700">{log.contact.name}</p>
+                  <p className="font-medium text-gray-700">
+                    {log.contact.name}
+                  </p>
                   <p className="text-sm text-gray-500">{log.flow.name}</p>
                 </div>
                 <span className="text-sm text-gray-400">
