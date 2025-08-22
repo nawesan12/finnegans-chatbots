@@ -30,11 +30,10 @@ export default function LoginPage() {
       body: JSON.stringify({ email, password }),
     });
 
-    console.log(response);
-
     if (response.ok) {
-      // toast.success("Login successful!");
-      router.replace("/dashboard");
+      const data = await response.json();
+      toast.success(`Welcome back, ${data.name}!`);
+      window.location.assign("/dashboard");
     } else {
       const errorData = await response.json();
       toast.error(errorData.error || "Login failed");
