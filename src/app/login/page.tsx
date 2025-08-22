@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useAuthStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -19,6 +20,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const { setUser } = useAuthStore();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,8 +34,10 @@ export default function LoginPage() {
 
     if (response.ok) {
       const data = await response.json();
+      const { token, ...user } = data;
+      setUser(user, token);
       toast.success(`Welcome back, ${data.name}!`);
-      window.location.assign("/dashboard");
+      router.push("/dashboard");
     } else {
       const errorData = await response.json();
       toast.error(errorData.error || "Login failed");
