@@ -1,9 +1,7 @@
 import { PrismaClient } from "@prisma/client";
+import { executeFlow } from "./flow-executor";
 
 const prisma = new PrismaClient();
-
-const META_ACCESS_TOKEN = process.env.META_ACCESS_TOKEN;
-const META_PHONE_NUMBER_ID = process.env.META_PHONE_NUMBER_ID;
 
 export async function processWebhookEvent(data: any) {
   if (data.object) {
@@ -29,7 +27,7 @@ export async function processWebhookEvent(data: any) {
       }
 
       let contact = await prisma.contact.findUnique({
-        where: { phone: from },
+        where: { phone: from, userId: user.id },
       });
 
       if (!contact) {
@@ -53,20 +51,7 @@ export async function processWebhookEvent(data: any) {
         return;
       }
 
-      await prisma.log.create({
-        data: {
-          flowId: flow.id,
-          contactId: contact.id,
-          status: "Started",
-          context: {
-            lastMessage: text,
-          },
-        },
-      });
-
-      // For now, just send a canned response.
-      // In the future, this will be replaced with the flow execution logic.
-      await sendMessage(user.id, from, "Hello! This is a canned response.");
+      await executeFlow(flow.id, contact.id, text, sendMessage);
     }
   }
 }
