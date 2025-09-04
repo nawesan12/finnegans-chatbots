@@ -15,7 +15,7 @@ export async function GET() {
     console.error("Error fetching flows:", error);
     return NextResponse.json(
       { error: "Internal Server Error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -25,10 +25,19 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { name, trigger, status, definition, userId, phoneNumber } = body;
 
+    console.log("Received data:", {
+      name,
+      trigger,
+      status,
+      definition,
+      userId,
+      phoneNumber,
+    });
+
     if (!name || !userId) {
       return NextResponse.json(
         { error: "Missing required fields" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -48,7 +57,7 @@ export async function POST(request: Request) {
     console.error("Error creating flow:", error);
     return NextResponse.json(
       { error: "Internal Server Error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

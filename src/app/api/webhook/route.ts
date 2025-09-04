@@ -47,7 +47,7 @@ export async function POST(request: Request) {
   if (!user || !user.metaAppSecret) {
     console.error(
       "User not found or metaAppSecret not set for phone number ID:",
-      phoneNumberId
+      phoneNumberId,
     );
     return new NextResponse("Internal Server Error", { status: 500 });
   }
