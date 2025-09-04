@@ -194,6 +194,11 @@ const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
         toast.success("URL del webhook copiada al portapapeles!");
     }, []);
 
+    const handleCopyId = useCallback((nodeId: string) => {
+        navigator.clipboard.writeText(nodeId);
+        toast.success("ID copiado al portapapeles!");
+    }, []);
+
     const updateSelected = (patch) => {
         if (!selected) return;
         setNodes((nds) =>
@@ -208,6 +213,26 @@ const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
             ...patch,
             data: { ...s.data, ...(patch.data || {}) },
         }));
+        if (
+            selected.type === "options" &&
+            patch.data &&
+            Object.prototype.hasOwnProperty.call(patch.data, "options")
+        ) {
+            const opts = patch.data.options || [];
+            const handles = new Set(
+                opts.map((_: unknown, i: number) => `opt-${i}`)
+            );
+            setEdges((eds) =>
+                eds.filter(
+                    (e) =>
+                        !(
+                            e.source === selected.id &&
+                            e.sourceHandle &&
+                            !handles.has(e.sourceHandle)
+                        ),
+                ),
+            );
+        }
     };
 
     const onDrop = useCallback(
@@ -334,12 +359,49 @@ const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
         setNodes(layout.nodes);
     };
 
+    // undo / redo (simple snapshot stack)
+    const historyRef = useRef({ past: [], future: [] });
+    useEffect(() => {
+        historyRef.current.past.push(JSON.stringify({ nodes, edges }));
+        historyRef.current.future = [];
+    }, [nodes, edges]);
+
+    const undo = useCallback(() => {
+        const past = historyRef.current.past;
+        if (past.length <= 1) return;
+        const current = past.pop();
+        historyRef.current.future.push(current);
+        const prev = JSON.parse(past[past.length - 1]);
+        setNodes(prev.nodes);
+        setEdges(prev.edges);
+    }, [setNodes, setEdges]);
+    const redo = useCallback(() => {
+        const next = historyRef.current.future.pop();
+        if (!next) return;
+        historyRef.current.past.push(next);
+        const state = JSON.parse(next);
+        setNodes(state.nodes);
+        setEdges(state.edges);
+    }, [setNodes, setEdges]);
+
     // keyboard shortcuts
     useEffect(() => {
         const onKey = (e) => {
             if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
                 e.preventDefault();
                 handleExport();
+            }
+            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    redo();
+                } else {
+                    undo();
+                }
+            }
+            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "y") {
+                e.preventDefault();
+                redo();
             }
             if (e.key === "Delete" || e.key === "Backspace") {
                 setNodes((nds) => nds.filter((n) => n.id !== selected?.id));
@@ -353,32 +415,7 @@ const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
         };
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
-    }, [selected, setNodes, setEdges, handleExport]);
-
-    // undo / redo (simple snapshot stack)
-    const historyRef = useRef({ past: [], future: [] });
-    useEffect(() => {
-        historyRef.current.past.push(JSON.stringify({ nodes, edges }));
-        historyRef.current.future = [];
-    }, [nodes, edges]);
-
-    const undo = () => {
-        const past = historyRef.current.past;
-        if (past.length <= 1) return;
-        const current = past.pop();
-        historyRef.current.future.push(current);
-        const prev = JSON.parse(past[past.length - 1]);
-        setNodes(prev.nodes);
-        setEdges(prev.edges);
-    };
-    const redo = () => {
-        const next = historyRef.current.future.pop();
-        if (!next) return;
-        historyRef.current.past.push(next);
-        const state = JSON.parse(next);
-        setNodes(state.nodes);
-        setEdges(state.edges);
-    };
+    }, [selected, setNodes, setEdges, handleExport, undo, redo]);
 
     // zoom controls
     const zoomIn = () => rfRef.current?.zoomIn?.();
@@ -415,11 +452,12 @@ const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
                     onDuplicate={() => handleDuplicate(props)}
                     onDelete={() => handleDelete(props.id)}
                     onCopyWebhook={() => handleCopyWebhook(props)}
+                    onCopyId={() => handleCopyId(props.id)}
                 />
             );
         }
         return customNodeTypes;
-    }, [handleEdit, handleDuplicate, handleDelete, handleCopyWebhook]);
+    }, [handleEdit, handleDuplicate, handleDelete, handleCopyWebhook, handleCopyId]);
 
     return (
         <div className="h-screen w-full grid grid-cols-12 gap-0">
