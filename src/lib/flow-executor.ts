@@ -4,6 +4,7 @@ import {
   MessageDataSchema,
   TriggerDataSchema,
   EndDataSchema,
+  DelayDataSchema,
 } from "@/components/flow-builder/types";
 import type { Node, Edge } from "reactflow";
 
@@ -12,11 +13,12 @@ const prisma = new PrismaClient();
 // Infer types from Zod schemas
 type TriggerData = z.infer<typeof TriggerDataSchema>;
 type MessageData = z.infer<typeof MessageDataSchema>;
+type DelayData = z.infer<typeof DelayDataSchema>;
 type EndData = z.infer<typeof EndDataSchema>;
 
 // Define a more specific Node type
 // We should include all possible node data types here eventually
-type FlowNode = Node<TriggerData | MessageData | EndData>;
+type FlowNode = Node<TriggerData | MessageData | DelayData | EndData>;
 
 interface FlowData {
   nodes: FlowNode[];
@@ -84,6 +86,12 @@ export async function executeFlow(
       case "message":
         const messageData = currentNode.data as MessageData;
         await sendMessage(contact.userId, contact.phone, messageData.text);
+        break;
+      case "delay":
+        const delayData = currentNode.data as DelayData;
+        await new Promise((resolve) =>
+          setTimeout(resolve, delayData.seconds * 1000)
+        );
         break;
       case "end":
         console.log("Flow execution ended.");
