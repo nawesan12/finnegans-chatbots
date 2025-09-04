@@ -83,6 +83,12 @@ export function Simulator({ nodes, edges }) {
             const nextEdge = (outgoing.get(current.id) || [])[0];
             current = nextEdge ? idMap.get(nextEdge.target) : null;
         }
+        if (Object.keys(context.vars).length > 0) {
+            out.push({
+                type: "system",
+                text: `Vars: ${JSON.stringify(context.vars)}`,
+            });
+        }
         setLog(out);
     };
 

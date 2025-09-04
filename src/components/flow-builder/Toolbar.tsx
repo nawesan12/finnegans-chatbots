@@ -13,7 +13,9 @@ import {
     ZoomIn,
     ZoomOut,
     Minimize2,
+    Clipboard,
 } from "lucide-react";
+import { toast } from "sonner";
 
 export function Topbar({
     onNew,
@@ -67,7 +69,20 @@ export function Topbar({
                 <Redo2 className="h-4 w-4" />
             </Button>
             <div className="ml-auto flex items-center gap-1">
-                {selectedId && <Badge variant="outline">Selected: {selectedId}</Badge>}
+                {selectedId && (
+                    <>
+                        <Badge variant="outline">Selected: {selectedId}</Badge>
+                        <Button
+                            variant="ghost"
+                            onClick={() => {
+                                navigator.clipboard.writeText(selectedId);
+                                toast.success("ID copiado al portapapeles");
+                            }}
+                        >
+                            <Clipboard className="h-4 w-4" />
+                        </Button>
+                    </>
+                )}
                 <Button variant="ghost" onClick={fitView}>
                     <Minimize2 className="h-4 w-4" />
                 </Button>

@@ -90,7 +90,7 @@ export function Inspector({ selectedNode, onChange }) {
                                 <Label>Text</Label>
                                 <Badge
                                     variant={
-                                        selectedNode.data.text?.length > 3500
+                                        selectedNode.data.text?.length > waTextLimit
                                             ? "destructive"
                                             : "secondary"
                                     }
@@ -165,7 +165,7 @@ export function Inspector({ selectedNode, onChange }) {
                         <Slider
                             value={[selectedNode.data.seconds || 1]}
                             min={1}
-                            max={300}
+                            max={3600}
                             step={1}
                             onValueChange={([v]) =>
                                 onChange({ data: { ...selectedNode.data, seconds: v } })
