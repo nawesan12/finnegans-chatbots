@@ -57,7 +57,6 @@ export function Simulator({ nodes, edges }) {
             if (current.type === "condition") {
                 try {
                     // VERY basic eval – simulation only
-                    // eslint-disable-next-line no-new-func
                     const fn = new Function(
                         "context",
                         `return (${current.data.expression})`,

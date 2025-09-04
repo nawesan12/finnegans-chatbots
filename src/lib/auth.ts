@@ -17,7 +17,7 @@ export function signToken(payload: UserPayload): string {
 export function verifyToken(token: string): UserPayload | null {
   try {
     return jwt.verify(token, JWT_SECRET) as UserPayload;
-  } catch (error) {
+  } catch {
     return null;
   }
 }

@@ -39,7 +39,7 @@ export async function PUT(
 ) {
   try {
     const body = await request.json();
-    const { name, phone, tags } = body;
+    const { name, phone } = body;
 
     // TODO: More advanced tag handling (add/remove)
     const updatedContact = await prisma.contact.update({

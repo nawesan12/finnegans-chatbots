@@ -21,6 +21,7 @@ export async function GET() {
 
     const metrics = {
       totalContacts,
+      totalFlows,
       activeConversations: activeFlows, // Placeholder
       messagesSent, // Placeholder
       messagesReceived, // Placeholder

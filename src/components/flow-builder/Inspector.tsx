@@ -16,7 +16,7 @@ import { Slider } from "@/components/ui/slider";
 import { Trash2 } from "lucide-react";
 import { waTextLimit } from "./types";
 
-export function Inspector({ selectedNode, onChange, allNodes }) {
+export function Inspector({ selectedNode, onChange }) {
     if (!selectedNode) {
         return (
             <Card className="h-full">
