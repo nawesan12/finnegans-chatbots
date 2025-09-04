@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Play, Rocket, RotateCcw } from "lucide-react";
+import { Play, Rocket, RotateCcw, Copy } from "lucide-react";
 
 export function Simulator({ nodes, edges }) {
     const [input, setInput] = useState("/start");
@@ -21,8 +21,14 @@ export function Simulator({ nodes, edges }) {
     }, [edges]);
 
     const run = async () => {
-        const context: any = { input, vars: {}, apiResult: null };
-        const out: { type: string; text: string }[] = [];
+        const context: {
+            input: string;
+            vars: Record<string, unknown>;
+            apiResult: unknown;
+        } = { input, vars: {}, apiResult: null };
+        const out: { type: string; text: string }[] = [
+            { type: "user", text: input },
+        ];
         // find trigger matching input
         const start = nodes.find(
             (n) =>
@@ -87,7 +93,7 @@ export function Simulator({ nodes, edges }) {
                                 : undefined,
                     });
                     const text = await res.text();
-                    let parsed: any;
+                    let parsed: unknown;
                     try {
                         parsed = JSON.parse(text);
                     } catch {
@@ -143,6 +149,21 @@ export function Simulator({ nodes, edges }) {
         setLog(out);
     };
 
+    const copyLog = () => {
+        const text = log
+            .map((line) => {
+                const prefix =
+                    line.type === "bot"
+                        ? "Bot: "
+                        : line.type === "user"
+                        ? "You: "
+                        : "";
+                return `${prefix}${line.text}`;
+            })
+            .join("\n");
+        navigator.clipboard.writeText(text);
+    };
+
     useEffect(() => {
         setLog([]);
     }, [nodes, edges]);
@@ -180,6 +201,10 @@ export function Simulator({ nodes, edges }) {
                         <RotateCcw className="h-4 w-4 mr-2" />
                         Limpiar
                     </Button>
+                    <Button variant="outline" onClick={copyLog}>
+                        <Copy className="h-4 w-4 mr-2" />
+                        Copiar
+                    </Button>
                 </div>
                 <div
                     ref={logRef}
@@ -193,9 +218,9 @@ export function Simulator({ nodes, edges }) {
                     {log.map((line, i) => (
                         <div
                             key={i}
-                            className={`text-sm ${line.type === "bot" ? "" : "text-muted-foreground"}`}
+                            className={`text-sm ${line.type === "system" ? "text-muted-foreground" : ""}`}
                         >
-                            {line.type === "bot" ? "🤖 " : "• "}
+                            {line.type === "bot" ? "🤖 " : line.type === "user" ? "👤 " : "• "}
                             {line.text}
                         </div>
                     ))}
