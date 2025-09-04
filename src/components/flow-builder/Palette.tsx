@@ -90,6 +90,11 @@ export function Palette({ onAdd }) {
                     <motion.button
                         key={p.type}
                         onClick={() => onAdd(p.type)}
+                        onDragStart={(e) => {
+                            e.dataTransfer.setData("application/wa-node", p.type);
+                            e.dataTransfer.effectAllowed = "move";
+                        }}
+                        draggable
                         whileHover={{ scale: 1.02 }}
                         className="flex items-center gap-3 p-3 rounded-2xl border hover:shadow-sm text-left"
                     >
@@ -104,4 +109,3 @@ export function Palette({ onAdd }) {
         </div>
     );
 }
-export const paletteItems = palette;

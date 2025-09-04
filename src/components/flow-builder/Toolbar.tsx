@@ -12,6 +12,7 @@ import {
     Undo2,
     ZoomIn,
     ZoomOut,
+    Minimize2,
 } from "lucide-react";
 
 export function Topbar({
@@ -24,6 +25,7 @@ export function Topbar({
     onRedo,
     zoomIn,
     zoomOut,
+    fitView,
     selectedId,
 }) {
     const fileRef = useRef(null);
@@ -66,6 +68,9 @@ export function Topbar({
             </Button>
             <div className="ml-auto flex items-center gap-1">
                 {selectedId && <Badge variant="outline">Selected: {selectedId}</Badge>}
+                <Button variant="ghost" onClick={fitView}>
+                    <Minimize2 className="h-4 w-4" />
+                </Button>
                 <Button variant="ghost" onClick={zoomOut}>
                     <ZoomOut className="h-4 w-4" />
                 </Button>

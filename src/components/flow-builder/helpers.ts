@@ -30,3 +30,30 @@ export const getLayoutedElements = (
 };
 
 export const makeId = () => Math.random().toString(36).slice(2, 9);
+
+export const getStarterData = (type: string) => {
+  const starters: Record<string, unknown> = {
+    trigger: { keyword: "/start" },
+    message: { text: "Nuevo mensaje", useTemplate: false },
+    options: { options: ["Opcion 1", "Opcion 2"] },
+    delay: { seconds: 1 },
+    condition: { expression: "context.input.includes('ok')" },
+    api: {
+      url: "https://api.example.com",
+      method: "POST",
+      headers: {},
+      body: "{}",
+      assignTo: "apiResult",
+    },
+    assign: { key: "name", value: "John" },
+    media: {
+      mediaType: "image",
+      url: "https://placekitten.com/400/300",
+      caption: "A cat",
+    },
+    handoff: { queue: "Default", note: "VIP" },
+    goto: { targetNodeId: "" },
+    end: { reason: "end" },
+  };
+  return starters[type] || {};
+};
