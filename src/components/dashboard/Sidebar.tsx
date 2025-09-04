@@ -88,10 +88,12 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
       </nav>
       <div className="p-4 border-t border-gray-700">
         <div className="flex items-center">
-          <img
+          <Image
             className="h-10 w-10 rounded-full object-cover"
             src="https://placehold.co/100x100/6366f1/white?text=A"
             alt="Admin"
+            width={40}
+            height={40}
           />
           {!isCollapsed && (
             <motion.div

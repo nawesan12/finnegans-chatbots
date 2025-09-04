@@ -177,36 +177,45 @@ const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
     const onNodeClick = (_, node) => setSelected(node);
     const onPaneClick = () => setSelected(null);
 
-    const handleEdit = (node) => {
-        setSelected(node);
-    };
+    const handleEdit = useCallback(
+        (node) => {
+            setSelected(node);
+        },
+        [setSelected],
+    );
 
-    const handleDuplicate = (node) => {
-        const newNode = {
-            ...node,
-            id: makeId(),
-            position: {
-                x: node.position.x + 20,
-                y: node.position.y + 20,
-            },
-        };
-        setNodes((nds) => nds.concat(newNode));
-    };
+    const handleDuplicate = useCallback(
+        (node) => {
+            const newNode = {
+                ...node,
+                id: makeId(),
+                position: {
+                    x: node.position.x + 20,
+                    y: node.position.y + 20,
+                },
+            };
+            setNodes((nds) => nds.concat(newNode));
+        },
+        [setNodes],
+    );
 
-    const handleDelete = (nodeId) => {
-        setNodes((nds) => nds.filter((n) => n.id !== nodeId));
-        setEdges((eds) =>
-            eds.filter(
-                (ed) => ed.source !== nodeId && ed.target !== nodeId,
-            ),
-        );
-    };
+    const handleDelete = useCallback(
+        (nodeId) => {
+            setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+            setEdges((eds) =>
+                eds.filter(
+                    (ed) => ed.source !== nodeId && ed.target !== nodeId,
+                ),
+            );
+        },
+        [setNodes, setEdges],
+    );
 
-    const handleCopyWebhook = (node) => {
+    const handleCopyWebhook = useCallback((node) => {
         const webhookUrl = `${window.location.origin}/api/webhook?flowId=${node.id}`;
         navigator.clipboard.writeText(webhookUrl);
         toast.success("URL del webhook copiada al portapapeles!");
-    };
+    }, []);
 
     const updateSelected = (patch) => {
         if (!selected) return;
@@ -287,7 +296,7 @@ const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
         reader.readAsText(file);
     };
 
-    const handleExport = () => {
+    const handleExport = useCallback(() => {
         const payload = JSON.stringify({ nodes, edges }, null, 2);
         const blob = new Blob([payload], { type: "application/json" });
         const url = URL.createObjectURL(blob);
@@ -296,7 +305,7 @@ const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
         a.download = `whatsapp-flow-${new Date().toISOString().slice(0, 19)}.json`;
         a.click();
         URL.revokeObjectURL(url);
-    };
+    }, [nodes, edges]);
 
     // validation
     const validate = () => {
@@ -390,7 +399,7 @@ const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
         };
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
-    }, [selected, setNodes, setEdges]);
+    }, [selected, setNodes, setEdges, handleExport]);
 
     // undo / redo (simple snapshot stack)
     const historyRef = useRef({ past: [], future: [] });
