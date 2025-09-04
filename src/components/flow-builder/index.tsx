@@ -205,7 +205,7 @@ const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
     const handleCopyWebhook = (node) => {
         const webhookUrl = `${window.location.origin}/api/webhook?flowId=${node.id}`;
         navigator.clipboard.writeText(webhookUrl);
-        toast.success("Webhook URL copied to clipboard!");
+        toast.success("URL del webhook copiada al portapapeles!");
     };
 
     const updateSelected = (patch) => {
@@ -233,8 +233,8 @@ const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
             const id = makeId();
             const starters = {
                 trigger: { keyword: "/start" },
-                message: { text: "New message", useTemplate: false },
-                options: { options: ["Option 1", "Option 2"] },
+                message: { text: "Nuevo mensaje", useTemplate: false },
+                options: { options: ["Opcion 1", "Opcion 2"] },
                 delay: { seconds: 1 },
                 condition: { expression: "context.input.includes('ok')" },
                 api: {
@@ -279,9 +279,9 @@ const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
                     throw new Error("Invalid file");
                 setNodes(json.nodes);
                 setEdges(json.edges);
-                toast.success("Imported flow");
-            } catch (err) {
-                toast.error("Import failed");
+                toast.success("Flujo importado");
+            } catch {
+                toast.error("Error al importar");
             }
         };
         reader.readAsText(file);
@@ -306,7 +306,7 @@ const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
             triggers.map((t) => t.data.keyword?.toLowerCase()),
         );
         if (triggerSet.size !== triggers.length)
-            problems.push("Duplicate trigger keywords");
+            problems.push("Palabras clave de disparador duplicadas");
         nodes.forEach((n) => {
             try {
                 switch (n.type) {
@@ -351,17 +351,17 @@ const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
             }
             if (n.type !== "end" && !edges.some((e) => e.source === n.id)) {
                 if (n.type !== "options" && n.type !== "condition") {
-                    problems.push(`${n.id}: has no outgoing edge`);
+                    problems.push(`${n.id}: sin conexión de salida`);
                 }
             }
             if (n.type !== "trigger" && !edges.some((e) => e.target === n.id)) {
-                problems.push(`${n.id}: unreachable (no incoming edge)`);
+                problems.push(`${n.id}: inaccesible (sin conexión entrante)`);
             }
         });
         if (problems.length) {
             problems.forEach((p) => toast.error(p));
         } else {
-            toast.success("All good! Flow looks valid.");
+            toast.success("Todo bien! El flujo parece válido.");
         }
     };
 
@@ -378,7 +378,7 @@ const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
                 e.preventDefault();
                 handleExport();
             }
-            if (e.key === "" || e.key === "") {
+            if (e.key === "Delete" || e.key === "Backspace") {
                 setNodes((nds) => nds.filter((n) => n.id !== selected?.id));
                 setEdges((eds) =>
                     eds.filter(
@@ -471,7 +471,7 @@ const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
                         setNodes(defaultNodes);
                         setEdges(defaultEdges);
                         setSelected(null);
-                        toast.message("New flow created");
+                        toast.message("Nuevo flujo creado");
                     }}
                     onImport={handleImport}
                     onExport={handleExport}
