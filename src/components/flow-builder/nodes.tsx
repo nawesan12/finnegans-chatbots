@@ -17,6 +17,7 @@ import {
     Copy,
     Trash2,
     Clipboard,
+    Hash,
 } from "lucide-react";
 import {
     ContextMenu,
@@ -34,6 +35,7 @@ const Shell = ({
   onDuplicate,
   onDelete,
   onCopyWebhook,
+  onCopyId,
 }: {
   icon: React.ElementType;
   title: string;
@@ -43,6 +45,7 @@ const Shell = ({
   onDuplicate: () => void;
   onDelete: () => void;
   onCopyWebhook: () => void;
+  onCopyId: () => void;
 }) => (
     <ContextMenu>
         <ContextMenuTrigger>
@@ -67,6 +70,10 @@ const Shell = ({
                 <Clipboard className="h-4 w-4 mr-2" />
                 Copy Webhook URL
             </ContextMenuItem>
+            <ContextMenuItem onClick={onCopyId}>
+                <Hash className="h-4 w-4 mr-2" />
+                Copy ID
+            </ContextMenuItem>
             <ContextMenuItem onClick={onDelete} className="text-red-500">
                 <Trash2 className="h-4 w-4 mr-2" />
                 Delete
@@ -82,7 +89,7 @@ const CommonHandles = ({ top = false, bottom = true }) => (
   </>
 );
 
-const TriggerNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => (
+const TriggerNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook, onCopyId }) => (
     <div>
         <Shell
             icon={FileUp}
@@ -92,6 +99,7 @@ const TriggerNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => 
             onDuplicate={onDuplicate}
             onDelete={onDelete}
             onCopyWebhook={onCopyWebhook}
+            onCopyId={onCopyId}
         >
             <div className="text-muted-foreground">
                 Keyword: <Badge variant="secondary">{data.keyword}</Badge>
@@ -101,7 +109,7 @@ const TriggerNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => 
     </div>
 );
 
-const MessageNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => (
+const MessageNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook, onCopyId }) => (
     <div>
         <Shell
             icon={MessageSquare}
@@ -111,6 +119,7 @@ const MessageNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => 
             onDuplicate={onDuplicate}
             onDelete={onDelete}
             onCopyWebhook={onCopyWebhook}
+            onCopyId={onCopyId}
         >
             {data.useTemplate ? <Badge variant="outline">Template</Badge> : null}
             <div className="whitespace-pre-wrap break-words bg-muted/30 p-2 rounded-lg max-h-40 overflow-auto">
@@ -121,7 +130,7 @@ const MessageNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => 
     </div>
 );
 
-const OptionsNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => (
+const OptionsNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook, onCopyId }) => (
     <div>
         <Shell
             icon={Filter}
@@ -131,6 +140,7 @@ const OptionsNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => 
             onDuplicate={onDuplicate}
             onDelete={onDelete}
             onCopyWebhook={onCopyWebhook}
+            onCopyId={onCopyId}
         >
             <ul className="space-y-1">
                 {data.options?.map((opt, idx) => (
@@ -154,7 +164,7 @@ const OptionsNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => 
   </div>
 );
 
-const DelayNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => (
+const DelayNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook, onCopyId }) => (
     <div>
         <Shell
             icon={Clock3}
@@ -164,6 +174,7 @@ const DelayNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => (
             onDuplicate={onDuplicate}
             onDelete={onDelete}
             onCopyWebhook={onCopyWebhook}
+            onCopyId={onCopyId}
         >
             <div>
                 Wait <b>{data.seconds}</b> seconds
@@ -173,7 +184,7 @@ const DelayNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => (
     </div>
 );
 
-const ConditionNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => (
+const ConditionNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook, onCopyId }) => (
     <div>
         <Shell
             icon={GitBranch}
@@ -183,6 +194,7 @@ const ConditionNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) =
             onDuplicate={onDuplicate}
             onDelete={onDelete}
             onCopyWebhook={onCopyWebhook}
+            onCopyId={onCopyId}
         >
             <code className="text-xs bg-muted/40 px-2 py-1 rounded block overflow-auto max-h-24">
                 {data.expression}
@@ -207,7 +219,7 @@ const ConditionNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) =
   </div>
 );
 
-const APICallNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => (
+const APICallNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook, onCopyId }) => (
     <div>
         <Shell
             icon={Code2}
@@ -217,6 +229,7 @@ const APICallNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => 
             onDuplicate={onDuplicate}
             onDelete={onDelete}
             onCopyWebhook={onCopyWebhook}
+            onCopyId={onCopyId}
         >
             <div className="text-xs">
                 <div className="truncate">
@@ -231,7 +244,7 @@ const APICallNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => 
     </div>
 );
 
-const AssignVarNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => (
+const AssignVarNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook, onCopyId }) => (
     <div>
         <Shell
             icon={Variable}
@@ -241,6 +254,7 @@ const AssignVarNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) =
             onDuplicate={onDuplicate}
             onDelete={onDelete}
             onCopyWebhook={onCopyWebhook}
+            onCopyId={onCopyId}
         >
             <div className="text-xs">
                 <b>{data.key}</b> = <code className="break-all">{data.value}</code>
@@ -250,7 +264,7 @@ const AssignVarNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) =
     </div>
 );
 
-const MediaNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => (
+const MediaNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook, onCopyId }) => (
     <div>
         <Shell
             icon={ImageIcon}
@@ -260,6 +274,7 @@ const MediaNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => (
             onDuplicate={onDuplicate}
             onDelete={onDelete}
             onCopyWebhook={onCopyWebhook}
+            onCopyId={onCopyId}
         >
             <div className="text-xs">
                 {data.mediaType.toUpperCase()} • {data.url}
@@ -272,7 +287,7 @@ const MediaNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => (
     </div>
 );
 
-const HandoffNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => (
+const HandoffNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook, onCopyId }) => (
     <div>
         <Shell
             icon={Headphones}
@@ -282,6 +297,7 @@ const HandoffNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => 
             onDuplicate={onDuplicate}
             onDelete={onDelete}
             onCopyWebhook={onCopyWebhook}
+            onCopyId={onCopyId}
         >
             <div className="text-xs">
                 Queue: <b>{data.queue}</b>
@@ -294,7 +310,7 @@ const HandoffNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => 
     </div>
 );
 
-const GoToNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => (
+const GoToNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook, onCopyId }) => (
     <div>
         <Shell
             icon={Link2}
@@ -304,6 +320,7 @@ const GoToNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => (
             onDuplicate={onDuplicate}
             onDelete={onDelete}
             onCopyWebhook={onCopyWebhook}
+            onCopyId={onCopyId}
         >
             <div className="text-xs">
                 Jump to:{" "}
@@ -314,7 +331,7 @@ const GoToNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => (
     </div>
 );
 
-const EndNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => (
+const EndNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook, onCopyId }) => (
     <div>
         <Shell
             icon={Flag}
@@ -324,6 +341,7 @@ const EndNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook }) => (
             onDuplicate={onDuplicate}
             onDelete={onDelete}
             onCopyWebhook={onCopyWebhook}
+            onCopyId={onCopyId}
         >
             <div className="text-xs text-muted-foreground">
                 {data.reason || "end"}
