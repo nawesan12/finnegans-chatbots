@@ -46,12 +46,12 @@ import {
     EndDataSchema,
     waTextLimit
 } from "./types";
-import { getLayoutedElements, makeId } from "./helpers";
+import { getLayoutedElements, makeId, getStarterData } from "./helpers";
 import { nodeTypes } from "./nodes";
 import { Inspector } from "./Inspector";
 import { Simulator } from "./Simulator";
 import { Topbar } from "./Toolbar";
-import { Palette, paletteItems } from "./Palette";
+import { Palette } from "./Palette";
 import { z } from "zod";
 
 const defaultNodes = [
@@ -132,30 +132,7 @@ const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
         const id = makeId();
         const y = (nodes.at(-1)?.position?.y || 0) + 140;
         const x = nodes.at(-1)?.position?.x || 0;
-        const starters = {
-            trigger: { keyword: "/start" },
-            message: { text: "Nuevo mensaje", useTemplate: false },
-            options: { options: ["Opcion 1", "Opcion 2"] },
-            delay: { seconds: 1 },
-            condition: { expression: "context.input.includes('ok')" },
-            api: {
-                url: "https://api.example.com",
-                method: "POST",
-                headers: {},
-                body: "{}",
-                assignTo: "apiResult",
-            },
-            assign: { key: "name", value: "John" },
-            media: {
-                mediaType: "image",
-                url: "https://placekitten.com/400/300",
-                caption: "A cat",
-            },
-            handoff: { queue: "Default", note: "VIP" },
-            goto: { targetNodeId: "" },
-            end: { reason: "end" },
-        };
-        const data = { name: `${type}-${id}`, ...(starters[type] || {}) };
+        const data = { name: `${type}-${id}`, ...getStarterData(type) };
         setNodes((nds) => nds.concat({ id, type, data, position: { x, y } }));
     };
 
@@ -240,30 +217,7 @@ const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
             if (!type) return;
             const pos = rfRef.current?.project({ x: e.clientX, y: e.clientY });
             const id = makeId();
-            const starters = {
-                trigger: { keyword: "/start" },
-                message: { text: "Nuevo mensaje", useTemplate: false },
-                options: { options: ["Opcion 1", "Opcion 2"] },
-                delay: { seconds: 1 },
-                condition: { expression: "context.input.includes('ok')" },
-                api: {
-                    url: "https://api.example.com",
-                    method: "POST",
-                    headers: {},
-                    body: "{}",
-                    assignTo: "apiResult",
-                },
-                assign: { key: "name", value: "John" },
-                media: {
-                    mediaType: "image",
-                    url: "https://placekitten.com/400/300",
-                    caption: "A cat",
-                },
-                handoff: { queue: "Default", note: "VIP" },
-                goto: { targetNodeId: "" },
-                end: { reason: "end" },
-            };
-            const data = { name: `${type}-${id}`, ...(starters[type] || {}) };
+            const data = { name: `${type}-${id}`, ...getStarterData(type) };
             setNodes((nds) =>
                 nds.concat({ id, type, position: pos || { x: 0, y: 0 }, data }),
             );
@@ -429,12 +383,7 @@ const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
     // zoom controls
     const zoomIn = () => rfRef.current?.zoomIn?.();
     const zoomOut = () => rfRef.current?.zoomOut?.();
-
-    // dnd from palette
-    const onPaletteDragStart = (e, type) => {
-        e.dataTransfer.setData("application/wa-node", type);
-        e.dataTransfer.effectAllowed = "move";
-    };
+    const fitView = () => rfRef.current?.fitView?.();
 
     // export to WhatsApp Cloud API-ish actions (spec outline)
     const exportForWhatsApp = () => {
@@ -490,6 +439,7 @@ const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
                     onRedo={redo}
                     zoomIn={zoomIn}
                     zoomOut={zoomOut}
+                    fitView={fitView}
                     selectedId={selected?.id}
                 />
             </div>
@@ -520,19 +470,7 @@ const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
                 <Palette onAdd={(type) => addNode(type)} />
                 <Separator className="my-4" />
                 <div className="text-xs text-muted-foreground">
-                    Consejo: arrastra desde esta lista al lienzo también.
-                </div>
-                <div className="mt-2 grid gap-2">
-                    {paletteItems.map((p) => (
-                        <div
-                            key={p.type}
-                            draggable
-                            onDragStart={(e) => onPaletteDragStart(e, p.type)}
-                            className="flex items-center gap-2 p-2 rounded-lg border bg-muted/30"
-                        >
-                            <p.icon className="h-4 w-4" /> {p.label}
-                        </div>
-                    ))}
+                    Consejo: clickea o arrastra nodos al lienzo.
                 </div>
             </div>
 
