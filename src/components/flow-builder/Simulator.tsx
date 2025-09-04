@@ -1,12 +1,13 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Play, Rocket } from "lucide-react";
+import { Play, Rocket, RotateCcw } from "lucide-react";
 
 export function Simulator({ nodes, edges }) {
     const [input, setInput] = useState("/start");
     const [log, setLog] = useState([]);
+    const logRef = useRef<HTMLDivElement>(null);
 
     const idMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
     const outgoing = useMemo(() => {
@@ -96,6 +97,12 @@ export function Simulator({ nodes, edges }) {
         setLog([]);
     }, [nodes, edges]);
 
+    useEffect(() => {
+        if (logRef.current) {
+            logRef.current.scrollTop = logRef.current.scrollHeight;
+        }
+    }, [log]);
+
     return (
         <Card className="h-full">
             <CardHeader>
@@ -108,14 +115,26 @@ export function Simulator({ nodes, edges }) {
                     <Input
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                                run();
+                            }
+                        }}
                         placeholder="/start"
                     />
                     <Button onClick={run}>
                         <Rocket className="h-4 w-4 mr-2" />
                         Iniciar
                     </Button>
+                    <Button variant="outline" onClick={() => setLog([])}>
+                        <RotateCcw className="h-4 w-4 mr-2" />
+                        Limpiar
+                    </Button>
                 </div>
-                <div className="border rounded-lg p-3 h-[260px] overflow-auto bg-muted/30 space-y-2">
+                <div
+                    ref={logRef}
+                    className="border rounded-lg p-3 h-[260px] overflow-auto bg-muted/30 space-y-2"
+                >
                     {log.length === 0 && (
                         <div className="text-sm text-muted-foreground">
                             Sin simulaciones. Presiona Iniciar.
