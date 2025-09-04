@@ -20,9 +20,9 @@ export function Simulator({ nodes, edges }) {
         return map;
     }, [edges]);
 
-    const run = () => {
-        const context = { input, vars: {}, apiResult: null };
-        const out = [];
+    const run = async () => {
+        const context: any = { input, vars: {}, apiResult: null };
+        const out: { type: string; text: string }[] = [];
         // find trigger matching input
         const start = nodes.find(
             (n) =>
@@ -54,6 +54,56 @@ export function Simulator({ nodes, edges }) {
             }
             if (current.type === "delay") {
                 out.push({ type: "system", text: `⏱ Wait ${current.data.seconds}s` });
+            }
+            if (current.type === "options") {
+                out.push({
+                    type: "bot",
+                    text: current.data.options
+                        .map((opt, i) => `${i + 1}. ${opt}`)
+                        .join(" | "),
+                });
+                out.push({
+                    type: "system",
+                    text: `Auto-selecting "${current.data.options[0]}"`,
+                });
+                const e = (outgoing.get(current.id) || []).find(
+                    (ed) => ed.sourceHandle === "opt-0",
+                );
+                current = e ? idMap.get(e.target) : null;
+                continue;
+            }
+            if (current.type === "api") {
+                out.push({
+                    type: "system",
+                    text: `Calling ${current.data.method} ${current.data.url}`,
+                });
+                try {
+                    const res = await fetch(current.data.url, {
+                        method: current.data.method,
+                        headers: current.data.headers,
+                        body:
+                            current.data.method !== "GET"
+                                ? current.data.body
+                                : undefined,
+                    });
+                    const text = await res.text();
+                    let parsed: any;
+                    try {
+                        parsed = JSON.parse(text);
+                    } catch {
+                        parsed = text;
+                    }
+                    context.vars[current.data.assignTo] = parsed;
+                    out.push({
+                        type: "system",
+                        text: `Stored result in ${current.data.assignTo}`,
+                    });
+                } catch (e) {
+                    out.push({
+                        type: "system",
+                        text: `API error: ${String(e)}`,
+                    });
+                }
             }
             if (current.type === "condition") {
                 try {
