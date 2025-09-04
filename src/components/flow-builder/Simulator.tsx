@@ -2,11 +2,12 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Play, Rocket, RotateCcw, Copy } from "lucide-react";
+import { Play, Rocket, RotateCcw, Copy, Loader2 } from "lucide-react";
 
 export function Simulator({ nodes, edges }) {
     const [input, setInput] = useState("/start");
     const [log, setLog] = useState([]);
+    const [isRunning, setIsRunning] = useState(false);
     const logRef = useRef<HTMLDivElement>(null);
 
     const idMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
@@ -21,14 +22,17 @@ export function Simulator({ nodes, edges }) {
     }, [edges]);
 
     const run = async () => {
+        if (isRunning) return;
+        setIsRunning(true);
+        try {
         const context: {
             input: string;
             vars: Record<string, unknown>;
             apiResult: unknown;
         } = { input, vars: {}, apiResult: null };
-        const out: { type: string; text: string }[] = [
-            { type: "user", text: input },
-        ];
+        const addLog = (entry: { type: string; text: string }) =>
+            setLog((prev) => [...prev, entry]);
+        setLog([{ type: "user", text: input }]);
         // find trigger matching input
         const start = nodes.find(
             (n) =>
@@ -36,8 +40,7 @@ export function Simulator({ nodes, edges }) {
                 n.data.keyword?.toLowerCase() === input.toLowerCase(),
         );
         if (!start) {
-            out.push({ type: "system", text: "No trigger matches the input" });
-            setLog(out);
+            addLog({ type: "system", text: "No trigger matches the input" });
             return;
         }
         let current = start;
@@ -47,10 +50,10 @@ export function Simulator({ nodes, edges }) {
             visited.add(current.id);
             guard++;
             if (current.type === "message") {
-                out.push({ type: "bot", text: current.data.text });
+                addLog({ type: "bot", text: current.data.text });
             }
             if (current.type === "media") {
-                out.push({
+                addLog({
                     type: "bot",
                     text: `[${current.data.mediaType.toUpperCase()}] ${current.data.url} ${current.data.caption || ""}`,
                 });
@@ -59,16 +62,19 @@ export function Simulator({ nodes, edges }) {
                 context.vars[current.data.key] = current.data.value;
             }
             if (current.type === "delay") {
-                out.push({ type: "system", text: `⏱ Wait ${current.data.seconds}s` });
+                addLog({ type: "system", text: `⏱ Wait ${current.data.seconds}s` });
+                await new Promise((r) =>
+                    setTimeout(r, (current.data.seconds || 0) * 1000),
+                );
             }
             if (current.type === "options") {
-                out.push({
+                addLog({
                     type: "bot",
                     text: current.data.options
                         .map((opt, i) => `${i + 1}. ${opt}`)
                         .join(" | "),
                 });
-                out.push({
+                addLog({
                     type: "system",
                     text: `Auto-selecting "${current.data.options[0]}"`,
                 });
@@ -79,7 +85,7 @@ export function Simulator({ nodes, edges }) {
                 continue;
             }
             if (current.type === "api") {
-                out.push({
+                addLog({
                     type: "system",
                     text: `Calling ${current.data.method} ${current.data.url}`,
                 });
@@ -100,12 +106,12 @@ export function Simulator({ nodes, edges }) {
                         parsed = text;
                     }
                     context.vars[current.data.assignTo] = parsed;
-                    out.push({
+                    addLog({
                         type: "system",
                         text: `Stored result in ${current.data.assignTo}`,
                     });
                 } catch (e) {
-                    out.push({
+                    addLog({
                         type: "system",
                         text: `API error: ${String(e)}`,
                     });
@@ -125,7 +131,10 @@ export function Simulator({ nodes, edges }) {
                     current = e ? idMap.get(e.target) : null;
                     continue;
                 } catch (e) {
-                    out.push({ type: "system", text: `Condition error: ${String(e)}` });
+                    addLog({
+                        type: "system",
+                        text: `Condition error: ${String(e)}`,
+                    });
                 }
             }
             if (current.type === "goto") {
@@ -133,7 +142,7 @@ export function Simulator({ nodes, edges }) {
                 continue;
             }
             if (current.type === "end") {
-                out.push({ type: "system", text: "🏁 End" });
+                addLog({ type: "system", text: "🏁 End" });
                 break;
             }
             // default follow single edge
@@ -141,12 +150,14 @@ export function Simulator({ nodes, edges }) {
             current = nextEdge ? idMap.get(nextEdge.target) : null;
         }
         if (Object.keys(context.vars).length > 0) {
-            out.push({
+            addLog({
                 type: "system",
                 text: `Vars: ${JSON.stringify(context.vars)}`,
             });
         }
-        setLog(out);
+    } finally {
+        setIsRunning(false);
+    }
     };
 
     const copyLog = () => {
@@ -193,9 +204,13 @@ export function Simulator({ nodes, edges }) {
                         }}
                         placeholder="/start"
                     />
-                    <Button onClick={run}>
-                        <Rocket className="h-4 w-4 mr-2" />
-                        Iniciar
+                    <Button onClick={run} disabled={isRunning || !input.trim()}>
+                        {isRunning ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                            <Rocket className="h-4 w-4 mr-2" />
+                        )}
+                        {isRunning ? "Ejecutando" : "Iniciar"}
                     </Button>
                     <Button variant="outline" onClick={() => setLog([])}>
                         <RotateCcw className="h-4 w-4 mr-2" />
