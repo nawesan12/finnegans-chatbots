@@ -3,57 +3,72 @@ import { executeFlow } from "./flow-executor";
 
 const prisma = new PrismaClient();
 
-export async function processWebhookEvent(data: any) {
-  if (data.object) {
-    if (
-      data.entry &&
-      data.entry[0].changes &&
-      data.entry[0].changes[0] &&
-      data.entry[0].changes[0].value.messages &&
-      data.entry[0].changes[0].value.messages[0]
-    ) {
-      const from = data.entry[0].changes[0].value.messages[0].from;
-      const text = data.entry[0].changes[0].value.messages[0].text.body;
-      const phoneNumberId =
-        data.entry[0].changes[0].value.metadata.phone_number_id;
+interface MetaWebhookMessage {
+  from: string;
+  text: { body: string };
+}
 
-      const user = await prisma.user.findFirst({
-        where: { metaPhoneNumberId: phoneNumberId },
-      });
+interface MetaWebhookEntry {
+  changes: {
+    value: {
+      messages?: MetaWebhookMessage[];
+      metadata: { phone_number_id: string };
+    };
+  }[];
+}
 
-      if (!user) {
-        console.error("User not found for phone number ID:", phoneNumberId);
-        return;
-      }
+interface MetaWebhookEvent {
+  object?: string;
+  entry?: MetaWebhookEntry[];
+}
 
-      let contact = await prisma.contact.findUnique({
-        where: { phone: from, userId: user.id },
-      });
+export async function processWebhookEvent(data: MetaWebhookEvent) {
+  const message = data.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+  const phoneNumberId =
+    data.entry?.[0]?.changes?.[0]?.value?.metadata.phone_number_id;
 
-      if (!contact) {
-        contact = await prisma.contact.create({
-          data: {
-            phone: from,
-            userId: user.id,
-          },
-        });
-      }
-
-      const flow = await prisma.flow.findFirst({
-        where: {
-          userId: user.id,
-          status: "Active",
-        },
-      });
-
-      if (!flow) {
-        console.error("No active flow found for user:", user.id);
-        return;
-      }
-
-      await executeFlow(flow.id, contact.id, text, sendMessage);
-    }
+  if (!data.object || !message || !phoneNumberId) {
+    return;
   }
+
+  const from = message.from;
+  const text = message.text.body;
+
+  const user = await prisma.user.findFirst({
+    where: { metaPhoneNumberId: phoneNumberId },
+  });
+
+  if (!user) {
+    console.error("User not found for phone number ID:", phoneNumberId);
+    return;
+  }
+
+  let contact = await prisma.contact.findUnique({
+    where: { phone: from, userId: user.id },
+  });
+
+  if (!contact) {
+    contact = await prisma.contact.create({
+      data: {
+        phone: from,
+        userId: user.id,
+      },
+    });
+  }
+
+  const flow = await prisma.flow.findFirst({
+    where: {
+      userId: user.id,
+      status: "Active",
+    },
+  });
+
+  if (!flow) {
+    console.error("No active flow found for user:", user.id);
+    return;
+  }
+
+  await executeFlow(flow.id, contact.id, text, sendMessage);
 }
 
 export async function sendMessage(userId: string, to: string, text: string) {

@@ -12,7 +12,6 @@ export const getLayoutedElements = (
   edges: Edge[],
   direction = "TB"
 ) => {
-  const isHorizontal = direction === "LR";
   dagreGraph.setGraph({ rankdir: direction, nodesep: 40, ranksep: 80 });
 
   nodes.forEach((n) =>

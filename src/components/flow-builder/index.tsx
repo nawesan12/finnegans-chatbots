@@ -558,7 +558,6 @@ const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
                 <Inspector
                     selectedNode={selected}
                     onChange={updateSelected}
-                    allNodes={nodes}
                 />
                 <Simulator nodes={nodes} edges={edges} />
                 <Card>
