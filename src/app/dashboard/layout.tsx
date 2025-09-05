@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import Sidebar from "@/components/dashboard/Sidebar";
 import Header from "@/components/dashboard/Header";
 import ImportContactsModal from "@/components/ImportContactsModal";
+import AddContactModal from "@/components/AddContactModal";
 import { pageVariants, pageTransition } from "@/lib/animations";
 
 export default function DashboardLayout({
@@ -15,6 +16,7 @@ export default function DashboardLayout({
 }) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isAddContactModalOpen, setIsAddContactModalOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const { token, user } = useAuthStore();
@@ -41,6 +43,10 @@ export default function DashboardLayout({
     setIsImportModalOpen(true);
   };
 
+  const handleOpenAddContactModal = () => {
+    setIsAddContactModalOpen(true);
+  };
+
   return (
     <div className="flex h-screen bg-gray-100 font-sans">
       <Sidebar
@@ -51,6 +57,7 @@ export default function DashboardLayout({
         <Header
           title={pageTitles[pathname] || "Dashboard"}
           onImportClick={handleOpenImportModal}
+          onNewContactClick={handleOpenAddContactModal}
         />
         <div className="flex-1 overflow-y-auto">
           <AnimatePresence mode="wait">
@@ -70,6 +77,11 @@ export default function DashboardLayout({
       <ImportContactsModal
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
+      />
+      <AddContactModal
+        open={isAddContactModalOpen}
+        onOpenChange={setIsAddContactModalOpen}
+        userId={user.id}
       />
     </div>
   );

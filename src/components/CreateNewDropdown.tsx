@@ -12,9 +12,11 @@ const dropdownVariants = {
 const CreateNewDropdown = ({
   isOpen,
   onImportClick,
+  onNewContactClick,
 }: {
   isOpen: boolean;
   onImportClick: () => void;
+  onNewContactClick: () => void;
 }) => {
   const menuItems = [
     {
@@ -25,7 +27,7 @@ const CreateNewDropdown = ({
     {
       icon: UserPlus,
       label: "Nuevo contacto",
-      action: () => console.log("Nuevo contacto"),
+      action: onNewContactClick,
     },
     {
       icon: Upload,
