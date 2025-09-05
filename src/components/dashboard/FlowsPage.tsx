@@ -119,7 +119,7 @@ const FlowsPage = () => {
             onClick={() => setEditingFlow(row)}
             className="text-[#4bc3fe] hover:text-indigo-900 font-medium"
           >
-            Edit
+            Editar
           </button>
           <button className="text-gray-500 hover:text-gray-800">
             <MoreVertical className="h-5 w-5" />
@@ -130,7 +130,7 @@ const FlowsPage = () => {
   ];
 
   if (loading && !editingFlow) {
-    return <div>Loading flows...</div>;
+    return <div>Cargando flujos...</div>;
   }
 
   return (
