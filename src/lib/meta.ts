@@ -44,8 +44,15 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
   }
 
   let contact = await prisma.contact.findUnique({
-    where: { phone: from, userId: user.id },
+    where: { phone: from },
   });
+
+  if (contact && contact.userId !== user.id) {
+    console.error(
+      `Contact with phone ${from} exists but belongs to another user.`,
+    );
+    return;
+  }
 
   if (!contact) {
     contact = await prisma.contact.create({
@@ -68,10 +75,47 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
     return;
   }
 
-  await executeFlow(flow.id, contact.id, text, sendMessage);
+  // Find or create a session
+  let session = await prisma.session.findUnique({
+    where: { contactId_flowId: { contactId: contact.id, flowId: flow.id } },
+    include: { flow: true, contact: true },
+  });
+
+  if (!session) {
+    session = await prisma.session.create({
+      data: {
+        contactId: contact.id,
+        flowId: flow.id,
+        status: "Active",
+      },
+      include: { flow: true, contact: true },
+    });
+  } else if (session.status === "Completed") {
+    // If the session is completed, create a new one
+    session = await prisma.session.create({
+        data: {
+          contactId: contact.id,
+          flowId: flow.id,
+          status: "Active",
+        },
+        include: { flow: true, contact: true },
+      });
+  }
+
+
+  await executeFlow(session, text, sendMessage);
 }
 
-export async function sendMessage(userId: string, to: string, text: string) {
+type SendMessagePayload =
+  | { type: "text"; text: string }
+  | { type: "media"; mediaType: string; url: string; caption?: string }
+  | { type: "options"; text: string; options: string[] };
+
+export async function sendMessage(
+  userId: string,
+  to: string,
+  message: SendMessagePayload,
+) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -90,17 +134,57 @@ export async function sendMessage(userId: string, to: string, text: string) {
     Authorization: `Bearer ${user.metaAccessToken}`,
     "Content-Type": "application/json",
   };
-  const body = JSON.stringify({
-    messaging_product: "whatsapp",
-    to,
-    text: { body: text },
-  });
+
+  let body: any;
+
+  switch (message.type) {
+    case "text":
+      body = {
+        messaging_product: "whatsapp",
+        to,
+        text: { body: message.text },
+      };
+      break;
+    case "media":
+      body = {
+        messaging_product: "whatsapp",
+        to,
+        type: message.mediaType,
+        [message.mediaType]: {
+          link: message.url,
+          caption: message.caption,
+        },
+      };
+      break;
+    case "options":
+      body = {
+        messaging_product: "whatsapp",
+        to,
+        type: "interactive",
+        interactive: {
+          type: "button",
+          body: {
+            text: message.text,
+          },
+          action: {
+            buttons: message.options.map((opt) => ({
+              type: "reply",
+              reply: {
+                id: opt.toLowerCase().replace(/\s+/g, "_"),
+                title: opt,
+              },
+            })),
+          },
+        },
+      };
+      break;
+  }
 
   try {
     const response = await fetch(url, {
       method: "POST",
       headers,
-      body,
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {

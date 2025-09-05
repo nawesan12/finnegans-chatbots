@@ -8,6 +8,9 @@ export function Simulator({ nodes, edges }) {
   const [input, setInput] = useState("/start");
   const [log, setLog] = useState([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [pausedNode, setPausedNode] = useState(null);
+  const [context, setContext] = useState({ vars: {} });
   const logRef = useRef<HTMLDivElement>(null);
 
   const idMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
@@ -21,141 +24,175 @@ export function Simulator({ nodes, edges }) {
     return map;
   }, [edges]);
 
-  const run = async () => {
-    if (isRunning) return;
-    setIsRunning(true);
-    try {
-      const context: {
-        input: string;
-        vars: Record<string, unknown>;
-        apiResult: unknown;
-      } = { input, vars: {}, apiResult: null };
-      const addLog = (entry: { type: string; text: string }) =>
-        setLog((prev) => [...prev, entry]);
-      setLog([{ type: "user", text: input }]);
-      // find trigger matching input
-      const start = nodes.find(
-        (n) =>
-          n.type === "trigger" &&
-          n.data.keyword?.toLowerCase() === input.toLowerCase(),
-      );
-      if (!start) {
-        addLog({ type: "system", text: "No trigger matches the input" });
+  const addLog = (entry: { type: string; text: string; options?: string[] }) =>
+    setLog((prev) => [...prev, entry]);
+
+  const execute = async (startNode) => {
+    let current = startNode;
+    const visited = new Set();
+    let guard = 0;
+    while (current && guard < 200) {
+      if (visited.has(current.id)) {
+        addLog({ type: "system", text: "Error: Loop detected" });
         return;
       }
-      let current = start;
-      const visited = new Set();
-      let guard = 0;
-      while (current && guard < 200) {
-        visited.add(current.id);
-        guard++;
-        if (current.type === "message") {
-          addLog({ type: "bot", text: current.data.text });
-        }
-        if (current.type === "media") {
-          addLog({
-            type: "bot",
-            text: `[${current.data.mediaType.toUpperCase()}] ${current.data.url} ${current.data.caption || ""}`,
+      visited.add(current.id);
+      guard++;
+
+      if (current.type === "message") {
+        addLog({ type: "bot", text: current.data.text });
+      }
+      if (current.type === "media") {
+        addLog({
+          type: "bot",
+          text: `[${current.data.mediaType.toUpperCase()}] ${current.data.url} ${current.data.caption || ""}`,
+        });
+      }
+      if (current.type === "assign") {
+        const newContext = { ...context, vars: { ...context.vars, [current.data.key]: current.data.value } };
+        setContext(newContext);
+      }
+      if (current.type === "delay") {
+        addLog({ type: "system", text: `⏱ Wait ${current.data.seconds}s` });
+        await new Promise((r) =>
+          setTimeout(r, (current.data.seconds || 0) * 1000),
+        );
+      }
+      if (current.type === "options") {
+        addLog({
+          type: "options",
+          text: current.data.text,
+          options: current.data.options,
+        });
+        setIsPaused(true);
+        setPausedNode(current);
+        return;
+      }
+      if (current.type === "api") {
+        addLog({
+          type: "system",
+          text: `Calling ${current.data.method} ${current.data.url}`,
+        });
+        try {
+          const res = await fetch(current.data.url, {
+            method: current.data.method,
+            headers: current.data.headers,
+            body:
+              current.data.method !== "GET" ? current.data.body : undefined,
           });
-        }
-        if (current.type === "assign") {
-          context.vars[current.data.key] = current.data.value;
-        }
-        if (current.type === "delay") {
-          addLog({ type: "system", text: `⏱ Wait ${current.data.seconds}s` });
-          await new Promise((r) =>
-            setTimeout(r, (current.data.seconds || 0) * 1000),
-          );
-        }
-        if (current.type === "options") {
-          addLog({
-            type: "bot",
-            text: current.data.options
-              .map((opt, i) => `${i + 1}. ${opt}`)
-              .join(" | "),
-          });
+          const text = await res.text();
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(text);
+          } catch {
+            parsed = text;
+          }
+          const newContext = { ...context, vars: { ...context.vars, [current.data.assignTo]: parsed } };
+          setContext(newContext);
           addLog({
             type: "system",
-            text: `Auto-selecting "${current.data.options[0]}"`,
+            text: `Stored result in ${current.data.assignTo}`,
           });
+        } catch (e) {
+          addLog({
+            type: "system",
+            text: `API error: ${String(e)}`,
+          });
+        }
+      }
+      if (current.type === "condition") {
+        try {
+          const fn = new Function(
+            "context",
+            `return (${current.data.expression})`,
+          );
+          const res = !!fn(context);
           const e = (outgoing.get(current.id) || []).find(
-            (ed) => ed.sourceHandle === "opt-0",
+            (ed) => ed.sourceHandle === (res ? "true" : "false"),
           );
           current = e ? idMap.get(e.target) : null;
           continue;
-        }
-        if (current.type === "api") {
+        } catch (e) {
           addLog({
             type: "system",
-            text: `Calling ${current.data.method} ${current.data.url}`,
+            text: `Condition error: ${String(e)}`,
           });
-          try {
-            const res = await fetch(current.data.url, {
-              method: current.data.method,
-              headers: current.data.headers,
-              body:
-                current.data.method !== "GET" ? current.data.body : undefined,
-            });
-            const text = await res.text();
-            let parsed: unknown;
-            try {
-              parsed = JSON.parse(text);
-            } catch {
-              parsed = text;
-            }
-            context.vars[current.data.assignTo] = parsed;
-            addLog({
-              type: "system",
-              text: `Stored result in ${current.data.assignTo}`,
-            });
-          } catch (e) {
-            addLog({
-              type: "system",
-              text: `API error: ${String(e)}`,
-            });
-          }
         }
-        if (current.type === "condition") {
-          try {
-            // VERY basic eval – simulation only
-            const fn = new Function(
-              "context",
-              `return (${current.data.expression})`,
-            );
-            const res = !!fn(context);
-            const e = (outgoing.get(current.id) || []).find(
-              (ed) => ed.sourceHandle === (res ? "true" : "false"),
-            );
-            current = e ? idMap.get(e.target) : null;
-            continue;
-          } catch (e) {
-            addLog({
-              type: "system",
-              text: `Condition error: ${String(e)}`,
-            });
-          }
-        }
-        if (current.type === "goto") {
-          current = idMap.get(current.data.targetNodeId);
-          continue;
-        }
-        if (current.type === "end") {
-          addLog({ type: "system", text: "🏁 End" });
-          break;
-        }
-        // default follow single edge
-        const nextEdge = (outgoing.get(current.id) || [])[0];
-        current = nextEdge ? idMap.get(nextEdge.target) : null;
       }
-      if (Object.keys(context.vars).length > 0) {
-        addLog({
-          type: "system",
-          text: `Vars: ${JSON.stringify(context.vars)}`,
-        });
+      if (current.type === "goto") {
+        current = idMap.get(current.data.targetNodeId);
+        continue;
+      }
+      if (current.type === "end") {
+        addLog({ type: "system", text: "🏁 End" });
+        break;
+      }
+
+      const nextEdge = (outgoing.get(current.id) || [])[0];
+      current = nextEdge ? idMap.get(nextEdge.target) : null;
+    }
+  };
+
+  const handleSendMessage = async (message?: string) => {
+    const messageToSend = message || input;
+    if (isRunning || !messageToSend.trim()) return;
+    setIsRunning(true);
+    addLog({ type: "user", text: messageToSend });
+
+    try {
+      if (isPaused && pausedNode) {
+        const optionIndex = pausedNode.data.options.findIndex(
+          (opt) => opt.toLowerCase() === messageToSend.toLowerCase(),
+        );
+
+        let nextNodeId;
+        if (optionIndex !== -1) {
+          const sourceHandle = `opt-${optionIndex}`;
+          const edge = (outgoing.get(pausedNode.id) || []).find(
+            (e) => e.sourceHandle === sourceHandle,
+          );
+          nextNodeId = edge?.target;
+        } else {
+          const edge = (outgoing.get(pausedNode.id) || []).find(
+            (e) => e.sourceHandle === "no-match",
+          );
+          nextNodeId = edge?.target;
+        }
+
+        setIsPaused(false);
+        setPausedNode(null);
+
+        if (nextNodeId) {
+          await execute(idMap.get(nextNodeId));
+        } else {
+          addLog({ type: "system", text: "No path for this option." });
+        }
+      } else {
+        setContext({ vars: {} });
+        const startNode = nodes.find(
+          (n) =>
+            n.type === "trigger" &&
+            n.data.keyword?.toLowerCase() === messageToSend.toLowerCase(),
+        );
+
+        if (startNode) {
+          await execute(startNode);
+        } else {
+          addLog({ type: "system", text: "No trigger matches the input" });
+        }
       }
     } finally {
+      setInput("");
       setIsRunning(false);
     }
+  };
+
+  const reset = () => {
+    setLog([]);
+    setIsPaused(false);
+    setPausedNode(null);
+    setContext({ vars: {} });
+    setInput("/start");
   };
 
   const copyLog = () => {
@@ -170,7 +207,7 @@ export function Simulator({ nodes, edges }) {
   };
 
   useEffect(() => {
-    setLog([]);
+    reset();
   }, [nodes, edges]);
 
   useEffect(() => {
@@ -193,22 +230,22 @@ export function Simulator({ nodes, edges }) {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
-                run();
+                handleSendMessage();
               }
             }}
-            placeholder="Hola"
+            placeholder={isPaused ? "Escribe tu respuesta..." : "Hola"}
           />
 
           <div className="flex gap-2">
-            <Button onClick={run} disabled={isRunning || !input.trim()}>
+            <Button onClick={() => handleSendMessage()} disabled={isRunning || !input.trim()}>
               {isRunning ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : (
                 <Rocket className="h-4 w-4 mr-2" />
               )}
-              {isRunning ? "Ejecutando" : "Iniciar"}
+              {isRunning ? "Ejecutando" : isPaused ? "Enviar" : "Iniciar"}
             </Button>
-            <Button variant="outline" onClick={() => setLog([])}>
+            <Button variant="outline" onClick={reset}>
               <RotateCcw className="h-4 w-4 mr-2" />
               Limpiar
             </Button>
@@ -238,6 +275,20 @@ export function Simulator({ nodes, edges }) {
                   ? "👤 "
                   : "• "}
               {line.text}
+              {line.type === 'options' && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {line.options.map((opt, j) => (
+                    <Button
+                      key={j}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleSendMessage(opt)}
+                    >
+                      {opt}
+                    </Button>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>

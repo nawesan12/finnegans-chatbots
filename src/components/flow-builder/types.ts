@@ -54,3 +54,7 @@ export const HandoffDataSchema = BaseDataSchema.extend({
 export const EndDataSchema = BaseDataSchema.extend({
   reason: z.string().default("end"),
 });
+
+export const GoToDataSchema = BaseDataSchema.extend({
+  targetNodeId: z.string().min(1),
+});
