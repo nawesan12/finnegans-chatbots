@@ -67,7 +67,7 @@ const ContactsPage = ({ onImportClick }: { onImportClick: () => void }) => {
   ];
 
   if (loading) {
-    return <div>Loading...</div>;
+    return <div>Cargando...</div>;
   }
 
   return (
