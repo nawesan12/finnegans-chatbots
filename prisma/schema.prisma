@@ -35,8 +35,9 @@ model Contact {
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
-  tags TagsOnContacts[]
-  logs Log[]
+  tags     TagsOnContacts[]
+  logs     Log[]
+  sessions Session[]
 }
 
 model Tag {
@@ -69,7 +70,8 @@ model Flow {
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
-  logs Log[]
+  logs     Log[]
+  sessions Session[]
 }
 
 model Log {
@@ -84,4 +86,20 @@ model Log {
 
   flowId String
   flow   Flow   @relation(fields: [flowId], references: [id])
+}
+
+model Session {
+  id            String   @id @default(cuid())
+  status        String   @default("Active") // e.g., Active, Paused, Completed, Errored
+  currentNodeId String?
+  context       Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  contactId String
+  contact   Contact @relation(fields: [contactId], references: [id])
+  flowId    String
+  flow      Flow    @relation(fields: [flowId], references: [id])
+
+  @@unique([contactId, flowId])
 }

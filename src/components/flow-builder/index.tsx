@@ -209,6 +209,7 @@ const FlowBuilder = React.forwardRef(({ initialFlow }, ref) => {
     ) {
       const opts = patch.data.options || [];
       const handles = new Set(opts.map((_: unknown, i: number) => `opt-${i}`));
+      handles.add("no-match");
       setEdges((eds) =>
         eds.filter(
           (e) =>

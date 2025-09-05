@@ -158,9 +158,21 @@ const OptionsNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook, onCop
         id={`opt-${i}`}
         type="source"
         position={Position.Bottom}
-        style={{ left: 20 + i * (240 / Math.max(1, data.options.length - 1)) }}
+        style={{ left: 20 + i * (200 / Math.max(1, data.options.length - 1)) }}
       />
     ))}
+    <Handle
+      id="no-match"
+      type="source"
+      position={Position.Bottom}
+      style={{ left: 240 }}
+    />
+    <div
+      className="absolute text-xs text-muted-foreground"
+      style={{ bottom: -20, left: 220 }}
+    >
+      No Match
+    </div>
   </div>
 );
 
