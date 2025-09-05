@@ -3,7 +3,17 @@ import React from "react";
 import { motion } from "framer-motion";
 import { itemVariants } from "@/lib/animations";
 
-const MetricCard = ({ title, value, change, icon: Icon }) => (
+const MetricCard = ({
+  title,
+  value,
+  change,
+  icon: Icon,
+}: {
+  title: string;
+  value: string | number;
+  change?: string;
+  icon: React.FC<React.SVGProps<SVGSVGElement>>;
+}) => (
   <motion.div
     variants={itemVariants}
     className="bg-white p-6 rounded-lg shadow-md flex items-start justify-between"

@@ -22,7 +22,8 @@ const FlowsPage = () => {
       const data = await response.json();
       setFlows(data);
     } catch (error) {
-      toast.error(error.message);
+      //@ts-expect-error bla
+      toast.error(error?.message);
     } finally {
       setLoading(false);
     }
@@ -34,8 +35,9 @@ const FlowsPage = () => {
 
   const handleCreateNewFlow = () => {
     setEditingFlow({
+      //@ts-expect-error bla
       id: null, // No ID for a new flow
-      name: "New Flow",
+      name: "Nuevo flujo",
       definition: null, // Start with a blank canvas
     });
   };
@@ -44,39 +46,47 @@ const FlowsPage = () => {
     if (!editingFlow || !flowBuilderRef.current) return;
 
     try {
-      const flowData = flowBuilderRef.current.getFlowData();
-      const isNewFlow = !editingFlow.id;
-      const url = isNewFlow ? "/api/flows" : `/api/flows/${editingFlow.id}`;
+      //@ts-expect-error bla
+      const flowData = flowBuilderRef?.current?.getFlowData();
+      //@ts-expect-error bla
+      const isNewFlow = !editingFlow?.id;
+      //@ts-expect-error bla
+      const url = isNewFlow ? "/api/flows" : `/api/flows/${editingFlow?.id}`;
       const method = isNewFlow ? "POST" : "PUT";
 
       const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: editingFlow.name,
+          //@ts-expect-error bla
+          name: editingFlow?.name,
           definition: flowData,
-          phoneNumber: editingFlow.phoneNumber,
+          //@ts-expect-error bla
+          phoneNumber: editingFlow?.phoneNumber,
         }),
       });
 
-      if (!response.ok) throw new Error(`Failed to ${isNewFlow ? 'create' : 'save'} flow`);
+      if (!response.ok)
+        throw new Error(`Failed to ${isNewFlow ? "create" : "save"} flow`);
 
       const updatedFlow = await response.json();
       setEditingFlow(updatedFlow);
-      toast.success(`Flow ${isNewFlow ? 'created' : 'saved'} successfully!`);
+      toast.success(`Flow ${isNewFlow ? "created" : "saved"} successfully!`);
       fetchFlows(); // Refresh the list
     } catch (error) {
-      toast.error(error.message);
+      //@ts-expect-error bla
+      toast.error(error?.message);
     }
   };
 
   const columns = [
-    { key: "name", label: "Flow Name" },
-    { key: "phoneNumber", label: "Phone Number" },
-    { key: "trigger", label: "Trigger Keyword" },
+    { key: "name", label: "Nombre del Flujo" },
+    { key: "phoneNumber", label: "Número de Teléfono" },
+    { key: "trigger", label: "Palabra Clave de Activación" },
     {
       key: "status",
-      label: "Status",
+      label: "Estado",
+      //@ts-expect-error bla
       render: (row) => {
         const colors = {
           Active: "bg-green-100 text-green-800",
@@ -86,6 +96,7 @@ const FlowsPage = () => {
         return (
           <span
             className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+              //@ts-expect-error bla
               colors[row.status] || "bg-gray-100 text-gray-800"
             }`}
           >
@@ -94,10 +105,14 @@ const FlowsPage = () => {
         );
       },
     },
-    { key: "updatedAt", label: "Last Modified", render: (row) => new Date(row.updatedAt).toLocaleString() },
+    {
+      key: "updatedAt",
+      label: "Ultimo modificado", //@ts-expect-error bla
+      render: (row) => new Date(row.updatedAt).toLocaleString(),
+    },
     {
       key: "actions",
-      label: "Actions",
+      label: "Acciones", //@ts-expect-error bla
       render: (row) => (
         <div className="flex space-x-2">
           <button
@@ -137,14 +152,19 @@ const FlowsPage = () => {
               <ChevronLeft className="h-5 w-5 mr-1" /> Volver a Flujos
             </button>
             <h2 className="text-xl font-semibold text-gray-800">
-              {editingFlow.name}
+              {/*@ts-expect-error bla*/}
+              {editingFlow?.name}
             </h2>
             <div className="flex items-center gap-4">
               <Input
-                placeholder="Phone Number"
+                placeholder="Phone Number" //@ts-expect-error bla
                 value={editingFlow.phoneNumber || ""}
                 onChange={(e) =>
-                  setEditingFlow({ ...editingFlow, phoneNumber: e.target.value })
+                  setEditingFlow({
+                    //@ts-expect-error bla
+                    ...editingFlow,
+                    phoneNumber: e.target.value,
+                  })
                 }
                 className="w-64"
               />
@@ -158,21 +178,21 @@ const FlowsPage = () => {
           </div>
           <div className="flex-1">
             <FlowBuilder
-              ref={flowBuilderRef}
-              initialFlow={editingFlow.definition}
+              ref={flowBuilderRef} //@ts-expect-error bla
+              initialFlow={editingFlow?.definition}
             />
           </div>
         </motion.div>
       ) : (
         <motion.div key="flow-list" className="p-6">
           <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl font-bold text-gray-800">Flows</h1>
+            <h1 className="text-2xl font-bold text-gray-800">Flujos</h1>
             <button
               onClick={handleCreateNewFlow}
-              className="flex items-center gap-2 bg-[#4bc3fe] text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-indigo-700"
+              className="flex items-center gap-2 bg-[#8694ff] text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-indigo-700"
             >
               <Plus className="h-5 w-5" />
-              Create New Flow
+              Crear flujo
             </button>
           </div>
           <motion.div

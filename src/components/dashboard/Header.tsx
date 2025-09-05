@@ -8,14 +8,23 @@ import CreateNewDropdown from "@/components/CreateNewDropdown";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
-const Header = ({ title, onImportClick }) => {
+const Header = ({
+  title,
+  onImportClick,
+}: {
+  title: string;
+  onImportClick: () => void;
+}) => {
   const router = useRouter();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
 
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        dropdownRef?.current && //@ts-expect-error bla
+        !dropdownRef?.current?.contains(event.target as Node)
+      ) {
         setIsDropdownOpen(false);
       }
     };

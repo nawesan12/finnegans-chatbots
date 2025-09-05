@@ -14,7 +14,13 @@ import {
   ChevronRight,
 } from "lucide-react";
 
-const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
+const Sidebar = ({
+  isCollapsed,
+  setIsCollapsed,
+}: {
+  isCollapsed: boolean;
+  setIsCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
+}) => {
   const pathname = usePathname();
   const navItems = [
     {
@@ -24,7 +30,12 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
       href: "/dashboard",
     },
     { id: "flows", icon: Bot, label: "Flujos", href: "/dashboard/flows" },
-    { id: "logs", icon: MessageSquare, label: "Registros", href: "/dashboard/logs" },
+    {
+      id: "logs",
+      icon: MessageSquare,
+      label: "Registros",
+      href: "/dashboard/logs",
+    },
     {
       id: "contacts",
       icon: Users,
@@ -90,7 +101,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed }) => {
         <div className="flex items-center">
           <Image
             className="h-10 w-10 rounded-full object-cover"
-            src="https://placehold.co/100x100/6366f1/white?text=A"
+            src="/finnegans.svg"
             alt="Admin"
             width={40}
             height={40}

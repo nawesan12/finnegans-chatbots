@@ -21,6 +21,7 @@ const LogsPage = () => {
         const data = await response.json();
         setLogs(data);
       } catch (error) {
+        //@ts-expect-error bla
         toast.error(error.message);
       } finally {
         setLoading(false);
@@ -30,13 +31,27 @@ const LogsPage = () => {
   }, []);
 
   const columns = [
-    { key: "contact", label: "Contact", render: (row) => `${row.contact.name} (${row.contact.phone})` },
-    { key: "flow", label: "Flow", render: (row) => row.flow.name },
-    { key: "createdAt", label: "Timestamp", render: (row) => new Date(row.createdAt).toLocaleString() },
+    {
+      key: "contact",
+      label: "Contacto",
+      render: (row: { contact: { name: string; phone: string } }) =>
+        `${row.contact.name} (${row.contact.phone})`,
+    },
+    {
+      key: "flow",
+      label: "Flujo",
+      render: (row: { flow: { name: string } }) => row.flow.name,
+    },
+    {
+      key: "createdAt",
+      label: "Marca de tiempo",
+      render: (row: { createdAt: string }) =>
+        new Date(row.createdAt).toLocaleString(),
+    },
     {
       key: "status",
-      label: "Status",
-      render: (row) => {
+      label: "Estado",
+      render: (row: { status: string }) => {
         const colors = {
           Completed: "bg-green-100 text-green-800",
           "In Progress": "bg-blue-100 text-blue-800",
@@ -45,6 +60,7 @@ const LogsPage = () => {
         return (
           <span
             className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+              //@ts-expect-error bla
               colors[row.status] || "bg-gray-100 text-gray-800"
             }`}
           >

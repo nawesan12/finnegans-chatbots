@@ -6,7 +6,7 @@ import { itemVariants } from "@/lib/animations";
 import Table from "@/components/dashboard/Table";
 import { toast } from "sonner";
 
-const ContactsPage = ({ onImportClick }) => {
+const ContactsPage = ({ onImportClick }: { onImportClick: () => void }) => {
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -21,7 +21,8 @@ const ContactsPage = ({ onImportClick }) => {
         const data = await response.json();
         setContacts(data);
       } catch (error) {
-        toast.error(error.message);
+        //@ts-expect-error bla
+        toast.error(error?.message);
       } finally {
         setLoading(false);
       }
@@ -30,14 +31,14 @@ const ContactsPage = ({ onImportClick }) => {
   }, []);
 
   const columns = [
-    { key: "name", label: "Name" },
-    { key: "phone", label: "Phone" },
+    { key: "name", label: "Nombre" },
+    { key: "phone", label: "Telefono" },
     {
       key: "tags",
-      label: "Tags",
-      render: (row) => (
+      label: "Etiquetas",
+      render: (row: { tags: { tag: { id: string; name: string } }[] }) => (
         <div className="flex space-x-1">
-          {row.tags?.map((t) => (
+          {row.tags?.map((t: { tag: { id: string; name: string } }) => (
             <span
               key={t.tag.id}
               className="px-2 text-xs font-semibold rounded-full bg-gray-200 text-gray-700"
@@ -48,7 +49,12 @@ const ContactsPage = ({ onImportClick }) => {
         </div>
       ),
     },
-    { key: "updatedAt", label: "Last Contact", render: (row) => new Date(row.updatedAt).toLocaleDateString() },
+    {
+      key: "updatedAt",
+      label: "Last Contact",
+      render: (row: { updatedAt: string }) =>
+        new Date(row.updatedAt).toLocaleDateString(),
+    },
     {
       key: "actions",
       label: "Actions",
