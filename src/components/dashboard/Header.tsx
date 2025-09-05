@@ -11,9 +11,11 @@ import { toast } from "sonner";
 const Header = ({
   title,
   onImportClick,
+  onNewContactClick,
 }: {
   title: string;
   onImportClick: () => void;
+  onNewContactClick: () => void;
 }) => {
   const router = useRouter();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -36,6 +38,11 @@ const Header = ({
 
   const handleImportAndCloseDropdown = () => {
     onImportClick();
+    setIsDropdownOpen(false);
+  };
+
+  const handleNewContactAndCloseDropdown = () => {
+    onNewContactClick();
     setIsDropdownOpen(false);
   };
 
@@ -71,6 +78,7 @@ const Header = ({
           <CreateNewDropdown
             isOpen={isDropdownOpen}
             onImportClick={handleImportAndCloseDropdown}
+            onNewContactClick={handleNewContactAndCloseDropdown}
           />
         </div>
         <Button onClick={handleLogout} variant="outline" size="icon">
