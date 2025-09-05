@@ -39,14 +39,35 @@ export async function PUT(
 ) {
   try {
     const body = await request.json();
-    const { name, phone } = body;
+    const { name, phone, tags: newTagNames = [] } = body;
 
-    // TODO: More advanced tag handling (add/remove)
+    const contact = await prisma.contact.findUnique({
+      where: { id: params.id },
+      include: { tags: { include: { tag: true } } },
+    });
+
+    if (!contact) {
+      return NextResponse.json({ error: "Contact not found" }, { status: 404 });
+    }
+
+    const tagsToDisconnect = contact.tags
+      .filter((t) => !newTagNames.includes(t.tag.name))
+      .map((t) => ({ id: t.tag.id }));
+
+    const tagsToConnectOrCreate = newTagNames.map((name: string) => ({
+      where: { name },
+      create: { name },
+    }));
+
     const updatedContact = await prisma.contact.update({
       where: { id: params.id },
       data: {
         name,
         phone,
+        tags: {
+          disconnect: tagsToDisconnect,
+          connectOrCreate: tagsToConnectOrCreate,
+        },
       },
       include: {
         tags: { include: { tag: true } },
