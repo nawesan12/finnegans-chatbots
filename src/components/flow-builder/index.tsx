@@ -22,6 +22,7 @@ import {
   type OnConnect,
   type Connection,
   type NodeTypes,
+  type NodeProps,
   type ReactFlowInstance,
 } from "reactflow";
 import "reactflow/dist/style.css";
@@ -39,7 +40,6 @@ import {
 import { Separator } from "@/components/ui/separator";
 
 import {
-  BaseDataSchema,
   TriggerDataSchema,
   MessageDataSchema,
   OptionsDataSchema,
@@ -49,6 +49,7 @@ import {
   AssignVarDataSchema,
   MediaDataSchema,
   HandoffDataSchema,
+  GotoDataSchema,
   EndDataSchema,
   waTextLimit,
 } from "./types";
@@ -58,7 +59,6 @@ import { Inspector } from "./Inspector";
 import { Simulator } from "./Simulator";
 import { Topbar } from "./Toolbar";
 import { Palette } from "./Palette";
-import { z } from "zod";
 
 /** ---------------------------
  *    Tipos y utilidades
@@ -76,7 +76,7 @@ type WhatsAppNodeType =
   | "goto"
   | "end";
 
-type WNode = Node<any, WhatsAppNodeType>;
+type WNode = Node<Record<string, unknown>, WhatsAppNodeType>;
 type WEdge = Edge;
 
 type FlowSnapshot = { nodes: WNode[]; edges: WEdge[] };
@@ -172,7 +172,8 @@ export type FlowBuilderRef = {
 const FlowBuilder = forwardRef<FlowBuilderRef, FlowBuilderProps>(
   ({ initialFlow }, ref) => {
     // ---------------- Refs y estados principales ----------------
-    const [nodes, setNodes, onNodesChange] = useNodesState<any>(defaultNodes);
+    const [nodes, setNodes, onNodesChange] =
+      useNodesState<Record<string, unknown>>(defaultNodes);
     const [edges, setEdges, onEdgesChange] = useEdgesState(defaultEdges);
     const [selected, setSelected] = useState<WNode | null>(null);
 
@@ -400,7 +401,8 @@ const FlowBuilder = forwardRef<FlowBuilderRef, FlowBuilderProps>(
         patch.data &&
         Object.prototype.hasOwnProperty.call(patch.data, "options")
       ) {
-        const opts = (patch.data as any).options || [];
+        const opts =
+          (patch.data as Partial<{ options: string[] }>).options || [];
         const handles = new Set(
           opts.map((_: unknown, i: number) => `opt-${i}`),
         );
@@ -549,9 +551,7 @@ const FlowBuilder = forwardRef<FlowBuilderRef, FlowBuilderProps>(
               HandoffDataSchema.parse(n.data);
               break;
             case "goto":
-              BaseDataSchema.extend({ targetNodeId: z.string().min(1) }).parse(
-                n.data,
-              );
+              GotoDataSchema.parse(n.data);
               break;
             case "end":
               EndDataSchema.parse(n.data);
@@ -797,13 +797,15 @@ const FlowBuilder = forwardRef<FlowBuilderRef, FlowBuilderProps>(
     const memoizedNodeTypes = useMemo(() => {
       const custom: NodeTypes = {};
       for (const [key, NodeType] of Object.entries(nodeTypes)) {
-        (custom as any)[key] = (props: any) => (
+        (custom as Record<string, (p: NodeProps<Record<string, unknown>>) => JSX.Element>)[
+          key
+        ] = (props: NodeProps<Record<string, unknown>>) => (
           <NodeType
             {...props}
-            onEdit={() => handleEdit(props)}
-            onDuplicate={() => handleDuplicate(props)}
+            onEdit={() => handleEdit(props as unknown as WNode)}
+            onDuplicate={() => handleDuplicate(props as unknown as WNode)}
             onDelete={() => handleDelete(props.id)}
-            onCopyWebhook={() => handleCopyWebhook(props)}
+            onCopyWebhook={() => handleCopyWebhook(props as unknown as WNode)}
             onCopyId={() => handleCopyId(props.id)}
           />
         );
