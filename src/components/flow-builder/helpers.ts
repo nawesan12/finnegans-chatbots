@@ -1,48 +1,149 @@
 import { Node, Edge } from "reactflow";
 import dagre from "dagre";
 
-const nodeWidth = 280;
-const nodeHeight = 100;
+/** Defaults – se usan si el nodo no declara width/height */
+const DEFAULT_NODE_WIDTH = 280;
+const DEFAULT_NODE_HEIGHT = 100;
 
-const dagreGraph = new dagre.graphlib.Graph();
-dagreGraph.setDefaultEdgeLabel(() => ({}));
+/** Direcciones válidas para dagre */
+type LayoutDirection = "TB" | "BT" | "LR" | "RL";
+
+type LayoutOptions = {
+  /** Separación horizontal entre nodos del mismo nivel (dagre nodesep) */
+  nodesep?: number;
+  /** Separación vertical entre niveles (dagre ranksep) */
+  ranksep?: number;
+  /** Agrega padding a todas las posiciones resultantes */
+  padding?: { x?: number; y?: number };
+  /** Ajusta las posiciones a una grilla (p.ej. 8px) */
+  snapToGrid?: number | false;
+  /** Traslada todo el layout para que el min x/y quede en 0,0 (más prolijo para fitView) */
+  translateToOrigin?: boolean;
+};
+
+/** Obtiene el tamaño del nodo desde distintas fuentes, con fallback seguro */
+const getNodeSize = (n: Node) => {
+  // Prioridad: propiedades measures de React Flow -> style -> defaults
+  const width =
+    (typeof (n as any).width === "number" && (n as any).width) ||
+    (typeof n?.style?.width === "number" && (n.style!.width as number)) ||
+    DEFAULT_NODE_WIDTH;
+
+  const height =
+    (typeof (n as any).height === "number" && (n as any).height) ||
+    (typeof n?.style?.height === "number" && (n.style!.height as number)) ||
+    DEFAULT_NODE_HEIGHT;
+
+  return { width, height };
+};
+
+/** Snappea un número a la grilla si corresponde */
+const snap = (v: number, grid?: number | false) =>
+  grid && grid > 1 ? Math.round(v / grid) * grid : v;
 
 export const getLayoutedElements = (
   nodes: Node[],
   edges: Edge[],
-  direction = "TB"
+  direction: LayoutDirection = "TB",
+  options: LayoutOptions = {},
 ) => {
-  dagreGraph.setGraph({ rankdir: direction, nodesep: 40, ranksep: 80 });
+  const {
+    nodesep = 40,
+    ranksep = 80,
+    padding = { x: 0, y: 0 },
+    snapToGrid = false,
+    translateToOrigin = false,
+  } = options;
 
-  nodes.forEach((n) =>
-    dagreGraph.setNode(n.id, { width: nodeWidth, height: nodeHeight })
-  );
-  edges.forEach((e) => dagreGraph.setEdge(e.source, e.target));
+  // Grafo nuevo por ejecución (evita estado compartido)
+  const g = new dagre.graphlib.Graph();
+  g.setDefaultEdgeLabel(() => ({}));
+  g.setGraph({ rankdir: direction, nodesep, ranksep });
 
-  dagre.layout(dagreGraph);
-
-  const layoutedNodes = nodes.map((n) => {
-    const { x, y } = dagreGraph.node(n.id);
-    return { ...n, position: { x: x - nodeWidth / 2, y: y - nodeHeight / 2 } };
+  // Definir nodos con sus tamaños
+  nodes.forEach((n) => {
+    const { width, height } = getNodeSize(n);
+    g.setNode(n.id, { width, height });
   });
 
-  return { nodes: layoutedNodes, edges };
+  // Definir aristas (dagre no usa handles, sólo relación)
+  edges.forEach((e) => {
+    if (e.source && e.target) g.setEdge(e.source, e.target);
+  });
+
+  // Calcular layout
+  dagre.layout(g);
+
+  // Obtener los nodos posicionados (centrados según tamaño)
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+
+  const layoutedNodes = nodes.map((n) => {
+    const pos = g.node(n.id);
+    // Si por alguna razón dagre no devolvió el nodo (edge huérfana, etc.), conservar posición previa
+    if (!pos) return n;
+
+    const { width, height } = getNodeSize(n);
+    const x = pos.x - width / 2 + (padding.x || 0);
+    const y = pos.y - height / 2 + (padding.y || 0);
+
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+
+    return {
+      ...n,
+      position: {
+        x: snap(x, snapToGrid),
+        y: snap(y, snapToGrid),
+      },
+    };
+  });
+
+  // Trasladar todo el layout al origen si se pide
+  let finalNodes = layoutedNodes;
+  if (translateToOrigin) {
+    const dx = Math.min(0, minX);
+    const dy = Math.min(0, minY);
+    if (dx !== 0 || dy !== 0) {
+      finalNodes = layoutedNodes.map((n) => ({
+        ...n,
+        position: {
+          x: snap(n.position.x - dx, snapToGrid),
+          y: snap(n.position.y - dy, snapToGrid),
+        },
+      }));
+    }
+  }
+
+  // Devolver edges tal cual (compatibilidad total)
+  return { nodes: finalNodes, edges };
 };
 
-export const makeId = () => Math.random().toString(36).slice(2, 9);
+/** ID corto, con fallback a random si no hay crypto */
+export const makeId = () => {
+  try {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+      return (crypto.randomUUID() || "").replace(/-/g, "").slice(0, 9);
+    }
+  } catch {
+    // ignore
+  }
+  return Math.random().toString(36).slice(2, 11);
+};
 
 export const getStarterData = (type: string) => {
+  // Mantiene las mismas keys que ya usás, con defaults razonables
   const starters: Record<string, unknown> = {
     trigger: { keyword: "/start" },
     message: { text: "Nuevo mensaje", useTemplate: false },
     options: { options: ["Opcion 1", "Opcion 2"] },
     delay: { seconds: 1 },
-    condition: { expression: "context.input.includes('ok')" },
+    condition: { expression: "context.input?.toLowerCase?.().includes('ok')" },
     api: {
-      url: "https://api.example.com",
+      url: "https://api.example.com/resource",
       method: "POST",
       headers: {},
-      body: "{}",
+      body: '{"echo":"{{ input }}"}',
       assignTo: "apiResult",
     },
     assign: { key: "name", value: "John" },

@@ -1,32 +1,93 @@
-import React from "react";
+"use client";
+import React, { memo, useCallback } from "react";
+import type { NodeProps } from "reactflow";
 import { Handle, Position } from "reactflow";
 import { Badge } from "@/components/ui/badge";
 import {
-    FileUp,
-    MessageSquare,
-    Filter,
-    Clock3,
-    GitBranch,
-    Code2,
-    Variable,
-    Image as ImageIcon,
-    Headphones,
-    Link2,
-    Flag,
-    Pencil,
-    Copy,
-    Trash2,
-    Clipboard,
-    Hash,
+  FileUp,
+  MessageSquare,
+  Filter,
+  Clock3,
+  GitBranch,
+  Code2,
+  Variable,
+  Image as ImageIcon,
+  Headphones,
+  Link2,
+  Flag,
+  Pencil,
+  Copy,
+  Trash2,
+  Clipboard,
+  Hash,
 } from "lucide-react";
 import {
-    ContextMenu,
-    ContextMenuContent,
-    ContextMenuItem,
-    ContextMenuTrigger,
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 
-const Shell = ({
+/* =========================
+   Tipos de datos por nodo
+   ========================= */
+type TriggerData = { keyword?: string };
+type MessageData = { useTemplate?: boolean; text?: string };
+type OptionsData = { options?: string[] };
+type DelayData = { seconds?: number };
+type ConditionData = { expression?: string };
+type ApiData = { method?: string; url?: string; assignTo?: string };
+type AssignData = { key?: string; value?: string };
+type MediaData = { mediaType?: string; url?: string; caption?: string };
+type HandoffData = { queue?: string; note?: string };
+type GoToData = { targetNodeId?: string };
+type EndData = { reason?: string };
+
+type NodeCommonHandlers = {
+  onEdit: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  onCopyWebhook: () => void;
+  onCopyId: () => void;
+};
+
+/* =========================
+   Utils
+   ========================= */
+const safeUpper = (v?: string) => (v ? String(v).toUpperCase() : "");
+const copyWithFallback = async (text: string) => {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // Fallback para navegadores sin permiso
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand("copy");
+    } finally {
+      document.body.removeChild(ta);
+    }
+  }
+};
+
+/* =========================
+   Shell: contenedor visual
+   ========================= */
+type ShellProps = NodeCommonHandlers & {
+  icon: React.ElementType;
+  title: string;
+  children: React.ReactNode;
+  color: string; // ej: "border-blue-300"
+  selected?: boolean;
+  readOnly?: boolean;
+  compact?: boolean;
+  className?: string;
+  testId?: string;
+};
+
+const Shell = memo(function Shell({
   icon: Icon,
   title,
   children,
@@ -36,333 +97,532 @@ const Shell = ({
   onDelete,
   onCopyWebhook,
   onCopyId,
-}: {
-  icon: React.ElementType;
-  title: string;
-  children: React.ReactNode;
-  color: string;
-  onEdit: () => void;
-  onDuplicate: () => void;
-  onDelete: () => void;
-  onCopyWebhook: () => void;
-  onCopyId: () => void;
-}) => (
+  selected = false,
+  readOnly = false,
+  compact = false,
+  className = "",
+  testId,
+}: ShellProps) {
+  return (
     <ContextMenu>
-        <ContextMenuTrigger>
-            <div className={`w-[280px] rounded-2xl shadow-sm border ${color} bg-white`}>
-                <div className="flex items-center gap-2 px-4 py-2 border-b">
-                <Icon className="h-4 w-4" />
-                <h4 className="font-semibold text-sm">{title}</h4>
-                </div>
-                <div className="p-3 text-sm space-y-2">{children}</div>
-            </div>
-        </ContextMenuTrigger>
-        <ContextMenuContent>
-            <ContextMenuItem onClick={onEdit}>
-                <Pencil className="h-4 w-4 mr-2" />
-                Edit
-            </ContextMenuItem>
-            <ContextMenuItem onClick={onDuplicate}>
-                <Copy className="h-4 w-4 mr-2" />
-                Duplicate
-            </ContextMenuItem>
-            <ContextMenuItem onClick={onCopyWebhook}>
-                <Clipboard className="h-4 w-4 mr-2" />
-                Copy Webhook URL
-            </ContextMenuItem>
-            <ContextMenuItem onClick={onCopyId}>
-                <Hash className="h-4 w-4 mr-2" />
-                Copy ID
-            </ContextMenuItem>
-            <ContextMenuItem onClick={onDelete} className="text-red-500">
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete
-            </ContextMenuItem>
-        </ContextMenuContent>
+      <ContextMenuTrigger asChild>
+        <div
+          data-testid={testId}
+          aria-label={title}
+          className={[
+            "relative w-[280px] rounded-2xl border bg-white shadow-sm transition-shadow",
+            selected ? "ring-2 ring-cyan-400" : "",
+            className,
+            color,
+          ].join(" ")}
+        >
+          {/* Indicador superior de color sutil */}
+          <div
+            className={`absolute inset-x-0 top-0 h-1 rounded-t-2xl ${color.replace("border-", "bg-")}`}
+          />
+          <div className="flex items-center gap-2 px-4 py-2 border-b">
+            <Icon className="h-4 w-4" aria-hidden />
+            <h4 className="font-semibold text-sm truncate" title={title}>
+              {title}
+            </h4>
+            {readOnly && (
+              <span className="ml-auto text-[10px] uppercase text-muted-foreground">
+                read-only
+              </span>
+            )}
+          </div>
+          <div className={`p-3 text-sm space-y-2 ${compact ? "py-2" : "py-3"}`}>
+            {children}
+          </div>
+        </div>
+      </ContextMenuTrigger>
+
+      {/* Menú contextual (se respeta 1:1 y se agregan guardas) */}
+      <ContextMenuContent>
+        <ContextMenuItem
+          onClick={!readOnly ? onEdit : undefined}
+          disabled={readOnly}
+        >
+          <Pencil className="h-4 w-4 mr-2" /> Edit
+        </ContextMenuItem>
+        <ContextMenuItem
+          onClick={!readOnly ? onDuplicate : undefined}
+          disabled={readOnly}
+        >
+          <Copy className="h-4 w-4 mr-2" /> Duplicate
+        </ContextMenuItem>
+        <ContextMenuItem
+          onClick={async () => {
+            // Permití que el caller maneje la URL, pero si hay string en data, copiá.
+            onCopyWebhook?.();
+          }}
+        >
+          <Clipboard className="h-4 w-4 mr-2" /> Copy Webhook URL
+        </ContextMenuItem>
+        <ContextMenuItem
+          onClick={async () => {
+            onCopyId?.();
+          }}
+        >
+          <Hash className="h-4 w-4 mr-2" /> Copy ID
+        </ContextMenuItem>
+        <ContextMenuItem
+          onClick={!readOnly ? onDelete : undefined}
+          className="text-red-500"
+          disabled={readOnly}
+        >
+          <Trash2 className="h-4 w-4 mr-2" /> Delete
+        </ContextMenuItem>
+      </ContextMenuContent>
     </ContextMenu>
-);
+  );
+});
 
-const CommonHandles = ({ top = false, bottom = true }) => (
-  <>
-    {top && <Handle type="target" position={Position.Top} />}
-    {bottom && <Handle type="source" position={Position.Bottom} />}
-  </>
-);
+/* =========================
+   Handles comunes
+   ========================= */
+const CommonHandles = memo(function CommonHandles({
+  top = false,
+  bottom = true,
+}: {
+  top?: boolean;
+  bottom?: boolean;
+}) {
+  return (
+    <>
+      {top && <Handle type="target" position={Position.Top} />}
+      {bottom && <Handle type="source" position={Position.Bottom} />}
+    </>
+  );
+});
 
-const TriggerNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook, onCopyId }) => (
-    <div>
-        <Shell
-            icon={FileUp}
-            title="Trigger"
-            color="border-green-300"
-            onEdit={onEdit}
-            onDuplicate={onDuplicate}
-            onDelete={onDelete}
-            onCopyWebhook={onCopyWebhook}
-            onCopyId={onCopyId}
-        >
-            <div className="text-muted-foreground">
-                Keyword: <Badge variant="secondary">{data.keyword}</Badge>
-            </div>
-        </Shell>
-        <CommonHandles top={false} bottom={true} />
+/* =========================
+   Nodos
+   ========================= */
+const TriggerNode = memo(function TriggerNode({
+  data,
+  selected,
+}: NodeProps<TriggerData> & NodeCommonHandlers) {
+  const keyword = data?.keyword ?? "(set keyword)";
+  return (
+    <div className="relative">
+      <Shell
+        icon={FileUp}
+        title="Trigger"
+        color="border-green-300"
+        selected={!!selected}
+        {...(data as any)}
+      >
+        <div className="text-muted-foreground">
+          Keyword: <Badge variant="secondary">{keyword}</Badge>
+        </div>
+      </Shell>
+      <CommonHandles bottom />
     </div>
-);
+  );
+});
 
-const MessageNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook, onCopyId }) => (
-    <div>
-        <Shell
-            icon={MessageSquare}
-            title="Message"
-            color="border-blue-300"
-            onEdit={onEdit}
-            onDuplicate={onDuplicate}
-            onDelete={onDelete}
-            onCopyWebhook={onCopyWebhook}
-            onCopyId={onCopyId}
+const MessageNode = memo(function MessageNode({
+  data,
+  selected,
+  onEdit,
+  onDuplicate,
+  onDelete,
+  onCopyWebhook,
+  onCopyId,
+}: NodeProps<MessageData> & NodeCommonHandlers) {
+  const text = data?.text ?? "";
+  return (
+    <div className="relative">
+      <Shell
+        icon={MessageSquare}
+        title="Message"
+        color="border-blue-300"
+        selected={!!selected}
+        onEdit={onEdit}
+        onDuplicate={onDuplicate}
+        onDelete={onDelete}
+        onCopyWebhook={onCopyWebhook}
+        onCopyId={onCopyId}
+      >
+        {data?.useTemplate ? <Badge variant="outline">Template</Badge> : null}
+        <div
+          className="whitespace-pre-wrap break-words bg-muted/30 p-2 rounded-lg max-h-40 overflow-auto"
+          title={text}
         >
-            {data.useTemplate ? <Badge variant="outline">Template</Badge> : null}
-            <div className="whitespace-pre-wrap break-words bg-muted/30 p-2 rounded-lg max-h-40 overflow-auto">
-                {data.text}
-            </div>
-        </Shell>
-        <CommonHandles top bottom />
+          {text || <span className="text-muted-foreground">Add message…</span>}
+        </div>
+      </Shell>
+      <CommonHandles top bottom />
     </div>
-);
+  );
+});
 
-const OptionsNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook, onCopyId }) => (
-    <div>
-        <Shell
-            icon={Filter}
-            title="Options"
-            color="border-yellow-300"
-            onEdit={onEdit}
-            onDuplicate={onDuplicate}
-            onDelete={onDelete}
-            onCopyWebhook={onCopyWebhook}
-            onCopyId={onCopyId}
-        >
-            <ul className="space-y-1">
-                {data.options?.map((opt, idx) => (
-                    <li key={idx} className="border rounded px-2 py-1 text-xs">
-                        {opt}
-                    </li>
-                ))}
-            </ul>
-        </Shell>
-        {/* one target on top, multiple sources along bottom */}
-    <Handle type="target" position={Position.Top} />
-    {data.options?.map((opt, i) => (
+const OptionsNode = memo(function OptionsNode({
+  data,
+  selected,
+  onEdit,
+  onDuplicate,
+  onDelete,
+  onCopyWebhook,
+  onCopyId,
+}: NodeProps<OptionsData> & NodeCommonHandlers) {
+  const options = data?.options ?? [];
+  // porcentajes para distribuir uniformemente los handles
+  const handlePercents =
+    options.length <= 1
+      ? [50]
+      : options.map((_, i) => (i / (options.length - 1)) * 100);
+
+  return (
+    <div className="relative">
+      <Shell
+        icon={Filter}
+        title="Options"
+        color="border-yellow-300"
+        selected={!!selected}
+        onEdit={onEdit}
+        onDuplicate={onDuplicate}
+        onDelete={onDelete}
+        onCopyWebhook={onCopyWebhook}
+        onCopyId={onCopyId}
+      >
+        {options.length ? (
+          <ul className="space-y-1">
+            {options.map((opt, idx) => (
+              <li
+                key={idx}
+                className="border rounded px-2 py-1 text-xs truncate"
+                title={opt}
+              >
+                {opt}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="text-xs text-muted-foreground">Add options…</div>
+        )}
+      </Shell>
+
+      {/* Handles: 1 target arriba, N sources abajo, + 'no-match' */}
+      <Handle type="target" position={Position.Top} />
+      {handlePercents.map((p, i) => (
+        <Handle
+          key={`opt-${i}`}
+          id={`opt-${i}`}
+          type="source"
+          position={Position.Bottom}
+          style={{ left: `${p}%`, transform: "translateX(-50%)" }}
+        />
+      ))}
+      {/* No match al extremo derecho */}
       <Handle
-        key={i}
-        id={`opt-${i}`}
+        id="no-match"
         type="source"
         position={Position.Bottom}
-        style={{ left: 20 + i * (200 / Math.max(1, data.options.length - 1)) }}
+        style={{ right: 8 }}
       />
-    ))}
-    <Handle
-      id="no-match"
-      type="source"
-      position={Position.Bottom}
-      style={{ left: 240 }}
-    />
-    <div
-      className="absolute text-xs text-muted-foreground"
-      style={{ bottom: -20, left: 220 }}
-    >
-      No Match
+      <div
+        className="absolute text-[10px] text-muted-foreground"
+        style={{ bottom: -18, right: 8 }}
+      >
+        No&nbsp;Match
+      </div>
     </div>
-  </div>
-);
+  );
+});
 
-const DelayNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook, onCopyId }) => (
-    <div>
-        <Shell
-            icon={Clock3}
-            title="Delay"
-            color="border-orange-300"
-            onEdit={onEdit}
-            onDuplicate={onDuplicate}
-            onDelete={onDelete}
-            onCopyWebhook={onCopyWebhook}
-            onCopyId={onCopyId}
-        >
-            <div>
-                Wait <b>{data.seconds}</b> seconds
-            </div>
-        </Shell>
-        <CommonHandles top bottom />
+const DelayNode = memo(function DelayNode({
+  data,
+  selected,
+  onEdit,
+  onDuplicate,
+  onDelete,
+  onCopyWebhook,
+  onCopyId,
+}: NodeProps<DelayData> & NodeCommonHandlers) {
+  const seconds = data?.seconds ?? 0;
+  return (
+    <div className="relative">
+      <Shell
+        icon={Clock3}
+        title="Delay"
+        color="border-orange-300"
+        selected={!!selected}
+        onEdit={onEdit}
+        onDuplicate={onDuplicate}
+        onDelete={onDelete}
+        onCopyWebhook={onCopyWebhook}
+        onCopyId={onCopyId}
+      >
+        <div>
+          Wait <b>{seconds}</b> second{seconds === 1 ? "" : "s"}
+        </div>
+      </Shell>
+      <CommonHandles top bottom />
     </div>
-);
+  );
+});
 
-const ConditionNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook, onCopyId }) => (
-    <div>
-        <Shell
-            icon={GitBranch}
-            title="Condition"
-            color="border-purple-300"
-            onEdit={onEdit}
-            onDuplicate={onDuplicate}
-            onDelete={onDelete}
-            onCopyWebhook={onCopyWebhook}
-            onCopyId={onCopyId}
-        >
-            <code className="text-xs bg-muted/40 px-2 py-1 rounded block overflow-auto max-h-24">
-                {data.expression}
-            </code>
-            <div className="text-xs text-muted-foreground">
-                True → bottom-left, False → bottom-right
-            </div>
-        </Shell>
-        <Handle type="target" position={Position.Top} />
-    <Handle
-      type="source"
-      id="true"
-      position={Position.Bottom}
-      style={{ left: 80 }}
-    />
-    <Handle
-      type="source"
-      id="false"
-      position={Position.Bottom}
-      style={{ left: 200 }}
-    />
-  </div>
-);
-
-const APICallNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook, onCopyId }) => (
-    <div>
-        <Shell
-            icon={Code2}
-            title="API Call"
-            color="border-cyan-300"
-            onEdit={onEdit}
-            onDuplicate={onDuplicate}
-            onDelete={onDelete}
-            onCopyWebhook={onCopyWebhook}
-            onCopyId={onCopyId}
-        >
-            <div className="text-xs">
-                <div className="truncate">
-                    <b>{data.method}</b> {data.url}
-                </div>
-                <div>
-                    → <Badge variant="secondary">{data.assignTo}</Badge>
-                </div>
-            </div>
-        </Shell>
-        <CommonHandles top bottom />
+const ConditionNode = memo(function ConditionNode({
+  data,
+  selected,
+  onEdit,
+  onDuplicate,
+  onDelete,
+  onCopyWebhook,
+  onCopyId,
+}: NodeProps<ConditionData> & NodeCommonHandlers) {
+  const exp = data?.expression ?? "";
+  return (
+    <div className="relative">
+      <Shell
+        icon={GitBranch}
+        title="Condition"
+        color="border-purple-300"
+        selected={!!selected}
+        onEdit={onEdit}
+        onDuplicate={onDuplicate}
+        onDelete={onDelete}
+        onCopyWebhook={onCopyWebhook}
+        onCopyId={onCopyId}
+      >
+        <code className="text-xs bg-muted/40 px-2 py-1 rounded block overflow-auto max-h-24">
+          {exp || "// expression"}
+        </code>
+        <div className="text-xs text-muted-foreground">
+          True → left, False → right
+        </div>
+      </Shell>
+      <Handle type="target" position={Position.Top} />
+      <Handle
+        type="source"
+        id="true"
+        position={Position.Bottom}
+        style={{ left: 80 }}
+      />
+      <Handle
+        type="source"
+        id="false"
+        position={Position.Bottom}
+        style={{ left: 200 }}
+      />
     </div>
-);
+  );
+});
 
-const AssignVarNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook, onCopyId }) => (
-    <div>
-        <Shell
-            icon={Variable}
-            title="Set Variable"
-            color="border-rose-300"
-            onEdit={onEdit}
-            onDuplicate={onDuplicate}
-            onDelete={onDelete}
-            onCopyWebhook={onCopyWebhook}
-            onCopyId={onCopyId}
-        >
-            <div className="text-xs">
-                <b>{data.key}</b> = <code className="break-all">{data.value}</code>
-            </div>
-        </Shell>
-        <CommonHandles top bottom />
+const APICallNode = memo(function APICallNode({
+  data,
+  selected,
+  onEdit,
+  onDuplicate,
+  onDelete,
+  onCopyWebhook,
+  onCopyId,
+}: NodeProps<ApiData> & NodeCommonHandlers) {
+  const method = data?.method ?? "GET";
+  const url = data?.url ?? "(set URL)";
+  const assignTo = data?.assignTo ?? "response";
+  return (
+    <div className="relative">
+      <Shell
+        icon={Code2}
+        title="API Call"
+        color="border-cyan-300"
+        selected={!!selected}
+        onEdit={onEdit}
+        onDuplicate={onDuplicate}
+        onDelete={onDelete}
+        onCopyWebhook={onCopyWebhook}
+        onCopyId={onCopyId}
+      >
+        <div className="text-xs space-y-0.5">
+          <div className="truncate" title={`${method} ${url}`}>
+            <b>{method}</b> {url}
+          </div>
+          <div>
+            → <Badge variant="secondary">{assignTo}</Badge>
+          </div>
+        </div>
+      </Shell>
+      <CommonHandles top bottom />
     </div>
-);
+  );
+});
 
-const MediaNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook, onCopyId }) => (
-    <div>
-        <Shell
-            icon={ImageIcon}
-            title="Send Media"
-            color="border-teal-300"
-            onEdit={onEdit}
-            onDuplicate={onDuplicate}
-            onDelete={onDelete}
-            onCopyWebhook={onCopyWebhook}
-            onCopyId={onCopyId}
-        >
-            <div className="text-xs">
-                {data.mediaType.toUpperCase()} • {data.url}
-            </div>
-            {data.caption && (
-                <div className="text-xs text-muted-foreground">{data.caption}</div>
-            )}
-        </Shell>
-        <CommonHandles top bottom />
+const AssignVarNode = memo(function AssignVarNode({
+  data,
+  selected,
+  onEdit,
+  onDuplicate,
+  onDelete,
+  onCopyWebhook,
+  onCopyId,
+}: NodeProps<AssignData> & NodeCommonHandlers) {
+  const k = data?.key ?? "context.foo";
+  const v = data?.value ?? "bar";
+  return (
+    <div className="relative">
+      <Shell
+        icon={Variable}
+        title="Set Variable"
+        color="border-rose-300"
+        selected={!!selected}
+        onEdit={onEdit}
+        onDuplicate={onDuplicate}
+        onDelete={onDelete}
+        onCopyWebhook={onCopyWebhook}
+        onCopyId={onCopyId}
+      >
+        <div className="text-xs">
+          <b>{k}</b> = <code className="break-all">{String(v)}</code>
+        </div>
+      </Shell>
+      <CommonHandles top bottom />
     </div>
-);
+  );
+});
 
-const HandoffNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook, onCopyId }) => (
-    <div>
-        <Shell
-            icon={Headphones}
-            title="Human Handoff"
-            color="border-fuchsia-300"
-            onEdit={onEdit}
-            onDuplicate={onDuplicate}
-            onDelete={onDelete}
-            onCopyWebhook={onCopyWebhook}
-            onCopyId={onCopyId}
-        >
-            <div className="text-xs">
-                Queue: <b>{data.queue}</b>
-            </div>
-            {data.note && (
-                <div className="text-xs text-muted-foreground">{data.note}</div>
-            )}
-        </Shell>
-        <CommonHandles top bottom />
+const MediaNode = memo(function MediaNode({
+  data,
+  selected,
+  onEdit,
+  onDuplicate,
+  onDelete,
+  onCopyWebhook,
+  onCopyId,
+}: NodeProps<MediaData> & NodeCommonHandlers) {
+  const type = safeUpper(data?.mediaType) || "MEDIA";
+  const url = data?.url ?? "(set URL)";
+  return (
+    <div className="relative">
+      <Shell
+        icon={ImageIcon}
+        title="Send Media"
+        color="border-teal-300"
+        selected={!!selected}
+        onEdit={onEdit}
+        onDuplicate={onDuplicate}
+        onDelete={onDelete}
+        onCopyWebhook={onCopyWebhook}
+        onCopyId={onCopyId}
+      >
+        <div className="text-xs">
+          {type} •{" "}
+          <span className="truncate inline-block align-bottom" title={url}>
+            {url}
+          </span>
+        </div>
+        {data?.caption ? (
+          <div className="text-xs text-muted-foreground">{data.caption}</div>
+        ) : null}
+      </Shell>
+      <CommonHandles top bottom />
     </div>
-);
+  );
+});
 
-const GoToNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook, onCopyId }) => (
-    <div>
-        <Shell
-            icon={Link2}
-            title="Go To"
-            color="border-slate-300"
-            onEdit={onEdit}
-            onDuplicate={onDuplicate}
-            onDelete={onDelete}
-            onCopyWebhook={onCopyWebhook}
-            onCopyId={onCopyId}
-        >
-            <div className="text-xs">
-                Jump to:{" "}
-                <Badge variant="outline">{data.targetNodeId || "(select)"}</Badge>
-            </div>
-        </Shell>
-        <CommonHandles top bottom />
+const HandoffNode = memo(function HandoffNode({
+  data,
+  selected,
+  onEdit,
+  onDuplicate,
+  onDelete,
+  onCopyWebhook,
+  onCopyId,
+}: NodeProps<HandoffData> & NodeCommonHandlers) {
+  const queue = data?.queue ?? "default";
+  const note = data?.note;
+  return (
+    <div className="relative">
+      <Shell
+        icon={Headphones}
+        title="Human Handoff"
+        color="border-fuchsia-300"
+        selected={!!selected}
+        onEdit={onEdit}
+        onDuplicate={onDuplicate}
+        onDelete={onDelete}
+        onCopyWebhook={onCopyWebhook}
+        onCopyId={onCopyId}
+      >
+        <div className="text-xs">
+          Queue: <b>{queue}</b>
+        </div>
+        {note ? (
+          <div className="text-xs text-muted-foreground">{note}</div>
+        ) : null}
+      </Shell>
+      <CommonHandles top bottom />
     </div>
-);
+  );
+});
 
-const EndNode = ({ data, onEdit, onDuplicate, onDelete, onCopyWebhook, onCopyId }) => (
-    <div>
-        <Shell
-            icon={Flag}
-            title="End"
-            color="border-gray-300"
-            onEdit={onEdit}
-            onDuplicate={onDuplicate}
-            onDelete={onDelete}
-            onCopyWebhook={onCopyWebhook}
-            onCopyId={onCopyId}
-        >
-            <div className="text-xs text-muted-foreground">
-                {data.reason || "end"}
-            </div>
-        </Shell>
-        <Handle type="target" position={Position.Top} />
+const GoToNode = memo(function GoToNode({
+  data,
+  selected,
+  onEdit,
+  onDuplicate,
+  onDelete,
+  onCopyWebhook,
+  onCopyId,
+}: NodeProps<GoToData> & NodeCommonHandlers) {
+  const target = data?.targetNodeId || "(select)";
+  return (
+    <div className="relative">
+      <Shell
+        icon={Link2}
+        title="Go To"
+        color="border-slate-300"
+        selected={!!selected}
+        onEdit={onEdit}
+        onDuplicate={onDuplicate}
+        onDelete={onDelete}
+        onCopyWebhook={onCopyWebhook}
+        onCopyId={onCopyId}
+      >
+        <div className="text-xs">
+          Jump to: <Badge variant="outline">{target}</Badge>
+        </div>
+      </Shell>
+      <CommonHandles top bottom />
     </div>
-);
+  );
+});
 
+const EndNode = memo(function EndNode({
+  data,
+  selected,
+  onEdit,
+  onDuplicate,
+  onDelete,
+  onCopyWebhook,
+  onCopyId,
+}: NodeProps<EndData> & NodeCommonHandlers) {
+  const reason = data?.reason || "end";
+  return (
+    <div className="relative">
+      <Shell
+        icon={Flag}
+        title="End"
+        color="border-gray-300"
+        selected={!!selected}
+        onEdit={onEdit}
+        onDuplicate={onDuplicate}
+        onDelete={onDelete}
+        onCopyWebhook={onCopyWebhook}
+        onCopyId={onCopyId}
+      >
+        <div className="text-xs text-muted-foreground">{reason}</div>
+      </Shell>
+      <Handle type="target" position={Position.Top} />
+    </div>
+  );
+});
+
+/* =========================
+   Export nodeTypes
+   ========================= */
 export const nodeTypes = {
   trigger: TriggerNode,
   message: MessageNode,
