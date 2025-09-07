@@ -81,7 +81,8 @@ const HeaderJSONField = ({
     } catch (e: any) {
       setError(e?.message || "JSON inválido");
     }
-  }, [debouncedText, onValidJSON]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedText]);
 
   return (
     <div className="space-y-1">
