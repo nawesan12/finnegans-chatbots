@@ -152,6 +152,11 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
     [sn, onChange],
   );
 
+  const handleValidHeaders = useCallback(
+    (obj: Record<string, any>) => updateData("headers", obj),
+    [updateData],
+  );
+
   const appendMessage = useCallback(
     (textToInsert: string) => {
       if (!sn) return;
@@ -416,7 +421,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
 
             <HeaderJSONField
               value={sn.data?.headers}
-              onValidJSON={(obj) => updateData("headers", obj)}
+              onValidJSON={handleValidHeaders}
             />
 
             <div className="space-y-1">
