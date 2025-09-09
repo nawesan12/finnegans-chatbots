@@ -321,9 +321,11 @@ const FlowBuilder = React.forwardRef(
         });
         const id = makeId();
         const data = { name: `${type}-${id}`, ...getStarterData(type) };
-        setNodes((nds) =>
-          nds.concat({ id, type, position: pos || { x: 0, y: 0 }, data }),
-        );
+        setTimeout(() => {
+          setNodes((nds) =>
+            nds.concat({ id, type, position: pos || { x: 0, y: 0 }, data }),
+          );
+        }, 0);
       },
       [setNodes],
     );
