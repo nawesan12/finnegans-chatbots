@@ -468,10 +468,10 @@ export function Simulator({
                 <Switch
                   id="step-mode"
                   checked={stepMode}
-                  onCheckedChange={(v) => {
+                  onCheckedChange={useCallback((v: boolean) => {
                     setStepMode(v);
                     setAwaitingStep(false);
-                  }}
+                  }, [])}
                 />
                 <Button
                   variant="outline"
