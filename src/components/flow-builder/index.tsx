@@ -263,45 +263,48 @@ const FlowBuilder = React.forwardRef(
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const updateSelected = (patch: Partial<Node>) => {
-      if (!selected) return;
-      setNodes((nds) =>
-        nds.map((n) =>
-          n.id === selected.id
-            ? { ...n, ...patch, data: { ...n.data, ...(patch as any).data } }
-            : n,
-        ),
-      );
-      setSelected((s) =>
-        s
-          ? ({
-              ...s,
-              ...patch,
-              data: { ...s.data, ...(patch as any).data },
-            } as Node)
-          : s,
-      );
-      // limpiar edges de options si cambió cantidad
-      if (
-        selected.type === "options" &&
-        (patch as any).data &&
-        Object.prototype.hasOwnProperty.call((patch as any).data, "options")
-      ) {
-        const opts = ((patch as any).data?.options || []) as unknown[];
-        const handles = new Set(opts.map((_, i: number) => `opt-${i}`));
-        handles.add("no-match");
-        setEdges((eds) =>
-          eds.filter(
-            (e) =>
-              !(
-                e.source === selected.id &&
-                e.sourceHandle &&
-                !handles.has(e.sourceHandle)
-              ),
+    const updateSelected = useCallback(
+      (patch: Partial<Node>) => {
+        if (!selected) return;
+        setNodes((nds) =>
+          nds.map((n) =>
+            n.id === selected.id
+              ? { ...n, ...patch, data: { ...n.data, ...(patch as any).data } }
+              : n,
           ),
         );
-      }
-    };
+        setSelected((s) =>
+          s
+            ? ({
+                ...s,
+                ...patch,
+                data: { ...s.data, ...(patch as any).data },
+              } as Node)
+            : s,
+        );
+        // limpiar edges de options si cambió cantidad
+        if (
+          selected.type === "options" &&
+          (patch as any).data &&
+          Object.prototype.hasOwnProperty.call((patch as any).data, "options")
+        ) {
+          const opts = ((patch as any).data?.options || []) as unknown[];
+          const handles = new Set(opts.map((_, i: number) => `opt-${i}`));
+          handles.add("no-match");
+          setEdges((eds) =>
+            eds.filter(
+              (e) =>
+                !(
+                  e.source === selected.id &&
+                  e.sourceHandle &&
+                  !handles.has(e.sourceHandle)
+                ),
+            ),
+          );
+        }
+      },
+      [selected, setNodes, setEdges],
+    );
 
     const onDrop = useCallback(
       (e: React.DragEvent) => {
