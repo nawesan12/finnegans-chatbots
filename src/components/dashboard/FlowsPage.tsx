@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MoreVertical, ChevronLeft, Save, Plus } from "lucide-react";
 import { itemVariants } from "@/lib/animations";
@@ -79,55 +79,58 @@ const FlowsPage = () => {
     }
   };
 
-  const columns = [
-    { key: "name", label: "Nombre del Flujo" },
-    { key: "phoneNumber", label: "Número de Teléfono" },
-    { key: "trigger", label: "Palabra Clave de Activación" },
-    {
-      key: "status",
-      label: "Estado",
-      //@ts-expect-error bla
-      render: (row) => {
-        const colors = {
-          Active: "bg-green-100 text-green-800",
-          Draft: "bg-yellow-100 text-yellow-800",
-          Inactive: "bg-gray-100 text-gray-800",
-        };
-        return (
-          <span
-            className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-              //@ts-expect-error bla
-              colors[row.status] || "bg-gray-100 text-gray-800"
-            }`}
-          >
-            {row.status}
-          </span>
-        );
+  const columns = useMemo(
+    () => [
+      { key: "name", label: "Nombre del Flujo" },
+      { key: "phoneNumber", label: "Número de Teléfono" },
+      { key: "trigger", label: "Palabra Clave de Activación" },
+      {
+        key: "status",
+        label: "Estado",
+        //@ts-expect-error bla
+        render: (row) => {
+          const colors = {
+            Active: "bg-green-100 text-green-800",
+            Draft: "bg-yellow-100 text-yellow-800",
+            Inactive: "bg-gray-100 text-gray-800",
+          };
+          return (
+            <span
+              className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                //@ts-expect-error bla
+                colors[row.status] || "bg-gray-100 text-gray-800"
+              }`}
+            >
+              {row.status}
+            </span>
+          );
+        },
       },
-    },
-    {
-      key: "updatedAt",
-      label: "Ultimo modificado", //@ts-expect-error bla
-      render: (row) => new Date(row.updatedAt).toLocaleString(),
-    },
-    {
-      key: "actions",
-      label: "Acciones", //@ts-expect-error bla
-      render: (row) => (
-        <div className="flex space-x-2">
-          <button
-            onClick={() => setEditingFlow(row)}
-            className="text-[#4bc3fe] hover:text-indigo-900 font-medium"
-          >
-            Editar
-          </button>
-          <button className="text-gray-500 hover:text-gray-800">
-            <MoreVertical className="h-5 w-5" />
-          </button>
-        </div>
-      ),
-    },
-  ];
+      {
+        key: "updatedAt",
+        label: "Ultimo modificado", //@ts-expect-error bla
+        render: (row) => new Date(row.updatedAt).toLocaleString(),
+      },
+      {
+        key: "actions",
+        label: "Acciones", //@ts-expect-error bla
+        render: (row) => (
+          <div className="flex space-x-2">
+            <button
+              onClick={() => setEditingFlow(row)}
+              className="text-[#4bc3fe] hover:text-indigo-900 font-medium"
+            >
+              Editar
+            </button>
+            <button className="text-gray-500 hover:text-gray-800">
+              <MoreVertical className="h-5 w-5" />
+            </button>
+          </div>
+        ),
+      },
+    ],
+    [],
+  );
 
   if (loading && !editingFlow) {
     return <div>Cargando flujos...</div>;
