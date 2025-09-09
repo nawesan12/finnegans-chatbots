@@ -182,7 +182,11 @@ const FlowsPage = () => {
           <div className="flex-1">
             <FlowBuilder
               ref={flowBuilderRef} //@ts-expect-error bla
-              initialFlow={editingFlow?.definition}
+              initialFlow={useMemo(
+                () => editingFlow?.definition,
+                // eslint-disable-next-line react-hooks/exhaustive-deps
+                [editingFlow?.definition],
+              )}
             />
           </div>
         </motion.div>
