@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import {
   BarChart2,
   Bot,
+  Megaphone,
   MessageSquare,
   Users,
   Settings,
@@ -30,6 +31,12 @@ const Sidebar = ({
       href: "/dashboard",
     },
     { id: "flows", icon: Bot, label: "Flujos", href: "/dashboard/flows" },
+    {
+      id: "broadcasts",
+      icon: Megaphone,
+      label: "Mensajes Masivos",
+      href: "/dashboard/broadcasts",
+    },
     {
       id: "logs",
       icon: MessageSquare,

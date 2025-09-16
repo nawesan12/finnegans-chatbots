@@ -189,7 +189,7 @@ export async function sendMessage(
   userId: string,
   to: string,
   message: SendMessagePayload,
-) {
+): Promise<boolean> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { metaAccessToken: true, metaPhoneNumberId: true },
@@ -197,7 +197,7 @@ export async function sendMessage(
 
   if (!user?.metaAccessToken || !user?.metaPhoneNumberId) {
     console.error("Missing Meta API credentials for user:", userId);
-    return;
+    return false;
   }
 
   const url = `https://graph.facebook.com/${GRAPH_VERSION}/${user.metaPhoneNumberId}/messages`;
@@ -284,14 +284,18 @@ export async function sendMessage(
         res.status,
         txt || res.statusText,
       );
+      return false;
     }
   } catch (error) {
     if ((error as any)?.name === "AbortError") {
       console.error("Error sending message: request timeout");
-    } else {
-      console.error("Error sending message:", error);
+      return false;
     }
+    console.error("Error sending message:", error);
+    return false;
   } finally {
     clearTimeout(t);
   }
+
+  return true;
 }

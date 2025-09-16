@@ -34,6 +34,7 @@ export default function DashboardLayout({
   const pageTitles: { [key: string]: string } = {
     "/dashboard": "Panel de Control",
     "/dashboard/flows": "Flujos de Mensajes",
+    "/dashboard/broadcasts": "Mensajes Masivos",
     "/dashboard/logs": "Registros",
     "/dashboard/contacts": "Contactos",
     "/dashboard/settings": "Configuración",
