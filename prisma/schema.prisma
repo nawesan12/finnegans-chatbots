@@ -74,6 +74,7 @@ model Flow {
 
   logs     Log[]
   sessions Session[]
+  broadcasts Broadcast[]
 }
 
 model Log {
@@ -120,6 +121,9 @@ model Broadcast {
 
   userId String
   user   User @relation(fields: [userId], references: [id])
+
+  flowId String?
+  flow   Flow?  @relation(fields: [flowId], references: [id], onDelete: SetNull)
 
   recipients BroadcastRecipient[]
 }

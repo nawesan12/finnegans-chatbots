@@ -67,6 +67,16 @@ interface BroadcastItem {
   failureCount: number;
   createdAt: string;
   recipients: BroadcastRecipient[];
+  flow?: { id: string; name?: string | null } | null;
+  flowId?: string | null;
+}
+
+interface FlowOption {
+  id: string;
+  name: string;
+  status?: string | null;
+  userId: string;
+  updatedAt?: string;
 }
 
 const statusLabels: Record<string, string> = {
@@ -103,6 +113,9 @@ const BroadcastsPage = () => {
   const [selectedBroadcastId, setSelectedBroadcastId] = useState<string | null>(
     null,
   );
+  const [flows, setFlows] = useState<FlowOption[]>([]);
+  const [loadingFlows, setLoadingFlows] = useState(false);
+  const [selectedFlowId, setSelectedFlowId] = useState<string>("");
 
   const numberFormatter = useMemo(
     () =>
@@ -148,11 +161,64 @@ const BroadcastsPage = () => {
     }
   }, [user?.id]);
 
+  const fetchFlows = useCallback(async () => {
+    if (!user?.id) {
+      setFlows([]);
+      setSelectedFlowId("");
+      return;
+    }
+
+    try {
+      setLoadingFlows(true);
+      const response = await fetch(`/api/flows?userId=${user.id}`);
+      if (!response.ok) {
+        throw new Error("No se pudieron cargar los flujos");
+      }
+      const data: FlowOption[] = await response.json();
+      const filtered = data.filter((flow) => flow.userId === user.id);
+      const sorted = filtered.sort((a, b) => {
+        const aActive = a.status === "Active";
+        const bActive = b.status === "Active";
+        if (aActive !== bActive) {
+          return aActive ? -1 : 1;
+        }
+        const aTime = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+        const bTime = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+        return bTime - aTime;
+      });
+      setFlows(sorted);
+      setSelectedFlowId((current) =>
+        current && sorted.some((flow) => flow.id === current)
+          ? current
+          : sorted[0]?.id ?? "",
+      );
+    } catch (error) {
+      console.error(error);
+      toast.error("Error al cargar los flujos");
+      setFlows([]);
+      setSelectedFlowId("");
+    } finally {
+      setLoadingFlows(false);
+    }
+  }, [user?.id]);
+
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setContacts([]);
+      setBroadcasts([]);
+      setFlows([]);
+      setSelectedFlowId("");
+      return;
+    }
     fetchContacts();
     fetchBroadcasts();
-  }, [fetchContacts, fetchBroadcasts, user?.id]);
+    fetchFlows();
+  }, [
+    fetchBroadcasts,
+    fetchContacts,
+    fetchFlows,
+    user?.id,
+  ]);
 
   const tags = useMemo(() => {
     const set = new Set<string>();
@@ -271,6 +337,11 @@ const BroadcastsPage = () => {
         ),
       },
       {
+        key: "flow",
+        label: "Flujo",
+        render: (row: BroadcastItem) => row.flow?.name || "Sin flujo",
+      },
+      {
         key: "createdAt",
         label: "Creada",
         render: (row: BroadcastItem) =>
@@ -326,12 +397,19 @@ const BroadcastsPage = () => {
   };
 
   const canSubmit = useMemo(() => {
-    if (!message.trim() || !user?.id) return false;
+    if (!message.trim() || !user?.id || !selectedFlowId) return false;
     if (sendToAll) {
       return filteredContacts.length > 0;
     }
     return selectedContacts.length > 0;
-  }, [filteredContacts.length, message, selectedContacts.length, sendToAll, user?.id]);
+  }, [
+    filteredContacts.length,
+    message,
+    selectedContacts.length,
+    sendToAll,
+    selectedFlowId,
+    user?.id,
+  ]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -342,6 +420,11 @@ const BroadcastsPage = () => {
 
     if (!canSubmit) {
       toast.error("Configura el mensaje y destinatarios antes de enviar");
+      return;
+    }
+
+    if (!selectedFlowId) {
+      toast.error("Selecciona un flujo para adjuntar la campaña");
       return;
     }
 
@@ -357,6 +440,7 @@ const BroadcastsPage = () => {
           sendToAll,
           contactIds: sendToAll ? undefined : selectedContacts,
           filterTag: selectedTag !== "all" ? selectedTag : null,
+          flowId: selectedFlowId,
         }),
       });
 
@@ -389,6 +473,7 @@ const BroadcastsPage = () => {
       message: "Hola! Te damos la bienvenida a nuestra comunidad",
       sendToAll: true,
       filterTag: "Clientes",
+      flowId: "FLOW_ID",
     };
 
     return `curl -X POST https://tu-dominio.com/api/broadcasts \\n  -H "Content-Type: application/json" \\n  -d '${JSON.stringify(payload, null, 2)}'`;
@@ -426,6 +511,54 @@ const BroadcastsPage = () => {
                 placeholder="Promoción de primavera"
                 onChange={(event) => setTitle(event.target.value)}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Flujo asociado</Label>
+              <Select
+                value={selectedFlowId}
+                onValueChange={(value) => setSelectedFlowId(value)}
+                disabled={loadingFlows || flows.length === 0}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue
+                    placeholder={
+                      loadingFlows
+                        ? "Cargando flujos..."
+                        : "Selecciona un flujo para continuar"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {flows.length ? (
+                    flows.map((flow) => (
+                      <SelectItem key={flow.id} value={flow.id}>
+                        <div className="flex flex-col text-left">
+                          <span>{flow.name}</span>
+                          {flow.status && (
+                            <span className="text-xs text-gray-500">
+                              Estado: {flow.status}
+                            </span>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="no-flow" disabled>
+                      No hay flujos disponibles
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-500">
+                Asocia la campaña a un flujo creado en el constructor para
+                continuar la conversación automáticamente.
+              </p>
+              {!loadingFlows && flows.length === 0 && (
+                <p className="text-xs text-red-500">
+                  Debes crear y activar un flujo antes de enviar campañas masivas.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -624,6 +757,10 @@ const BroadcastsPage = () => {
               contenido de tu campaña y la segmentación deseada.
             </p>
             <p>
+              Recuerda incluir el <code className="font-mono">flowId</code> del chatbot que
+              debe continuar la conversación luego del mensaje masivo.
+            </p>
+            <p>
               Puedes programar tus envíos y reutilizar plantillas desde tus flujos para
               mantener una comunicación consistente.
             </p>
@@ -683,6 +820,13 @@ const BroadcastsPage = () => {
                   </Badge>
                   <p className="text-xs text-gray-500">
                     Enviada el {new Date(selectedBroadcast.createdAt).toLocaleString()}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Flujo asociado:
+                    <span className="font-medium text-gray-700">
+                      {" "}
+                      {selectedBroadcast.flow?.name ?? "Sin flujo"}
+                    </span>
                   </p>
                 </div>
                 <p className="text-sm text-gray-600 whitespace-pre-wrap border border-dashed border-gray-200 rounded-lg p-3">

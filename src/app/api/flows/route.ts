@@ -3,9 +3,18 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get("userId");
+    const status = searchParams.get("status");
+
+    const where: Record<string, unknown> = {};
+    if (userId) where.userId = userId;
+    if (status) where.status = status;
+
     const flows = await prisma.flow.findMany({
+      where: Object.keys(where).length ? where : undefined,
       orderBy: {
         updatedAt: "desc",
       },

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { sendMessage } from "@/lib/meta";
 
 const prisma = new PrismaClient();
@@ -20,6 +20,7 @@ export async function GET(request: Request) {
             },
           },
         },
+        flow: { select: { id: true, name: true } },
       },
     });
 
@@ -43,6 +44,7 @@ export async function POST(request: Request) {
       sendToAll,
       contactIds,
       filterTag,
+      flowId,
     } = body ?? {};
 
     if (!userId || typeof userId !== "string") {
@@ -59,6 +61,13 @@ export async function POST(request: Request) {
       );
     }
 
+    if (!flowId || typeof flowId !== "string") {
+      return NextResponse.json(
+        { error: "Flow ID is required" },
+        { status: 400 },
+      );
+    }
+
     const normalizedMessage = message.trim();
     const normalizedTitle =
       typeof title === "string" && title.trim().length > 0
@@ -68,6 +77,18 @@ export async function POST(request: Request) {
       typeof filterTag === "string" && filterTag.trim().length > 0
         ? filterTag.trim()
         : null;
+
+    const flow = await prisma.flow.findFirst({
+      where: { id: flowId, userId },
+      select: { id: true, name: true },
+    });
+
+    if (!flow) {
+      return NextResponse.json(
+        { error: "Selected flow not found" },
+        { status: 400 },
+      );
+    }
 
     let contacts;
 
@@ -132,14 +153,54 @@ export async function POST(request: Request) {
         status: "Processing",
         totalRecipients: contacts.length,
         user: { connect: { id: userId } },
+        flow: { connect: { id: flow.id } },
         recipients: {
           create: contacts.map((contact) => ({
             contact: { connect: { id: contact.id } },
           })),
         },
       },
-      include: { recipients: true },
+      include: {
+        recipients: true,
+        flow: { select: { id: true, name: true } },
+      },
     });
+
+    const sessionContextBase = {
+      source: "broadcast",
+      lastBroadcastId: broadcast.id,
+      flowId: flow.id,
+      flowName: flow.name,
+      broadcastTitle: normalizedTitle ?? null,
+      attachedAt: new Date().toISOString(),
+    };
+
+    await Promise.all(
+      contacts.map((contact) => {
+        const context = {
+          ...sessionContextBase,
+          contactId: contact.id,
+        } as Prisma.JsonObject;
+
+        return prisma.session.upsert({
+          where: {
+            contactId_flowId: { contactId: contact.id, flowId: flow.id },
+          },
+          update: {
+            status: "Active",
+            currentNodeId: null,
+            context,
+          },
+          create: {
+            contactId: contact.id,
+            flowId: flow.id,
+            status: "Active",
+            currentNodeId: null,
+            context,
+          },
+        });
+      }),
+    );
 
     const contactsMap = new Map(contacts.map((c) => [c.id, c]));
     let successCount = 0;
@@ -219,6 +280,7 @@ export async function POST(request: Request) {
             },
           },
         },
+        flow: { select: { id: true, name: true } },
       },
     });
 
