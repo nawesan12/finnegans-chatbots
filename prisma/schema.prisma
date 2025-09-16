@@ -23,6 +23,7 @@ model User {
 
   contacts Contact[]
   flows    Flow[]
+  broadcasts Broadcast[]
 }
 
 model Contact {
@@ -38,6 +39,7 @@ model Contact {
   tags     TagsOnContacts[]
   logs     Log[]
   sessions Session[]
+  broadcastRecipients BroadcastRecipient[]
 }
 
 model Tag {
@@ -102,4 +104,36 @@ model Session {
   flow      Flow    @relation(fields: [flowId], references: [id])
 
   @@unique([contactId, flowId])
+}
+
+model Broadcast {
+  id              String   @id @default(cuid())
+  title           String?
+  body            String
+  filterTag       String?
+  status          String   @default("Draft")
+  totalRecipients Int      @default(0)
+  successCount    Int      @default(0)
+  failureCount    Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  userId String
+  user   User @relation(fields: [userId], references: [id])
+
+  recipients BroadcastRecipient[]
+}
+
+model BroadcastRecipient {
+  id          String   @id @default(cuid())
+  status      String   @default("Pending")
+  error       String?
+  sentAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  broadcastId String
+  broadcast   Broadcast @relation(fields: [broadcastId], references: [id])
+
+  contactId String
+  contact   Contact @relation(fields: [contactId], references: [id])
 }

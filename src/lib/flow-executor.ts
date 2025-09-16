@@ -58,7 +58,7 @@ type SendMessage = (
     | { type: "text"; text: string }
     | { type: "media"; mediaType: string; url: string; caption?: string }
     | { type: "options"; text: string; options: string[] },
-) => Promise<void>;
+) => Promise<void | boolean>;
 
 // This function is now stateful and operates on a session
 export async function executeFlow(
