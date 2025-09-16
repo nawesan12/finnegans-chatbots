@@ -36,11 +36,11 @@ export default function LoginPage() {
       const data = await response.json();
       const { token, ...user } = data;
       setUser(user, token);
-      toast.success(`Welcome back, ${data.name}!`);
+      toast.success(`Bienvenido de nuevo, ${data.name}!`);
       router.push("/dashboard");
     } else {
       const errorData = await response.json();
-      toast.error(errorData.error || "Login failed");
+      toast.error(errorData.error || "Acceso fallido");
     }
   };
 
@@ -48,15 +48,15 @@ export default function LoginPage() {
     <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle className="text-2xl">Login</CardTitle>
+          <CardTitle className="text-2xl">Acceder</CardTitle>
           <CardDescription>
-            Enter your email below to login to your account.
+            Introduce tu correo electrónico para iniciar sesión en tu cuenta.
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleLogin}>
           <CardContent className="grid gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">Correo electrónico</Label>
               <Input
                 id="email"
                 type="email"
@@ -67,7 +67,7 @@ export default function LoginPage() {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">Contraseña</Label>
               <Input
                 id="password"
                 type="password"
@@ -79,14 +79,8 @@ export default function LoginPage() {
           </CardContent>
           <CardFooter className="flex flex-col">
             <Button type="submit" className="w-full">
-              Sign in
+              Iniciar sesión
             </Button>
-            <div className="mt-4 text-center text-sm">
-              Don&apos;t have an account?{" "}
-              <Link href="/register" className="underline">
-                Sign up
-              </Link>
-            </div>
           </CardFooter>
         </form>
       </Card>

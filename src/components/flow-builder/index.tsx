@@ -2,6 +2,7 @@
 import React, {
   useCallback,
   useEffect,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
@@ -53,6 +54,16 @@ import { Topbar } from "./Toolbar";
 import { Palette } from "./Palette";
 import { z } from "zod";
 
+// Exportá estos tipos
+export type RFNode = Node;
+export type RFEdge = Edge;
+
+export type FlowData = { nodes: RFNode[]; edges: RFEdge[] };
+export type FlowBuilderHandle = { getFlowData: () => FlowData };
+
+type FlowBuilderProps = {
+  initialFlow?: Partial<FlowData> | null;
+};
 const defaultNodes: Node[] = [
   {
     id: "n1",
@@ -106,13 +117,8 @@ const defaultEdges: Edge[] = [
 
 const DRAFT_KEY = "flowbuilder_draft_v1";
 
-//eslint-disable-next-line
-const FlowBuilder = React.forwardRef(
-  (
-    //@ts-expect-error bla
-    { initialFlow },
-    ref: React.ForwardedRef<HTMLDivElement>,
-  ) => {
+const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
+  ({ initialFlow }, ref) => {
     const [nodes, setNodes, onNodesChange] =
       useNodesState<Node[]>(defaultNodes);
     const [edges, setEdges, onEdgesChange] =
@@ -120,7 +126,7 @@ const FlowBuilder = React.forwardRef(
     const [selected, setSelected] = useState<Node | null>(null);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [zoomLevel, setZoomLevel] = useState<number | undefined>(undefined);
-    const rfRef = useRef<any>(null);
+    const rfRef = useRef(null);
 
     // Load initial flow or draft
     useEffect(() => {
@@ -147,7 +153,7 @@ const FlowBuilder = React.forwardRef(
 
     // Expose ref API
     //eslint-disable-next-line
-    React.useImperativeHandle(ref, () => ({
+    useImperativeHandle(ref, () => ({
       getFlowData: () => ({ nodes, edges }),
     }));
 
@@ -279,10 +285,7 @@ const FlowBuilder = React.forwardRef(
           if (
             s.type === "options" &&
             (patch as any).data &&
-            Object.prototype.hasOwnProperty.call(
-              (patch as any).data,
-              "options",
-            )
+            Object.prototype.hasOwnProperty.call((patch as any).data, "options")
           ) {
             const opts = ((patch as any).data?.options || []) as unknown[];
             const handles = new Set(opts.map((_, i: number) => `opt-${i}`));
@@ -635,6 +638,61 @@ const FlowBuilder = React.forwardRef(
       handleCopyId,
     ]);
 
+    const didFitOnceRef = useRef(false);
+
+    useEffect(() => {
+      if (initialFlow?.nodes && initialFlow?.edges) {
+        setNodes(initialFlow.nodes);
+        setEdges(initialFlow.edges);
+        if (!didFitOnceRef.current) {
+          didFitOnceRef.current = true;
+          setTimeout(() => rfRef.current?.fitView?.({ padding: 0.2 }), 0);
+        }
+        return;
+      }
+      try {
+        const raw = localStorage.getItem(DRAFT_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed.nodes) && Array.isArray(parsed.edges)) {
+            setNodes(parsed.nodes);
+            setEdges(parsed.edges);
+            if (!didFitOnceRef.current) {
+              didFitOnceRef.current = true;
+              setTimeout(() => rfRef.current?.fitView?.({ padding: 0.2 }), 0);
+            }
+          }
+        }
+      } catch {}
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialFlow]); // no incluyas setNodes/setEdges
+
+    const lastSelIdsRef = useRef<string[]>([]);
+    const shallowEqual = (a: string[], b: string[]) =>
+      a.length === b.length && a.every((id, i) => id === b[i]);
+
+    const handleSelectionChange = useCallback(
+      (sel: { nodes?: Node[] } | null) => {
+        const ids = (sel?.nodes || []).map((n) => n.id);
+        if (shallowEqual(ids, lastSelIdsRef.current)) return; // 👈 evita setState redundante
+        lastSelIdsRef.current = ids;
+        setSelectedIds(ids);
+
+        const first = (sel?.nodes || [])[0] ?? null;
+        // Evita setSelected si no cambió realmente
+        setSelected((prev) => (prev?.id === first?.id ? prev : first));
+      },
+      [],
+    );
+
+    const handleMoveEnd = useCallback(
+      (_evt: any, viewport: { zoom: number }) => {
+        if (typeof viewport?.zoom !== "number") return;
+        setZoomLevel((prev) => (prev === viewport.zoom ? prev : viewport.zoom));
+      },
+      [],
+    );
+
     return (
       <div className="h-screen w-full grid grid-cols-12 gap-0">
         <div className="col-span-12">
@@ -701,38 +759,28 @@ const FlowBuilder = React.forwardRef(
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             nodeTypes={memoizedNodeTypes}
-            fitView
             onNodeClick={onNodeClick}
             onPaneClick={onPaneClick}
             onDrop={onDrop}
             onDragOver={onDragOver}
-            onSelectionChange={(sel) => {
-              const ids = (sel?.nodes || []).map((n) => n.id);
-              setSelectedIds(ids);
-              setSelected((sel?.nodes || [])[0] ?? null);
-            }}
-            onMoveEnd={onMoveEnd}
+            onSelectionChange={handleSelectionChange} // veremos abajo
+            onMoveEnd={handleMoveEnd} // veremos abajo
             defaultEdgeOptions={{
               type: "smoothstep",
               markerEnd: { type: MarkerType.ArrowClosed },
             }}
-            // Calidad de vida
             snapToGrid
             snapGrid={[8, 8]}
             selectionOnDrag
-            panOnDrag={[1, 2]} // botón izquierdo y medio
+            panOnDrag={[1, 2]}
             panOnScroll
             zoomOnScroll
             zoomOnPinch
             panOnScrollSpeed={0.8}
             elevateNodesOnSelect
             selectionMode="partial"
-            deleteKeyCode={null} // lo manejamos nosotros
-          >
-            <Background variant="dots" gap={16} size={1} />
-            <MiniMap zoomable pannable />
-            <Controls />
-          </ReactFlow>
+            deleteKeyCode={null}
+          />
         </div>
 
         {/* Right: Inspector + Simulator */}

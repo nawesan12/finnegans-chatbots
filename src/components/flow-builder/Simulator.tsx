@@ -454,25 +454,25 @@ export function Simulator({
                 <Label htmlFor="ignore-delays" className="text-sm">
                   Ignorar delays
                 </Label>
-                <Switch
+                {/*<Switch
                   id="ignore-delays"
                   checked={ignoreDelays}
                   onCheckedChange={setIgnoreDelays}
-                />
+                />*/}
               </div>
 
               <div className="flex items-center gap-2">
                 <Label htmlFor="step-mode" className="text-sm">
                   Step
                 </Label>
-                <Switch
+                {/*<Switch
                   id="step-mode"
                   checked={stepMode}
                   onCheckedChange={useCallback((v: boolean) => {
                     setStepMode(v);
                     setAwaitingStep(false);
                   }, [])}
-                />
+                />*/}
                 <Button
                   variant="outline"
                   disabled={!stepMode || !isRunning || !awaitingStep}

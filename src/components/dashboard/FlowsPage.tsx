@@ -4,15 +4,20 @@ import { motion, AnimatePresence } from "framer-motion";
 import { MoreVertical, ChevronLeft, Save, Plus } from "lucide-react";
 import { itemVariants } from "@/lib/animations";
 import Table from "@/components/dashboard/Table";
-import FlowBuilder from "@/components/flow-builder";
+import FlowBuilder, {
+  FlowBuilderHandle,
+  FlowData,
+} from "@/components/flow-builder";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
 const FlowsPage = () => {
   const [flows, setFlows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [editingFlow, setEditingFlow] = useState(null);
-  const flowBuilderRef = useRef(null);
+  //eslint-disable-next-line
+  const [editingFlow, setEditingFlow] = useState<any>(null);
+
+  const flowBuilderRef = useRef<FlowBuilderHandle>(null);
 
   const fetchFlows = async () => {
     try {
@@ -35,7 +40,6 @@ const FlowsPage = () => {
 
   const handleCreateNewFlow = () => {
     setEditingFlow({
-      //@ts-expect-error bla
       id: null, // No ID for a new flow
       name: "Nuevo flujo",
       definition: null, // Start with a blank canvas
@@ -46,11 +50,10 @@ const FlowsPage = () => {
     if (!editingFlow || !flowBuilderRef.current) return;
 
     try {
-      //@ts-expect-error bla
       const flowData = flowBuilderRef?.current?.getFlowData();
-      //@ts-expect-error bla
+
       const isNewFlow = !editingFlow?.id;
-      //@ts-expect-error bla
+
       const url = isNewFlow ? "/api/flows" : `/api/flows/${editingFlow?.id}`;
       const method = isNewFlow ? "POST" : "PUT";
 
@@ -58,10 +61,9 @@ const FlowsPage = () => {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          //@ts-expect-error bla
           name: editingFlow?.name,
           definition: flowData,
-          //@ts-expect-error bla
+
           phoneNumber: editingFlow?.phoneNumber,
         }),
       });
@@ -132,6 +134,11 @@ const FlowsPage = () => {
     [],
   );
 
+  const initialFlow = useMemo<Partial<FlowData> | null>(
+    () => editingFlow?.definition ?? null,
+    [editingFlow?.definition],
+  );
+
   if (loading && !editingFlow) {
     return <div>Cargando flujos...</div>;
   }
@@ -155,16 +162,14 @@ const FlowsPage = () => {
               <ChevronLeft className="h-5 w-5 mr-1" /> Volver a Flujos
             </button>
             <h2 className="text-xl font-semibold text-gray-800">
-              {/*@ts-expect-error bla*/}
               {editingFlow?.name}
             </h2>
             <div className="flex items-center gap-4">
               <Input
-                placeholder="Phone Number" //@ts-expect-error bla
+                placeholder="Phone Number"
                 value={editingFlow.phoneNumber || ""}
                 onChange={(e) =>
                   setEditingFlow({
-                    //@ts-expect-error bla
                     ...editingFlow,
                     phoneNumber: e.target.value,
                   })
@@ -180,14 +185,7 @@ const FlowsPage = () => {
             </div>
           </div>
           <div className="flex-1">
-            <FlowBuilder
-              ref={flowBuilderRef} //@ts-expect-error bla
-              initialFlow={useMemo(
-                () => editingFlow?.definition,
-                // eslint-disable-next-line react-hooks/exhaustive-deps
-                [editingFlow?.definition],
-              )}
-            />
+            <FlowBuilder ref={flowBuilderRef} initialFlow={initialFlow} />;
           </div>
         </motion.div>
       ) : (

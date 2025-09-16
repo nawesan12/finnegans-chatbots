@@ -88,7 +88,7 @@ const ImportContactsModal = ({
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-2xl font-bold text-gray-800">
-                  Import Contacts
+                  Importar Contactos
                 </h2>
                 <button
                   onClick={handleClose}
@@ -98,7 +98,7 @@ const ImportContactsModal = ({
                 </button>
               </div>
               <p className="text-gray-500 mb-6">
-                Upload a CSV or JSON file to add new contacts in bulk.
+                Subi un CSV o un JSON para importar contactos en masa.
               </p>
 
               <div
@@ -114,15 +114,16 @@ const ImportContactsModal = ({
                   <UploadCloud className="h-12 w-12 mb-3" />
                   {isDragActive ? (
                     <p className="font-semibold text-indigo-600">
-                      Drop the file here...
+                      Soltar el archivo aquí...
                     </p>
                   ) : (
                     <>
                       <p className="font-semibold">
-                        Drag & drop a file here, or click to select
+                        Arrastra y suelta un archivo aquí, o haz clic para
+                        seleccionar
                       </p>
                       <p className="text-sm mt-1">
-                        Supported formats: CSV, JSON
+                        Formatos admitidos: CSV, JSON
                       </p>
                     </>
                   )}
