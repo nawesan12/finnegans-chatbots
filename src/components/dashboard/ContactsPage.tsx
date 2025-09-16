@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { MoreVertical, Upload } from "lucide-react";
 import { itemVariants } from "@/lib/animations";
@@ -31,7 +32,18 @@ const ContactsPage = ({ onImportClick }: { onImportClick: () => void }) => {
   }, []);
 
   const columns = [
-    { key: "name", label: "Nombre" },
+    {
+      key: "name",
+      label: "Nombre",
+      render: (row: { id: string; name?: string | null }) => (
+        <Link
+          href={`/dashboard/contacts/${row.id}`}
+          className="text-[#8694ff] hover:text-indigo-700 font-medium transition-colors"
+        >
+          {row.name || "Sin nombre"}
+        </Link>
+      ),
+    },
     { key: "phone", label: "Telefono" },
     {
       key: "tags",
