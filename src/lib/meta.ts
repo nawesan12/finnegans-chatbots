@@ -120,39 +120,61 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
           });
         }
 
-        // Flujo activo
-        const flow = await prisma.flow.findFirst({
-          where: { userId: user.id, status: "Active" },
-        });
+        const existingSession =
+          (await prisma.session.findFirst({
+            where: {
+              contactId: contact.id,
+              status: { in: ["Active", "Paused"] },
+            },
+            include: { flow: true, contact: true },
+            orderBy: { updatedAt: "desc" },
+          })) || null;
+
+        let flow = existingSession?.flow ?? null;
+
         if (!flow) {
-          console.error("No active flow found for user:", user.id);
+          flow = await prisma.flow.findFirst({
+            where: { userId: user.id, status: "Active" },
+            orderBy: { updatedAt: "desc" },
+          });
+        }
+
+        if (!flow) {
+          console.error("No flow available for user:", user.id);
           continue;
         }
 
-        // Sesión (si completed => crear nueva, sino continuar)
-        let session =
-          (await prisma.session.findUnique({
-            where: {
-              contactId_flowId: { contactId: contact.id, flowId: flow.id },
-            },
-            include: { flow: true, contact: true },
-          })) || null;
+        let session = existingSession;
 
-        if (!session || session.status === "Completed") {
-          session = await prisma.session.create({
-            data: { contactId: contact.id, flowId: flow.id, status: "Active" },
-            include: { flow: true, contact: true },
-          });
-        } else {
-          // aseguramos incluir relaciones
-          if (!(session as any).flow || !(session as any).contact) {
-            session = await prisma.session.findUnique({
+        if (!session || session.flowId !== flow.id) {
+          session =
+            (await prisma.session.findUnique({
               where: {
                 contactId_flowId: { contactId: contact.id, flowId: flow.id },
               },
               include: { flow: true, contact: true },
-            });
-          }
+            })) || null;
+        }
+
+        if (!session) {
+          session = await prisma.session.create({
+            data: { contactId: contact.id, flowId: flow.id, status: "Active" },
+            include: { flow: true, contact: true },
+          });
+        } else if (
+          session.status === "Completed" ||
+          session.status === "Errored"
+        ) {
+          session = await prisma.session.update({
+            where: { id: session.id },
+            data: { status: "Active", currentNodeId: null, context: {} },
+            include: { flow: true, contact: true },
+          });
+        } else if (!(session as any).flow || !(session as any).contact) {
+          session = await prisma.session.findUnique({
+            where: { id: session.id },
+            include: { flow: true, contact: true },
+          });
         }
 
         try {

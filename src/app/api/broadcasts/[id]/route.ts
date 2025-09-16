@@ -19,6 +19,7 @@ export async function GET(
             },
           },
         },
+        flow: { select: { id: true, name: true } },
       },
     });
 
