@@ -39,6 +39,14 @@ export default function DashboardLayout({
     "/dashboard/settings": "Configuración",
   };
 
+  const getPageTitle = (path: string) => {
+    if (path.startsWith("/dashboard/contacts/")) {
+      return "Detalle de Contacto";
+    }
+
+    return pageTitles[path] || "Dashboard";
+  };
+
   const handleOpenImportModal = () => {
     setIsImportModalOpen(true);
   };
@@ -55,7 +63,7 @@ export default function DashboardLayout({
       />
       <main className="flex-1 flex flex-col overflow-x-hidden relative">
         <Header
-          title={pageTitles[pathname] || "Dashboard"}
+          title={getPageTitle(pathname)}
           onImportClick={handleOpenImportModal}
           onNewContactClick={handleOpenAddContactModal}
         />
