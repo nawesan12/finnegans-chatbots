@@ -15,6 +15,21 @@ import { MessageSquare, Users, ArrowRight, Bot } from "lucide-react";
 import { containerVariants, itemVariants } from "@/lib/animations";
 import MetricCard from "@/components/dashboard/MetricCard";
 import { toast } from "sonner";
+import { useAuthStore } from "@/lib/store";
+
+type DashboardMetrics = {
+  totalContacts: number;
+  activeConversations: number;
+  messagesSent: number;
+  flowSuccessRate: number;
+};
+
+type RecentLog = {
+  id: string;
+  createdAt: string;
+  contact: { name: string | null; phone: string } | null;
+  flow: { name: string | null } | null;
+};
 
 const chartData = [
   { name: "Mon", sent: 400, received: 240 },
@@ -27,69 +42,155 @@ const chartData = [
 ];
 
 const DashboardPage = () => {
-  const [metrics, setMetrics] = useState(null);
-  const [recentLogs, setRecentLogs] = useState([]);
+  const { token, hasHydrated } = useAuthStore((state) => ({
+    token: state.token,
+    hasHydrated: state.hasHydrated,
+  }));
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [recentLogs, setRecentLogs] = useState<RecentLog[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const numberFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat("es-AR", {
+        maximumFractionDigits: 0,
+      }),
+    [],
+  );
+
+  const percentageFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat("es-AR", {
+        maximumFractionDigits: 1,
+      }),
+    [],
+  );
+
   useEffect(() => {
+    if (!hasHydrated) {
+      return;
+    }
+
+    if (!token) {
+      setMetrics(null);
+      setRecentLogs([]);
+      setLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    const parseErrorMessage = async (response: Response, fallback: string) => {
+      try {
+        const data = await response.json();
+        if (typeof data?.error === "string") {
+          return data.error;
+        }
+      } catch (error) {
+        console.error("Failed to parse error response", error);
+      }
+      return fallback;
+    };
+
     const fetchData = async () => {
       try {
         setLoading(true);
+        const authHeaders = {
+          Authorization: `Bearer ${token}`,
+        } as const;
+
         const [metricsRes, logsRes] = await Promise.all([
-          fetch("/api/metrics"),
-          fetch("/api/logs?limit=4"), // Assuming API supports limit
+          fetch("/api/metrics", { headers: authHeaders }),
+          fetch("/api/logs?limit=4", { headers: authHeaders }),
         ]);
 
-        if (!metricsRes.ok) throw new Error("Failed to fetch metrics");
-        if (!logsRes.ok) throw new Error("Failed to fetch recent logs");
+        if (!metricsRes.ok) {
+          throw new Error(
+            await parseErrorMessage(
+              metricsRes,
+              "No se pudieron obtener las métricas del panel",
+            ),
+          );
+        }
 
-        const metricsData = await metricsRes.json();
-        const logsData = await logsRes.json();
+        if (!logsRes.ok) {
+          throw new Error(
+            await parseErrorMessage(
+              logsRes,
+              "No se pudo obtener la actividad reciente",
+            ),
+          );
+        }
+
+        const metricsData: DashboardMetrics = await metricsRes.json();
+        const logsData: RecentLog[] = await logsRes.json();
+
+        if (!isMounted) {
+          return;
+        }
 
         setMetrics(metricsData);
         setRecentLogs(logsData);
       } catch (error) {
-        //@ts-expect-error bla
-        toast.error(error.message);
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Error al cargar la información del panel";
+        toast.error(message);
+        if (isMounted) {
+          setMetrics(null);
+          setRecentLogs([]);
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
-    fetchData();
-  }, []);
 
-  const metricCards = useMemo(
-    () =>
-      metrics
-        ? [
-            {
-              title: "Contactos Totales", //@ts-expect-error bla
-              value: metrics?.totalContacts,
-              change: "+5% este mes",
-              icon: Users,
-            },
-            {
-              title: "Conversaciones Activas", //@ts-expect-error bla
-              value: metrics?.activeConversations,
-              change: "-2% hoy",
-              icon: MessageSquare,
-            },
-            {
-              title: "Mensajes Enviados", //@ts-expect-error bla
-              value: metrics?.messagesSent,
-              change: "+12% esta semana",
-              icon: ArrowRight,
-            },
-            {
-              title: "Ratio de Exito", //@ts-expect-error bla
-              value: metrics?.flowSuccessRate,
-              change: "+1.2% este mes",
-              icon: Bot,
-            },
-          ]
-        : [],
-    [metrics],
-  );
+    fetchData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [hasHydrated, token]);
+
+  const metricCards = useMemo(() => {
+    const data: DashboardMetrics =
+      metrics ?? {
+        totalContacts: 0,
+        activeConversations: 0,
+        messagesSent: 0,
+        flowSuccessRate: 0,
+      };
+
+    return [
+      {
+        title: "Contactos Totales",
+        value: numberFormatter.format(data.totalContacts),
+        change: "+5% este mes",
+        icon: Users,
+      },
+      {
+        title: "Conversaciones Activas",
+        value: numberFormatter.format(data.activeConversations),
+        change: "-2% hoy",
+        icon: MessageSquare,
+      },
+      {
+        title: "Mensajes Enviados",
+        value: numberFormatter.format(data.messagesSent),
+        change: "+12% esta semana",
+        icon: ArrowRight,
+      },
+      {
+        title: "Ratio de Exito",
+        value: `${percentageFormatter.format(data.flowSuccessRate)}%`,
+        change: "+1.2% este mes",
+        icon: Bot,
+      },
+    ];
+  }, [metrics, numberFormatter, percentageFormatter]);
 
   if (loading) {
     return <div>Loading dashboard...</div>;
@@ -156,20 +257,38 @@ const DashboardPage = () => {
             Actividad Reciente
           </h3>
           <ul className="space-y-4">
-            {/*eslint-disable-next-line*/}
-            {recentLogs.map((log: any) => (
-              <li key={log.id} className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium text-gray-700">
-                    {log.contact.name}
-                  </p>
-                  <p className="text-sm text-gray-500">{log.flow.name}</p>
-                </div>
-                <span className="text-sm text-gray-400">
-                  {new Date(log.createdAt).toLocaleTimeString()}
-                </span>
-              </li>
-            ))}
+            {recentLogs.map((log) => {
+              const contactNameValue = log.contact?.name?.trim();
+              const contactDisplayName =
+                contactNameValue && contactNameValue.length > 0
+                  ? contactNameValue
+                  : log.contact?.phone ?? "Contacto sin nombre";
+
+              const flowNameValue = log.flow?.name?.trim();
+              const flowDisplayName =
+                flowNameValue && flowNameValue.length > 0
+                  ? flowNameValue
+                  : "Flujo sin nombre";
+
+              const timestamp = log.createdAt
+                ? new Date(log.createdAt).toLocaleTimeString()
+                : "--";
+
+              return (
+                <li
+                  key={log.id}
+                  className="flex items-center justify-between"
+                >
+                  <div>
+                    <p className="font-medium text-gray-700">
+                      {contactDisplayName}
+                    </p>
+                    <p className="text-sm text-gray-500">{flowDisplayName}</p>
+                  </div>
+                  <span className="text-sm text-gray-400">{timestamp}</span>
+                </li>
+              );
+            })}
           </ul>
         </motion.div>
       </motion.div>
