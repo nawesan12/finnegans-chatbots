@@ -19,6 +19,7 @@ import {
   Clock3,
   Search,
 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { containerVariants, itemVariants } from "@/lib/animations";
 import MetricCard from "@/components/dashboard/MetricCard";
 import Table from "@/components/dashboard/Table";
@@ -37,6 +38,14 @@ import {
   SelectItem,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 type FlowStatus = "Active" | "Draft" | "Inactive" | string;
 type StatusFilter = "all" | "Active" | "Draft" | "Inactive";
@@ -67,6 +76,10 @@ const statusFilters: { value: StatusFilter; label: string }[] = [
 ];
 
 const FlowsPage = () => {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const searchParamsString = searchParams.toString();
+  const openFlowQuery = searchParams.get("openFlow");
   const { user } = useAuthStore();
   const [flows, setFlows] = useState<FlowWithCounts[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -75,6 +88,7 @@ const FlowsPage = () => {
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [rowActionFlowId, setRowActionFlowId] = useState<string | null>(null);
 
   const flowBuilderRef = useRef<FlowBuilderHandle>(null);
 
@@ -105,6 +119,28 @@ const FlowsPage = () => {
   useEffect(() => {
     fetchFlows();
   }, [fetchFlows]);
+
+  useEffect(() => {
+    if (!openFlowQuery || !flows.length) return;
+
+    const targetFlow = flows.find((flow) => flow.id === openFlowQuery);
+    if (!targetFlow) return;
+
+    setEditingFlow((current) =>
+      current?.id === targetFlow.id
+        ? current
+        : { ...targetFlow, phoneNumber: targetFlow.phoneNumber ?? "" },
+    );
+
+    const params = new URLSearchParams(searchParamsString);
+    params.delete("openFlow");
+    const nextQuery = params.toString();
+
+    router.replace(
+      `/dashboard/flows${nextQuery ? `?${nextQuery}` : ""}`,
+      { scroll: false },
+    );
+  }, [flows, openFlowQuery, router, searchParamsString]);
 
   const numberFormatter = useMemo(
     () =>
@@ -204,6 +240,112 @@ const FlowsPage = () => {
       userId: user.id,
     });
   };
+
+  const openFlowInBuilder = useCallback((flow: FlowWithCounts) => {
+    setEditingFlow({ ...flow, phoneNumber: flow.phoneNumber ?? "" });
+  }, []);
+
+  const handleDuplicateFlow = useCallback(
+    async (flow: FlowWithCounts) => {
+      if (!flow?.id) return;
+
+      try {
+        setRowActionFlowId(flow.id);
+        const response = await fetch(`/api/flows/${flow.id}/duplicate`, {
+          method: "POST",
+        });
+        const raw = await response.text();
+
+        if (!response.ok) {
+          let errorMessage = "No se pudo duplicar el flujo";
+          try {
+            const parsed = JSON.parse(raw) as { error?: string };
+            if (parsed?.error) {
+              errorMessage = parsed.error;
+            }
+          } catch (error) {
+            console.error("Error parsing duplicate flow response:", error);
+          }
+          throw new Error(errorMessage);
+        }
+
+        const duplicated = raw
+          ? (JSON.parse(raw) as FlowWithCounts)
+          : null;
+
+        if (!duplicated) {
+          throw new Error("No se pudo duplicar el flujo");
+        }
+
+        toast.success(`Flujo duplicado a partir de "${flow.name}"`);
+        openFlowInBuilder(duplicated);
+        await fetchFlows();
+      } catch (error) {
+        toast.error(
+          (error as Error)?.message ??
+            "Error al duplicar el flujo seleccionado",
+        );
+      } finally {
+        setRowActionFlowId(null);
+      }
+    },
+    [fetchFlows, openFlowInBuilder],
+  );
+
+  const handleDeleteFlow = useCallback(
+    async (flow: FlowWithCounts) => {
+      if (!flow?.id) return;
+
+      const confirmed = window.confirm(
+        `¿Eliminar el flujo "${flow.name}" y sus registros asociados?`,
+      );
+      if (!confirmed) return;
+
+      try {
+        setRowActionFlowId(flow.id);
+        const response = await fetch(`/api/flows/${flow.id}`, {
+          method: "DELETE",
+        });
+        const raw = await response.text();
+
+        if (!response.ok) {
+          let errorMessage = "No se pudo eliminar el flujo";
+          try {
+            const parsed = JSON.parse(raw) as { error?: string };
+            if (parsed?.error) {
+              errorMessage = parsed.error;
+            }
+          } catch (error) {
+            console.error("Error parsing delete flow response:", error);
+          }
+          throw new Error(errorMessage);
+        }
+
+        toast.success("Flujo eliminado correctamente");
+        setFlows((prev) => prev.filter((item) => item.id !== flow.id));
+        if (editingFlow?.id === flow.id) {
+          setEditingFlow(null);
+        }
+        await fetchFlows();
+      } catch (error) {
+        toast.error(
+          (error as Error)?.message ??
+            "Error al eliminar el flujo seleccionado",
+        );
+      } finally {
+        setRowActionFlowId(null);
+      }
+    },
+    [editingFlow?.id, fetchFlows],
+  );
+
+  const handleUseInBroadcast = useCallback(
+    (flow: FlowWithCounts) => {
+      if (!flow?.id) return;
+      router.push(`/dashboard/broadcasts?flowId=${flow.id}`);
+    },
+    [router],
+  );
 
   const handleSaveFlow = async () => {
     if (!editingFlow || !flowBuilderRef.current) return;
@@ -381,24 +523,65 @@ const FlowsPage = () => {
         key: "actions",
         label: "Acciones",
         render: (row: FlowWithCounts) => (
-          <div className="flex space-x-2">
-            <button
-              onClick={() => setEditingFlow({ ...row })}
-              className="font-medium text-[#4bc3fe] hover:text-indigo-900"
-            >
-              Editar
-            </button>
-            <button
-              className="text-gray-500 transition hover:text-gray-800"
-              title="Más acciones"
-            >
-              <MoreVertical className="h-5 w-5" />
-            </button>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                disabled={rowActionFlowId === row.id}
+              >
+                {rowActionFlowId === row.id ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <MoreVertical className="h-4 w-4" />
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuLabel>Acciones</DropdownMenuLabel>
+              <DropdownMenuItem
+                disabled={rowActionFlowId === row.id}
+                onSelect={() => openFlowInBuilder(row)}
+              >
+                Abrir en constructor
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={rowActionFlowId === row.id}
+                onSelect={() => handleUseInBroadcast(row)}
+              >
+                Usar en campaña
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={rowActionFlowId === row.id}
+                onSelect={() => handleDuplicateFlow(row)}
+              >
+                Duplicar flujo
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={rowActionFlowId === row.id}
+                className="text-red-600 focus:text-red-600"
+                onSelect={() => handleDeleteFlow(row)}
+              >
+                Eliminar flujo
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         ),
       },
     ],
-    [handleStatusChange, numberFormatter, updatingStatusId],
+    [
+      handleDeleteFlow,
+      handleDuplicateFlow,
+      handleStatusChange,
+      handleUseInBroadcast,
+      numberFormatter,
+      openFlowInBuilder,
+      rowActionFlowId,
+      updatingStatusId,
+    ],
   );
 
   const initialFlow = useMemo<Partial<FlowData> | null>(

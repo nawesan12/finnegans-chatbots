@@ -5,6 +5,7 @@ import React, {
   useMemo,
   useState,
   useCallback,
+  useRef,
 } from "react";
 import { motion } from "framer-motion";
 import {
@@ -39,7 +40,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 interface ContactTag {
   tag: { id: string; name: string };
@@ -126,6 +127,9 @@ const flowStatusVariants: Record<
 const BroadcastsPage = () => {
   const { user } = useAuthStore();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const flowIdFromQuery = searchParams.get("flowId");
+  const lastAppliedFlowIdRef = useRef<string | null>(null);
   const [contacts, setContacts] = useState<ContactItem[]>([]);
   const [broadcasts, setBroadcasts] = useState<BroadcastItem[]>([]);
   const [loadingContacts, setLoadingContacts] = useState(false);
@@ -246,6 +250,20 @@ const BroadcastsPage = () => {
     fetchFlows,
     user?.id,
   ]);
+
+  useEffect(() => {
+    if (!flowIdFromQuery) {
+      lastAppliedFlowIdRef.current = null;
+      return;
+    }
+
+    if (!flows.length) return;
+    if (lastAppliedFlowIdRef.current === flowIdFromQuery) return;
+    if (!flows.some((flow) => flow.id === flowIdFromQuery)) return;
+
+    setSelectedFlowId(flowIdFromQuery);
+    lastAppliedFlowIdRef.current = flowIdFromQuery;
+  }, [flowIdFromQuery, flows]);
 
   const tags = useMemo(() => {
     const set = new Set<string>();
@@ -664,16 +682,31 @@ const BroadcastsPage = () => {
                             </p>
                           )}
                         </div>
-                        <Badge
-                          variant={
-                            flowStatusVariants[selectedFlow.status ?? ""] ?? "secondary"
-                          }
-                          className="whitespace-nowrap"
-                        >
-                          {flowStatusLabels[selectedFlow.status ?? ""] ??
-                            selectedFlow.status ??
-                            "Sin estado"}
-                        </Badge>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge
+                            variant={
+                              flowStatusVariants[selectedFlow.status ?? ""] ??
+                                "secondary"
+                            }
+                            className="whitespace-nowrap"
+                          >
+                            {flowStatusLabels[selectedFlow.status ?? ""] ??
+                              selectedFlow.status ??
+                              "Sin estado"}
+                          </Badge>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              router.push(
+                                `/dashboard/flows?openFlow=${selectedFlow.id}`,
+                              )
+                            }
+                          >
+                            Editar en flujos
+                          </Button>
+                        </div>
                       </div>
                       <div className="grid grid-cols-1 gap-3 text-gray-700 sm:grid-cols-2">
                         <div className="rounded-md border border-gray-200 bg-white p-3">
