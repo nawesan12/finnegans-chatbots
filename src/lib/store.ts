@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 
 interface User {
   id: string;
@@ -10,6 +10,7 @@ interface User {
 interface AuthState {
   user: User | null;
   token: string | null;
+  hasHydrated: boolean;
   setUser: (user: User, token: string) => void;
   logout: () => void;
 }
@@ -19,6 +20,7 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       user: null,
       token: null,
+      hasHydrated: false,
       setUser: (user, token) => set({ user, token }),
       logout: () => set({ user: null, token: null }),
     }),
@@ -27,3 +29,11 @@ export const useAuthStore = create<AuthState>()(
     },
   ),
 );
+
+useAuthStore.persist.onFinishHydration(() => {
+  useAuthStore.setState({ hasHydrated: true });
+});
+
+if (useAuthStore.persist.hasHydrated()) {
+  useAuthStore.setState({ hasHydrated: true });
+}
