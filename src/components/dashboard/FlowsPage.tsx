@@ -38,6 +38,7 @@ import {
   SelectItem,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 type FlowStatus = "Active" | "Draft" | "Inactive" | string;
@@ -489,9 +490,99 @@ const FlowsPage = () => {
 
   if (isInitialLoading) {
     return (
-      <div className="flex h-full items-center justify-center py-16 text-sm text-gray-500">
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        Cargando flujos...
+      <div className="space-y-6 p-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-7 w-48" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Skeleton className="h-10 w-32 rounded-md" />
+            <Skeleton className="h-10 w-36 rounded-md" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div
+              key={`flows-metric-skeleton-${index}`}
+              className="rounded-lg bg-white p-6 shadow-md"
+            >
+              <div className="flex items-start justify-between">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-10 w-10 rounded-full" />
+              </div>
+              <Skeleton className="mt-4 h-8 w-24" />
+              <Skeleton className="mt-2 h-3 w-20" />
+            </div>
+          ))}
+        </div>
+
+        <div className="space-y-6 rounded-lg bg-white p-6 shadow-md">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              {statusFilters.map((status, index) => (
+                <Skeleton
+                  key={`flows-filter-skeleton-${status.value}-${index}`}
+                  className="h-9 w-24 rounded-full"
+                />
+              ))}
+            </div>
+            <Skeleton className="h-10 w-full max-w-sm rounded-md" />
+          </div>
+
+          <div className="overflow-hidden rounded-lg border border-gray-100">
+            <div className="overflow-x-auto">
+              <table className="min-w-full bg-white">
+                <thead className="bg-gray-50">
+                  <tr>
+                    {columns.map((column: { key: string; label: string }) => (
+                      <th
+                        key={`flows-loading-header-${column.key}`}
+                        className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
+                      >
+                        {column.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {Array.from({ length: 5 }).map((_, rowIndex) => (
+                    <tr key={`flows-loading-row-${rowIndex}`}>
+                      <td className="px-6 py-4 text-sm">
+                        <div className="space-y-2">
+                          <Skeleton className="h-4 w-48" />
+                          <Skeleton className="h-3 w-36" />
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-sm">
+                        <Skeleton className="h-4 w-32" />
+                      </td>
+                      <td className="px-6 py-4 text-sm">
+                        <Skeleton className="h-4 w-24" />
+                      </td>
+                      <td className="px-6 py-4 text-sm">
+                        <Skeleton className="h-9 w-44 rounded-md" />
+                      </td>
+                      <td className="px-6 py-4 text-sm">
+                        <Skeleton className="h-4 w-16" />
+                      </td>
+                      <td className="px-6 py-4 text-sm">
+                        <Skeleton className="h-4 w-16" />
+                      </td>
+                      <td className="px-6 py-4 text-sm">
+                        <div className="flex items-center gap-3">
+                          <Skeleton className="h-4 w-20" />
+                          <Skeleton className="h-6 w-6 rounded-full" />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

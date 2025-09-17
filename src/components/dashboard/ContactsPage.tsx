@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { MoreVertical, Upload } from "lucide-react";
 import { itemVariants } from "@/lib/animations";
 import Table from "@/components/dashboard/Table";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 
 const ContactsPage = ({ onImportClick }: { onImportClick: () => void }) => {
@@ -79,7 +80,65 @@ const ContactsPage = ({ onImportClick }: { onImportClick: () => void }) => {
   ];
 
   if (loading) {
-    return <div>Cargando...</div>;
+    return (
+      <div className="p-6">
+        <motion.div
+          variants={itemVariants}
+          className="overflow-hidden rounded-lg bg-white shadow-md"
+        >
+          <div className="flex justify-end border-b border-gray-100 p-4">
+            <Skeleton className="h-9 w-40 rounded-md" />
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full bg-white">
+              <thead className="bg-gray-50">
+                <tr>
+                  {columns.map((column: { key: string; label: string }) => (
+                    <th
+                      key={`contacts-loading-header-${column.key}`}
+                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
+                    >
+                      {column.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {Array.from({ length: 5 }).map((_, rowIndex) => (
+                  <tr key={`contacts-loading-row-${rowIndex}`}> 
+                    <td className="whitespace-nowrap px-6 py-4 text-sm">
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-40" />
+                        <Skeleton className="h-3 w-32" />
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm">
+                      <Skeleton className="h-4 w-28" />
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm">
+                      <div className="flex flex-wrap gap-2">
+                        {Array.from({ length: 2 }).map((_, tagIndex) => (
+                          <Skeleton
+                            key={`contacts-loading-tag-${rowIndex}-${tagIndex}`}
+                            className="h-6 w-16 rounded-full"
+                          />
+                        ))}
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm">
+                      <Skeleton className="h-4 w-24" />
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm">
+                      <Skeleton className="h-6 w-6 rounded-full" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </motion.div>
+      </div>
+    );
   }
 
   return (
