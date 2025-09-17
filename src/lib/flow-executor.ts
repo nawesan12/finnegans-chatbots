@@ -1,4 +1,4 @@
-import { PrismaClient, Session } from "@prisma/client";
+import { PrismaClient, Session, Prisma } from "@prisma/client";
 import { z } from "zod";
 import {
   Node,
@@ -60,14 +60,83 @@ type SendMessage = (
     | { type: "options"; text: string; options: string[] },
 ) => Promise<void | boolean>;
 
+type IncomingMessageMeta = {
+  type?: string | null;
+  rawText?: string | null;
+  interactive?: {
+    type?: string | null;
+    id?: string | null;
+    title?: string | null;
+  } | null;
+};
+
+type InboundPayload = {
+  text: string;
+  type?: string | null;
+  raw?: string | null;
+  optionIndex?: number;
+  matchedOption?: string | null;
+  interactiveId?: string | null;
+  interactiveType?: string | null;
+  interactiveTitle?: string | null;
+};
+
+type FlowHistoryEntry = {
+  direction: "in" | "out";
+  type: string;
+  timestamp: string;
+  payload: Record<string, unknown>;
+};
+
+type FlowContextMeta = {
+  history: FlowHistoryEntry[];
+};
+
+type InputHistoryEntry = {
+  text: string;
+  timestamp: string;
+};
+
+type FlowRuntimeContext = {
+  [key: string]: unknown;
+  _meta?: FlowContextMeta;
+  inputHistory?: InputHistoryEntry[];
+  messageCount?: number;
+  lastSelectedOptionIndex?: number | null;
+  lastSelectedOption?: string | null;
+  lastOptionMatched?: boolean;
+  lastBotOptions?: string[];
+  lastBotMedia?: Record<string, unknown>;
+  lastInteractiveId?: string | null;
+  lastInteractiveType?: string | null;
+  lastInteractiveTitle?: string | null;
+  lastUserMessage?: string;
+  lastUserMessageRaw?: string | null;
+  lastUserMessageTrimmed?: string;
+  lastUserMessageNormalized?: string;
+  lastUserMessageAt?: string;
+  lastInboundAt?: string;
+  lastInboundType?: string;
+  lastInteractionAt?: string;
+  lastOutboundAt?: string;
+  lastBotMessageAt?: string;
+  lastBotMessageType?: string;
+  lastBotMessage?: string;
+  lastInput?: string;
+  lastInputTrimmed?: string;
+  lastInputNormalized?: string;
+  triggerMessage?: string;
+};
+
 // This function is now stateful and operates on a session
 export async function executeFlow(
   session: Session & {
-    flow: { definition: any; userId: string };
+    flow: { definition: unknown; userId: string };
     contact: { phone: string };
   },
   messageText: string,
   sendMessage: SendMessage,
+  incomingMeta: IncomingMessageMeta | null = null,
 ) {
   const SAFE_MAX_STEPS = 500;
   const MAX_DELAY_MS = 60_000; // cap delays to 60s/server safety
@@ -76,6 +145,15 @@ export async function executeFlow(
   const flow = session.flow.definition as FlowData;
   const nodes = flow?.nodes ?? [];
   const edges = flow?.edges ?? [];
+
+  let inboundPayload: InboundPayload | null = {
+    text: messageText ?? "",
+    type: incomingMeta?.type ?? "text",
+    raw: incomingMeta?.rawText ?? messageText,
+    interactiveId: incomingMeta?.interactive?.id ?? null,
+    interactiveType: incomingMeta?.interactive?.type ?? null,
+    interactiveTitle: incomingMeta?.interactive?.title ?? null,
+  };
 
   // Fast indices
   const nodeById = new Map(nodes.map((n) => [n.id, n]));
@@ -88,18 +166,209 @@ export async function executeFlow(
   }
 
   // Context bag
-  let context: Record<string, any> = (session.context as any) || {};
+  const context: FlowRuntimeContext =
+    (session.context as FlowRuntimeContext | null) ?? {};
   const toLc = (s?: string) => (s ?? "").trim().toLowerCase();
+  const nowIso = () => new Date().toISOString();
+  const HISTORY_LIMIT = 50;
+
+  const ensureMeta = (): FlowContextMeta => {
+    if (!context._meta || typeof context._meta !== "object") {
+      context._meta = { history: [] };
+    } else if (!Array.isArray(context._meta.history)) {
+      context._meta.history = [];
+    }
+    return context._meta;
+  };
+
+  const pushHistory = (entry: FlowHistoryEntry) => {
+    const meta = ensureMeta();
+    meta.history.push(entry);
+    if (meta.history.length > HISTORY_LIMIT) {
+      meta.history.splice(0, meta.history.length - HISTORY_LIMIT);
+    }
+  };
+
+  const recordInbound = (payload: InboundPayload) => {
+    const text = payload.text ?? "";
+    const ts = nowIso();
+    const trimmed = text.trim();
+    const normalized = toLc(trimmed);
+
+    const historyPayload: Record<string, unknown> = { text };
+    if (payload.optionIndex !== undefined) {
+      historyPayload.optionIndex = payload.optionIndex;
+    }
+    if (payload.matchedOption !== undefined) {
+      historyPayload.matchedOption = payload.matchedOption;
+    }
+    if (payload.interactiveId !== undefined) {
+      historyPayload.interactiveId = payload.interactiveId;
+    }
+    if (payload.interactiveType !== undefined) {
+      historyPayload.interactiveType = payload.interactiveType;
+    }
+    if (payload.interactiveTitle !== undefined) {
+      historyPayload.interactiveTitle = payload.interactiveTitle;
+    }
+
+    pushHistory({
+      direction: "in",
+      type: payload.type ?? "text",
+      timestamp: ts,
+      payload: historyPayload,
+    });
+
+    context.lastInteractionAt = ts;
+    context.lastInboundAt = ts;
+    context.lastInboundType = payload.type ?? "text";
+    context.lastUserMessage = text;
+    context.lastUserMessageTrimmed = trimmed;
+    context.lastUserMessageNormalized = normalized;
+    context.lastUserMessageAt = ts;
+    context.input = text;
+    context.lastInput = text;
+    context.lastInputTrimmed = trimmed;
+    context.lastInputNormalized = normalized;
+
+    if (payload.raw !== undefined) {
+      context.lastUserMessageRaw = payload.raw;
+    }
+    if (payload.interactiveId !== undefined) {
+      context.lastInteractiveId = payload.interactiveId;
+    }
+    if (payload.interactiveType !== undefined) {
+      context.lastInteractiveType = payload.interactiveType;
+    }
+    if (payload.interactiveTitle !== undefined) {
+      context.lastInteractiveTitle = payload.interactiveTitle;
+    }
+
+    if (payload.optionIndex !== undefined) {
+      context.lastSelectedOptionIndex = payload.optionIndex;
+    } else if (payload.matchedOption === null) {
+      context.lastSelectedOptionIndex = null;
+    }
+    if (payload.matchedOption !== undefined) {
+      context.lastSelectedOption = payload.matchedOption;
+      context.lastOptionMatched = payload.matchedOption != null;
+    }
+
+    const previousInputs: InputHistoryEntry[] = Array.isArray(
+      context.inputHistory,
+    )
+      ? [...(context.inputHistory as InputHistoryEntry[])]
+      : [];
+    previousInputs.push({ text, timestamp: ts });
+    if (previousInputs.length > HISTORY_LIMIT) {
+      previousInputs.splice(0, previousInputs.length - HISTORY_LIMIT);
+    }
+    context.inputHistory = previousInputs;
+
+    const count =
+      typeof context.messageCount === "number" &&
+      Number.isFinite(context.messageCount)
+        ? context.messageCount
+        : 0;
+    context.messageCount = count + 1;
+  };
+
+  const recordOutbound = (
+    type: "text" | "media" | "options",
+    payload: Record<string, unknown>,
+  ) => {
+    const ts = nowIso();
+    const historyPayload: Record<string, unknown> = {};
+    const textValue = payload["text"];
+    if (textValue !== undefined) {
+      const textString = typeof textValue === "string" ? textValue : String(textValue);
+      historyPayload.text = textString;
+      context.lastBotMessage = textString;
+    }
+
+    const optionsValue = payload["options"];
+    if (Array.isArray(optionsValue)) {
+      const normalizedOptions = optionsValue.map((opt) => String(opt));
+      historyPayload.options = normalizedOptions;
+      if (type === "options") {
+        context.lastBotOptions = normalizedOptions;
+      }
+    } else if (optionsValue !== undefined) {
+      historyPayload.options = optionsValue;
+    } else if (type === "options") {
+      context.lastBotOptions = [];
+    }
+
+    const mediaTypeValue = payload["mediaType"];
+    if (mediaTypeValue !== undefined) {
+      historyPayload.mediaType = mediaTypeValue;
+    }
+    const urlValue = payload["url"];
+    if (urlValue !== undefined) {
+      historyPayload.url = urlValue;
+    }
+    const captionValue = payload["caption"];
+    if (captionValue !== undefined) {
+      historyPayload.caption = captionValue;
+    }
+
+    pushHistory({
+      direction: "out",
+      type,
+      timestamp: ts,
+      payload: historyPayload,
+    });
+
+    context.lastInteractionAt = ts;
+    context.lastOutboundAt = ts;
+    context.lastBotMessageAt = ts;
+    context.lastBotMessageType = type;
+    if (type === "media") {
+      const mediaEntry: Record<string, unknown> = {};
+      if (typeof mediaTypeValue === "string") {
+        mediaEntry.mediaType = mediaTypeValue;
+      }
+      if (typeof urlValue === "string") {
+        mediaEntry.url = urlValue;
+      }
+      if (typeof captionValue === "string") {
+        mediaEntry.caption = captionValue;
+      }
+      context.lastBotMedia = mediaEntry;
+    }
+  };
 
   // --- tiny helpers ---
-  const getFromPath = (obj: any, path: string) =>
-    path.split(".").reduce((acc, k) => (acc == null ? acc : acc[k]), obj);
+  const getFromPath = (obj: unknown, path: string) =>
+    path.split(".").reduce<unknown>((acc, key) => {
+      if (
+        acc === null ||
+        acc === undefined ||
+        (typeof acc !== "object" && typeof acc !== "function")
+      ) {
+        return undefined;
+      }
+      return (acc as Record<string, unknown>)[key];
+    }, obj);
 
-  const setByPath = (obj: any, path: string, val: any) => {
+  const setByPath = (
+    obj: Record<string, unknown>,
+    path: string,
+    val: unknown,
+  ) => {
     const parts = path.split(".");
-    let cur = obj;
-    for (let i = 0; i < parts.length - 1; i++)
-      cur = cur[parts[i]] ?? (cur[parts[i]] = {});
+    let cur: Record<string, unknown> = obj;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const key = parts[i];
+      const next = cur[key];
+      if (typeof next === "object" && next !== null) {
+        cur = next as Record<string, unknown>;
+      } else {
+        const fresh: Record<string, unknown> = {};
+        cur[key] = fresh;
+        cur = fresh;
+      }
+    }
     cur[parts[parts.length - 1]] = val;
   };
 
@@ -109,14 +378,13 @@ export async function executeFlow(
       return v == null ? "" : String(v);
     });
 
-  const safeEvalBool = (expr: string, ctx: Record<string, any>) => {
+  const safeEvalBool = (expr: string, ctx: Record<string, unknown>) => {
     // Basic sanitization—reject clearly unsafe tokens
     if (
       /[;{}]|process|global|window|document|require|import|\beval\b/g.test(expr)
     ) {
       throw new Error("Unsafe expression");
     }
-    // eslint-disable-next-line no-new-func
     const fn = new Function("context", `return !!(${expr})`);
     return !!fn(ctx);
   };
@@ -136,14 +404,20 @@ export async function executeFlow(
 
   const updateSession = async (
     patch: Partial<Session> & {
-      context?: any;
+      context?: FlowRuntimeContext | null;
       currentNodeId?: string | null;
       status?: Session["status"];
     },
   ) => {
+    const { context: patchContext, ...rest } = patch;
+    const data = rest as Prisma.SessionUpdateInput;
+    if (patchContext !== undefined) {
+      data.context = patchContext as unknown;
+    }
+
     await prisma.session.update({
       where: { id: session.id },
-      data: patch as any,
+      data,
     });
   };
 
@@ -172,7 +446,7 @@ export async function executeFlow(
       console.error(
         `Node ${session.currentNodeId} not found in flow ${session.flowId}`,
       );
-      await updateSession({ status: "Errored" });
+      await updateSession({ status: "Errored", context });
       return;
     }
 
@@ -182,6 +456,16 @@ export async function executeFlow(
       const idx = (optionsData.options || []).findIndex(
         (opt) => toLc(opt) === toLc(messageText),
       );
+
+      const matchedOption =
+        idx !== -1 ? (optionsData.options ?? [])[idx] ?? null : null;
+      const baseInbound: InboundPayload = {
+        ...(inboundPayload ?? { text: messageText ?? "" }),
+        type: "option-selection",
+        matchedOption,
+      };
+      baseInbound.optionIndex = idx !== -1 ? idx : undefined;
+      inboundPayload = baseInbound;
 
       let nextId: string | undefined;
       if (idx !== -1) {
@@ -195,10 +479,10 @@ export async function executeFlow(
         : undefined;
       if (nextId && !currentNode) {
         console.error(`Next node ${nextId} not found (resume)`);
-        await updateSession({ status: "Errored" });
+        await updateSession({ status: "Errored", context });
         return;
       }
-      await updateSession({ status: "Active" });
+      await updateSession({ status: "Active", context });
     } else {
       currentNode = paused;
     }
@@ -218,6 +502,10 @@ export async function executeFlow(
     }
   }
 
+  if (inboundPayload && (session.status === "Paused" || currentNode)) {
+    recordInbound(inboundPayload);
+  }
+
   // --- Main loop ---
   const visited = new Set<string>();
   let steps = 0;
@@ -225,12 +513,12 @@ export async function executeFlow(
   try {
     while (currentNode) {
       if (steps++ > SAFE_MAX_STEPS) {
-        await updateSession({ status: "Errored" });
+        await updateSession({ status: "Errored", context });
         console.error("Guard limit reached");
         return;
       }
       if (visited.has(currentNode.id)) {
-        await updateSession({ status: "Errored" });
+        await updateSession({ status: "Errored", context });
         console.error("Loop detected at", currentNode.id);
         return;
       }
@@ -247,21 +535,48 @@ export async function executeFlow(
 
         case "message": {
           const data = currentNode.data as MessageData;
-          await sendMessage(session.flow.userId, session.contact.phone, {
-            type: "text",
-            text: tpl(data.text),
-          });
+          const text = tpl(data.text);
+          const sendResult = await sendMessage(
+            session.flow.userId,
+            session.contact.phone,
+            {
+              type: "text",
+              text,
+            },
+          );
+          if (sendResult === false) {
+            console.error(
+              "Failed to send text message to",
+              session.contact.phone,
+            );
+          } else {
+            recordOutbound("text", { text });
+          }
           break;
         }
 
         case "options": {
-          const data = currentNode.data as OptionsData;
-          await sendMessage(session.flow.userId, session.contact.phone, {
-            type: "options",
-            text: tpl((data as any).text ?? ""), // text might be optional in your schema
-            options: data.options ?? [],
-          });
-          await updateSession({ status: "Paused" });
+          const data = currentNode.data as OptionsData & { text?: string };
+          const text = tpl(data.text ?? "");
+          const options = data.options ?? [];
+          const sendResult = await sendMessage(
+            session.flow.userId,
+            session.contact.phone,
+            {
+              type: "options",
+              text,
+              options,
+            },
+          );
+          if (sendResult === false) {
+            console.error(
+              "Failed to send options message to",
+              session.contact.phone,
+            );
+          } else {
+            recordOutbound("options", { text, options });
+          }
+          await updateSession({ status: "Paused", context });
           return; // wait for user input
         }
 
@@ -326,17 +641,29 @@ export async function executeFlow(
 
         case "media": {
           const data = currentNode.data as MediaData;
-          await sendMessage(session.flow.userId, session.contact.phone, {
-            type: "media",
+          const mediaPayload = {
             mediaType: data.mediaType,
             url: tpl(data.url),
             caption: data.caption ? tpl(data.caption) : undefined,
-          });
+          };
+          const sendResult = await sendMessage(
+            session.flow.userId,
+            session.contact.phone,
+            { type: "media", ...mediaPayload },
+          );
+          if (sendResult === false) {
+            console.error(
+              "Failed to send media message to",
+              session.contact.phone,
+            );
+          } else {
+            recordOutbound("media", mediaPayload);
+          }
           break;
         }
 
         case "handoff": {
-          await updateSession({ status: "Paused" });
+          await updateSession({ status: "Paused", context });
           return; // agent picks up
         }
 
@@ -347,7 +674,11 @@ export async function executeFlow(
         }
 
         case "end": {
-          await updateSession({ status: "Completed", currentNodeId: null });
+          await updateSession({
+            status: "Completed",
+            currentNodeId: null,
+            context,
+          });
           return;
         }
 
@@ -373,7 +704,7 @@ export async function executeFlow(
       const next = nodeById.get(nextNodeId);
       if (!next) {
         console.error(`Next node ${nextNodeId} not found`);
-        await updateSession({ status: "Errored" });
+        await updateSession({ status: "Errored", context });
         return;
       }
 
@@ -383,6 +714,6 @@ export async function executeFlow(
     }
   } catch (err) {
     console.error("Flow execution error:", err);
-    await updateSession({ status: "Errored" });
+    await updateSession({ status: "Errored", context });
   }
 }
