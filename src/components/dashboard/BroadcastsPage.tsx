@@ -20,6 +20,9 @@ import {
   Clock,
   Phone,
   Plus,
+  Copy,
+  Check,
+  ArrowUpRight,
 } from "lucide-react";
 import { containerVariants, itemVariants } from "@/lib/animations";
 import MetricCard from "@/components/dashboard/MetricCard";
@@ -39,7 +42,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 interface ContactTag {
   tag: { id: string; name: string };
@@ -123,9 +126,17 @@ const flowStatusVariants: Record<
   Inactive: "outline",
 };
 
+const MESSAGE_CHARACTER_LIMIT = 4096;
+
+const FALLBACK_PREVIEW_CONTACT: { name: string; phone: string } = {
+  name: "Cliente Ejemplo",
+  phone: "+54 9 11 2345-6789",
+};
+
 const BroadcastsPage = () => {
   const { user } = useAuthStore();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [contacts, setContacts] = useState<ContactItem[]>([]);
   const [broadcasts, setBroadcasts] = useState<BroadcastItem[]>([]);
   const [loadingContacts, setLoadingContacts] = useState(false);
@@ -143,6 +154,9 @@ const BroadcastsPage = () => {
   const [flows, setFlows] = useState<FlowOption[]>([]);
   const [loadingFlows, setLoadingFlows] = useState(false);
   const [selectedFlowId, setSelectedFlowId] = useState<string>("");
+  const [previewCopied, setPreviewCopied] = useState(false);
+
+  const messageTooLong = message.length > MESSAGE_CHARACTER_LIMIT;
 
   const numberFormatter = useMemo(
     () =>
@@ -247,6 +261,35 @@ const BroadcastsPage = () => {
     user?.id,
   ]);
 
+  useEffect(() => {
+    if (!flows.length) {
+      setSelectedFlowId("");
+      return;
+    }
+
+    const requestedFlowId = searchParams.get("flowId");
+    setSelectedFlowId((current) => {
+      if (
+        requestedFlowId &&
+        flows.some((flow) => flow.id === requestedFlowId)
+      ) {
+        return requestedFlowId;
+      }
+
+      if (current && flows.some((flow) => flow.id === current)) {
+        return current;
+      }
+
+      return flows[0]?.id ?? "";
+    });
+  }, [flows, searchParams]);
+
+  useEffect(() => {
+    if (!previewCopied) return;
+    const timeoutId = window.setTimeout(() => setPreviewCopied(false), 2000);
+    return () => window.clearTimeout(timeoutId);
+  }, [previewCopied]);
+
   const tags = useMemo(() => {
     const set = new Set<string>();
     contacts.forEach((contact) => {
@@ -289,6 +332,82 @@ const BroadcastsPage = () => {
       prev.filter((contactId) => filteredContactIds.has(contactId)),
     );
   }, [filteredContactIds]);
+
+  const recipientsCount = useMemo(
+    () => (sendToAll ? filteredContacts.length : selectedContacts.length),
+    [filteredContacts.length, selectedContacts.length, sendToAll],
+  );
+
+  const segmentationLabel = useMemo(
+    () => (selectedTag === "all" ? "Todos los contactos" : selectedTag),
+    [selectedTag],
+  );
+
+  const selectedFlow = useMemo(
+    () => flows.find((flow) => flow.id === selectedFlowId) ?? null,
+    [flows, selectedFlowId],
+  );
+
+  const previewContact = useMemo(() => {
+    if (sendToAll) {
+      return filteredContacts[0] ?? contacts[0] ?? null;
+    }
+
+    if (selectedContacts.length > 0) {
+      const manualFromFiltered = filteredContacts.find((contact) =>
+        selectedContacts.includes(contact.id),
+      );
+      if (manualFromFiltered) return manualFromFiltered;
+
+      const manualFromAll = contacts.find((contact) =>
+        selectedContacts.includes(contact.id),
+      );
+      if (manualFromAll) return manualFromAll;
+    }
+
+    return filteredContacts[0] ?? contacts[0] ?? null;
+  }, [contacts, filteredContacts, selectedContacts, sendToAll]);
+
+  const previewName = previewContact?.name || FALLBACK_PREVIEW_CONTACT.name;
+  const previewPhone = previewContact?.phone || FALLBACK_PREVIEW_CONTACT.phone;
+  const previewContactLabel =
+    previewContact?.name ||
+    previewContact?.phone ||
+    FALLBACK_PREVIEW_CONTACT.name;
+
+  const basePreviewReplacements = useMemo(
+    () => ({
+      "{{name}}": previewName,
+      "{{phone}}": previewPhone,
+      "{{flow}}": selectedFlow?.name ?? "Flujo activo",
+      "{{keyword}}": selectedFlow?.trigger ?? "palabra clave",
+    }),
+    [previewName, previewPhone, selectedFlow?.name, selectedFlow?.trigger],
+  );
+
+  const placeholderReplacements = useMemo(
+    () =>
+      Object.entries(basePreviewReplacements).filter(([token]) =>
+        message.includes(token),
+      ),
+    [basePreviewReplacements, message],
+  );
+
+  const previewMessage = useMemo(() => {
+    if (!message.trim()) return "";
+    let output = message;
+    Object.entries(basePreviewReplacements).forEach(([token, value]) => {
+      if (output.includes(token)) {
+        output = output.split(token).join(value);
+      }
+    });
+    return output;
+  }, [basePreviewReplacements, message]);
+
+  const messageProgress = Math.min(
+    (message.length / MESSAGE_CHARACTER_LIMIT) * 100,
+    100,
+  );
 
   const metrics = useMemo(() => {
     const totalCampaigns = broadcasts.length;
@@ -423,25 +542,42 @@ const BroadcastsPage = () => {
     setSelectedContacts([]);
   };
 
+  const handleCopyPreview = useCallback(async () => {
+    if (!message.trim()) {
+      toast.error("Escribe un mensaje para copiar la vista previa");
+      return;
+    }
+
+    const textToCopy = previewMessage.trim();
+    if (!textToCopy) {
+      toast.error("No hay vista previa disponible para copiar");
+      return;
+    }
+
+    try {
+      if (typeof navigator === "undefined" || !navigator.clipboard) {
+        throw new Error("clipboard-unavailable");
+      }
+      await navigator.clipboard.writeText(textToCopy);
+      setPreviewCopied(true);
+      toast.success("Vista previa copiada al portapapeles");
+    } catch (error) {
+      console.error(error);
+      toast.error("No se pudo copiar la vista previa");
+    }
+  }, [message, previewMessage]);
+
   const canSubmit = useMemo(() => {
     if (!message.trim() || !user?.id || !selectedFlowId) return false;
-    if (sendToAll) {
-      return filteredContacts.length > 0;
-    }
-    return selectedContacts.length > 0;
+    if (messageTooLong) return false;
+    return recipientsCount > 0;
   }, [
-    filteredContacts.length,
     message,
-    selectedContacts.length,
-    sendToAll,
+    messageTooLong,
+    recipientsCount,
     selectedFlowId,
     user?.id,
   ]);
-
-  const selectedFlow = useMemo(
-    () => flows.find((flow) => flow.id === selectedFlowId) ?? null,
-    [flows, selectedFlowId],
-  );
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -457,6 +593,13 @@ const BroadcastsPage = () => {
 
     if (!selectedFlowId) {
       toast.error("Selecciona un flujo para adjuntar la campaña");
+      return;
+    }
+
+    if (messageTooLong) {
+      toast.error(
+        `El mensaje supera el límite de ${MESSAGE_CHARACTER_LIMIT} caracteres permitido`,
+      );
       return;
     }
 
@@ -713,6 +856,25 @@ const BroadcastsPage = () => {
                           </p>
                         </div>
                       </div>
+                      <div className="flex flex-col gap-2 rounded-md border border-indigo-100 bg-white px-3 py-2 text-xs text-gray-600 sm:flex-row sm:items-center sm:justify-between">
+                        <span>
+                          Ajusta el flujo en el constructor para modificar la
+                          experiencia posterior al envío masivo.
+                        </span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            router.push(
+                              `/dashboard/flows?open=${selectedFlow.id}`,
+                            )
+                          }
+                        >
+                          <ArrowUpRight className="mr-1 h-3 w-3" />
+                          Editar en constructor
+                        </Button>
+                      </div>
                       {selectedFlow.status && selectedFlow.status !== "Active" && (
                         <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
                           <AlertTriangle className="mt-0.5 h-4 w-4" />
@@ -734,8 +896,12 @@ const BroadcastsPage = () => {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="message">Mensaje a enviar</Label>
-                <span className="text-xs text-gray-500">
-                  {message.length} caracteres
+                <span
+                  className={`text-xs ${
+                    messageTooLong ? "text-red-600" : "text-gray-500"
+                  }`}
+                >
+                  {message.length} / {MESSAGE_CHARACTER_LIMIT} caracteres
                 </span>
               </div>
               <Textarea
@@ -744,7 +910,163 @@ const BroadcastsPage = () => {
                 rows={6}
                 placeholder="Escribe el texto que recibirán tus contactos. Puedes personalizarlo luego con plantillas."
                 onChange={(event) => setMessage(event.target.value)}
+                className={
+                  messageTooLong
+                    ? "border-red-300 focus-visible:ring-red-500"
+                    : undefined
+                }
+                aria-invalid={messageTooLong}
               />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-700">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-800">
+                      Resumen del envío
+                    </h4>
+                    <p className="text-xs text-gray-500">
+                      Asegúrate de que destinatarios y flujo sean correctos.
+                    </p>
+                  </div>
+                  {selectedFlow?.status && (
+                    <Badge
+                      variant={
+                        flowStatusVariants[selectedFlow.status] ?? "secondary"
+                      }
+                      className="whitespace-nowrap"
+                    >
+                      {flowStatusLabels[selectedFlow.status] ??
+                        selectedFlow.status}
+                    </Badge>
+                  )}
+                </div>
+                <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <dt className="text-xs uppercase tracking-wide text-gray-500">
+                      Destinatarios
+                    </dt>
+                    <dd className="text-lg font-semibold text-gray-800">
+                      {numberFormatter.format(recipientsCount)}
+                    </dd>
+                    <p className="text-xs text-gray-500">
+                      {sendToAll
+                        ? `De ${numberFormatter.format(
+                            filteredContacts.length,
+                          )} en el segmento`
+                        : `${numberFormatter.format(
+                            selectedContacts.length,
+                          )} seleccionados manualmente`}
+                    </p>
+                  </div>
+                  <div>
+                    <dt className="text-xs uppercase tracking-wide text-gray-500">
+                      Segmento
+                    </dt>
+                    <dd className="font-medium text-gray-800">
+                      {segmentationLabel}
+                    </dd>
+                    <p className="text-xs text-gray-500">
+                      {sendToAll
+                        ? "Se enviará a todo el grupo filtrado"
+                        : "Solo los contactos marcados recibirán el mensaje"}
+                    </p>
+                  </div>
+                </dl>
+                <div>
+                  <div className="mb-1 flex items-center justify-between text-xs text-gray-500">
+                    <span>Longitud del mensaje</span>
+                    <span className={messageTooLong ? "text-red-600" : undefined}>
+                      {message.length} / {MESSAGE_CHARACTER_LIMIT}
+                    </span>
+                  </div>
+                  <div className="h-2 rounded-full bg-gray-200">
+                    <div
+                      className={`h-2 rounded-full ${
+                        messageTooLong ? "bg-red-500" : "bg-[#4bc3fe]"
+                      }`}
+                      style={{ width: `${messageProgress}%` }}
+                    />
+                  </div>
+                  {messageTooLong ? (
+                    <p className="mt-1 text-xs text-red-600">
+                      Reduce el texto para cumplir con el límite permitido por
+                      WhatsApp.
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-xs text-gray-500">
+                      Procura mantener el mensaje claro y directo.
+                    </p>
+                  )}
+                </div>
+                {!selectedFlow && (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                    Selecciona un flujo para continuar la conversación luego del
+                    envío masivo.
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+                <div className="flex items-center justify-between gap-3">
+                  <h4 className="text-sm font-semibold text-gray-800">
+                    Vista previa del mensaje
+                  </h4>
+                  <span className="text-xs text-gray-500">
+                    Ejemplo: {previewContactLabel}
+                  </span>
+                </div>
+                <div className="min-h-[120px] rounded-md border border-gray-200 bg-white p-3 text-sm text-gray-700 whitespace-pre-wrap">
+                  {previewMessage
+                    ? previewMessage
+                    : "Tu mensaje aparecerá aquí tal como lo verá un contacto."}
+                </div>
+                {placeholderReplacements.length > 0 ? (
+                  <div className="space-y-1 text-xs text-gray-500">
+                    <p className="font-medium text-gray-700">
+                      Variables detectadas en el texto
+                    </p>
+                    <ul className="space-y-1">
+                      {placeholderReplacements.map(([token, value]) => (
+                        <li
+                          key={token}
+                          className="flex items-center justify-between gap-2 rounded-md bg-white px-2 py-1"
+                        >
+                          <span className="font-mono text-gray-600">
+                            {token}
+                          </span>
+                          <span className="text-gray-700">{value}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500">
+                    Puedes personalizar con tokens como {"{{name}}"},{" "}
+                    {"{{phone}}"} o {"{{flow}}"}.
+                  </p>
+                )}
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="flex items-center gap-2 text-[#4bc3fe] hover:text-indigo-900"
+                    onClick={handleCopyPreview}
+                  >
+                    {previewCopied ? (
+                      <>
+                        <Check className="h-4 w-4" /> Copiado
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-4 w-4" /> Copiar vista previa
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
