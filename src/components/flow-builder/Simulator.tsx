@@ -92,6 +92,8 @@ export function Simulator({
   const logRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
+  const contextRef = useRef<SimContext>({ vars: {} });
+  const awaitingStepRef = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -100,6 +102,17 @@ export function Simulator({
       abortRef.current?.abort();
     };
   }, []);
+
+  useEffect(() => {
+    contextRef.current = context;
+  }, [context]);
+
+  useEffect(() => {
+    if (!stepMode) {
+      awaitingStepRef.current = false;
+      setAwaitingStep(false);
+    }
+  }, [stepMode]);
 
   const idMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
 
@@ -127,21 +140,24 @@ export function Simulator({
   const wait = (ms: number) =>
     new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-  const maybeStepPause = async () => {
+  const maybeStepPause = useCallback(async () => {
     if (!stepMode) return;
+    awaitingStepRef.current = true;
     setAwaitingStep(true);
-    // espera hasta que el usuario pulse "Step"
     await new Promise<void>((resolve) => {
       const check = () => {
         if (!mountedRef.current) return resolve();
-        if (!awaitingStep) return resolve();
-        setTimeout(check, 60);
+        if (!awaitingStepRef.current) return resolve();
+        requestAnimationFrame(check);
       };
       check();
     });
-  };
+  }, [setAwaitingStep, stepMode]);
 
-  const step = () => setAwaitingStep(false);
+  const step = useCallback(() => {
+    awaitingStepRef.current = false;
+    setAwaitingStep(false);
+  }, []);
 
   const execute = useCallback(
     async (startNodeObj: NodeAny | string) => {
@@ -163,20 +179,24 @@ export function Simulator({
         // loop guard por id
         if (visited.has(current.id)) {
           addLog({ type: "system", text: "Error: Loop detected" });
+          awaitingStepRef.current = false;
+          setAwaitingStep(false);
           return;
         }
         visited.add(current.id);
 
+        const runtimeContext = contextRef.current;
+
         // Tipos
         if (current.type === "message") {
-          const text = tpl(current.data?.text, context);
+          const text = tpl(current.data?.text, runtimeContext);
           addLog({ type: "bot", text });
         }
 
         if (current.type === "media") {
           const mt = (current.data?.mediaType || "").toString().toUpperCase();
-          const url = tpl(current.data?.url, context);
-          const caption = tpl(current.data?.caption, context);
+          const url = tpl(current.data?.url, runtimeContext);
+          const caption = tpl(current.data?.caption, runtimeContext);
           addLog({
             type: "bot",
             text: `[${mt || "MEDIA"}] ${url} ${caption || ""}`.trim(),
@@ -187,7 +207,7 @@ export function Simulator({
           const key = current.data?.key as string;
           const rawValue = current.data?.value as string;
           if (key) {
-            const value = tpl(rawValue, context);
+            const value = tpl(rawValue, runtimeContext);
             setContext((prev) => {
               const next = { vars: { ...prev.vars } };
               // Soporta keys tipo a.b.c
@@ -196,6 +216,7 @@ export function Simulator({
                 else acc[k] = acc[k] ?? {};
                 return acc[k];
               }, next.vars as any);
+              contextRef.current = next;
               return next;
             });
           }
@@ -211,8 +232,10 @@ export function Simulator({
 
         if (current.type === "options") {
           const opts = (current.data?.options || []) as string[];
-          const text = tpl(current.data?.text, context);
+          const text = tpl(current.data?.text, runtimeContext);
           addLog({ type: "options", text, options: opts });
+          awaitingStepRef.current = false;
+          setAwaitingStep(false);
           setIsPaused(true);
           setPausedNode(current);
           return; // pausa hasta que el user responda
@@ -220,7 +243,7 @@ export function Simulator({
 
         if (current.type === "api") {
           const method = String(current.data?.method || "GET").toUpperCase();
-          const url = tpl(current.data?.url, context);
+          const url = tpl(current.data?.url, runtimeContext);
           const headers = current.data?.headers || {};
           const bodyRaw = current.data?.body || "";
           const assignTo = current.data?.assignTo || "apiResult";
@@ -236,7 +259,7 @@ export function Simulator({
               signal: abortRef.current.signal,
             };
             if (method !== "GET" && method !== "HEAD") {
-              init.body = tpl(bodyRaw, context);
+              init.body = tpl(bodyRaw, runtimeContext);
             }
 
             const res = await fetch(url, init);
@@ -248,9 +271,11 @@ export function Simulator({
               // keep as text
             }
 
-            setContext((prev) => ({
-              vars: { ...prev.vars, [assignTo]: parsed },
-            }));
+            setContext((prev) => {
+              const next = { vars: { ...prev.vars, [assignTo]: parsed } };
+              contextRef.current = next;
+              return next;
+            });
             addLog({ type: "system", text: `Stored result in ${assignTo}` });
           } catch (e: any) {
             if (e?.name === "AbortError") {
@@ -265,7 +290,7 @@ export function Simulator({
           try {
             const res = evalCondition(
               String(current.data?.expression || "false"),
-              context,
+              runtimeContext,
             );
             const edgesFrom = outgoing.get(current.id) || [];
             const edge = edgesFrom.find(
@@ -294,9 +319,22 @@ export function Simulator({
         current = nextEdge ? idMap.get(nextEdge.target) || null : null;
       }
 
+      awaitingStepRef.current = false;
+      setAwaitingStep(false);
+
       if (guard >= 500) addLog({ type: "system", text: "Guard limit reached" });
     },
-    [addLog, context, idMap, ignoreDelays, outgoing, stepMode],
+    [
+      addLog,
+      idMap,
+      ignoreDelays,
+      maybeStepPause,
+      outgoing,
+      setContext,
+      setIsPaused,
+      setPausedNode,
+      setAwaitingStep,
+    ],
   );
 
   const handleSendMessage = useCallback(
@@ -304,6 +342,8 @@ export function Simulator({
       const messageToSend = (message ?? input).trim();
       if (isRunning || !messageToSend) return;
 
+      awaitingStepRef.current = false;
+      setAwaitingStep(false);
       setIsRunning(true);
       addLog({ type: "user", text: messageToSend });
 
@@ -336,7 +376,9 @@ export function Simulator({
           }
         } else {
           // Reinicia contexto y busca trigger exacto (case-insensitive)
-          setContext({ vars: {} });
+          const initial = { vars: {} };
+          contextRef.current = initial;
+          setContext(initial);
           const msgLc = messageToSend.toLowerCase();
           const startNode = nodes.find(
             (n) =>
@@ -354,7 +396,16 @@ export function Simulator({
         setIsRunning(false);
       }
     },
-    [addLog, execute, idMap, input, isPaused, nodes, outgoing, pausedNode],
+    [
+      addLog,
+      execute,
+      idMap,
+      input,
+      isPaused,
+      nodes,
+      outgoing,
+      pausedNode,
+    ],
   );
 
   const reset = useCallback(() => {
@@ -362,8 +413,11 @@ export function Simulator({
     setLog([]);
     setIsPaused(false);
     setPausedNode(null);
-    setContext({ vars: {} });
+    const initial = { vars: {} };
+    contextRef.current = initial;
+    setContext(initial);
     setInput("/start");
+    awaitingStepRef.current = false;
     setAwaitingStep(false);
   }, []);
 
@@ -454,25 +508,28 @@ export function Simulator({
                 <Label htmlFor="ignore-delays" className="text-sm">
                   Ignorar delays
                 </Label>
-                {/*<Switch
+                <Switch
                   id="ignore-delays"
                   checked={ignoreDelays}
                   onCheckedChange={setIgnoreDelays}
-                />*/}
+                />
               </div>
 
               <div className="flex items-center gap-2">
                 <Label htmlFor="step-mode" className="text-sm">
                   Step
                 </Label>
-                {/*<Switch
+                <Switch
                   id="step-mode"
                   checked={stepMode}
-                  onCheckedChange={useCallback((v: boolean) => {
+                  onCheckedChange={(v) => {
                     setStepMode(v);
-                    setAwaitingStep(false);
-                  }, [])}
-                />*/}
+                    if (!v) {
+                      awaitingStepRef.current = false;
+                      setAwaitingStep(false);
+                    }
+                  }}
+                />
                 <Button
                   variant="outline"
                   disabled={!stepMode || !isRunning || !awaitingStep}
