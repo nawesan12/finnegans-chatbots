@@ -16,6 +16,10 @@ import {
   Search,
   Filter,
   CheckCircle2,
+  GitBranch,
+  Clock,
+  Phone,
+  Plus,
 } from "lucide-react";
 import { containerVariants, itemVariants } from "@/lib/animations";
 import MetricCard from "@/components/dashboard/MetricCard";
@@ -35,6 +39,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { useRouter } from "next/navigation";
 
 interface ContactTag {
   tag: { id: string; name: string };
@@ -75,8 +80,14 @@ interface FlowOption {
   id: string;
   name: string;
   status?: string | null;
+  trigger?: string | null;
+  phoneNumber?: string | null;
   userId: string;
   updatedAt?: string;
+  _count?: {
+    broadcasts: number;
+    sessions: number;
+  };
 }
 
 const statusLabels: Record<string, string> = {
@@ -97,8 +108,24 @@ const statusVariants: Record<string, "default" | "secondary" | "destructive" | "
   Pending: "secondary",
 };
 
+const flowStatusLabels: Record<string, string> = {
+  Active: "Activo",
+  Draft: "Borrador",
+  Inactive: "Inactivo",
+};
+
+const flowStatusVariants: Record<
+  string,
+  "default" | "secondary" | "outline" | "destructive"
+> = {
+  Active: "default",
+  Draft: "secondary",
+  Inactive: "outline",
+};
+
 const BroadcastsPage = () => {
   const { user } = useAuthStore();
+  const router = useRouter();
   const [contacts, setContacts] = useState<ContactItem[]>([]);
   const [broadcasts, setBroadcasts] = useState<BroadcastItem[]>([]);
   const [loadingContacts, setLoadingContacts] = useState(false);
@@ -411,6 +438,11 @@ const BroadcastsPage = () => {
     user?.id,
   ]);
 
+  const selectedFlow = useMemo(
+    () => flows.find((flow) => flow.id === selectedFlowId) ?? null,
+    [flows, selectedFlowId],
+  );
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!user?.id) {
@@ -430,6 +462,17 @@ const BroadcastsPage = () => {
 
     try {
       setIsSubmitting(true);
+      if (
+        selectedFlow?.status &&
+        selectedFlow.status !== "Active" &&
+        flowStatusLabels[selectedFlow.status]
+      ) {
+        toast.message(
+          `El flujo seleccionado está en estado ${
+            flowStatusLabels[selectedFlow.status]
+          }. Recuerda activarlo para continuar la conversación automáticamente.`,
+        );
+      }
       const response = await fetch("/api/broadcasts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -513,51 +556,178 @@ const BroadcastsPage = () => {
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-3">
               <Label>Flujo asociado</Label>
-              <Select
-                value={selectedFlowId}
-                onValueChange={(value) => setSelectedFlowId(value)}
-                disabled={loadingFlows || flows.length === 0}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue
-                    placeholder={
-                      loadingFlows
-                        ? "Cargando flujos..."
-                        : "Selecciona un flujo para continuar"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {flows.length ? (
-                    flows.map((flow) => (
-                      <SelectItem key={flow.id} value={flow.id}>
-                        <div className="flex flex-col text-left">
-                          <span>{flow.name}</span>
-                          {flow.status && (
-                            <span className="text-xs text-gray-500">
-                              Estado: {flow.status}
-                            </span>
+              {loadingFlows && flows.length === 0 ? (
+                <div className="flex items-center gap-2 rounded-lg border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Cargando flujos disponibles...
+                </div>
+              ) : flows.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-sm text-gray-600">
+                  <p className="font-medium text-gray-700">
+                    Aún no tienes flujos configurados.
+                  </p>
+                  <p className="mt-1">
+                    Crea un flujo en el constructor para automatizar la
+                    conversación luego del mensaje masivo.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 w-full sm:w-auto"
+                    onClick={() => router.push("/dashboard/flows")}
+                  >
+                    <Plus className="h-4 w-4 mr-2" /> Crear mi primer flujo
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <Select
+                    value={selectedFlowId}
+                    onValueChange={(value) => setSelectedFlowId(value)}
+                    disabled={loadingFlows}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue
+                        placeholder={
+                          loadingFlows
+                            ? "Cargando flujos..."
+                            : "Selecciona un flujo para continuar"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {flows.map((flow) => {
+                        const updatedLabel = flow.updatedAt
+                          ? new Date(flow.updatedAt).toLocaleDateString("es-AR", {
+                              day: "2-digit",
+                              month: "short",
+                            })
+                          : null;
+                        return (
+                          <SelectItem key={flow.id} value={flow.id} className="py-2">
+                            <div className="flex flex-col text-left">
+                              <span className="text-sm font-medium text-gray-800">
+                                {flow.name}
+                              </span>
+                              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                                <Badge
+                                  variant={
+                                    flowStatusVariants[flow.status ?? ""] ?? "secondary"
+                                  }
+                                  className="px-2 py-0.5 text-[10px] uppercase tracking-wide"
+                                >
+                                  {flowStatusLabels[flow.status ?? ""] ??
+                                    flow.status ??
+                                    "Sin estado"}
+                                </Badge>
+                                {flow.trigger && (
+                                  <span className="flex items-center gap-1">
+                                    <GitBranch className="h-3 w-3" />
+                                    {flow.trigger}
+                                  </span>
+                                )}
+                                {updatedLabel && (
+                                  <span className="flex items-center gap-1">
+                                    <Clock className="h-3 w-3" /> Actualizado {updatedLabel}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500">
+                    Asocia la campaña a un flujo creado en el constructor para
+                    continuar la conversación automáticamente.
+                  </p>
+                  {selectedFlow && (
+                    <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <p className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+                            <GitBranch className="h-4 w-4 text-[#4bc3fe]" />
+                            {selectedFlow.name}
+                          </p>
+                          {selectedFlow.updatedAt && (
+                            <p className="text-xs text-gray-500">
+                              Actualizado el
+                              {" "}
+                              {new Date(selectedFlow.updatedAt).toLocaleString("es-AR", {
+                                dateStyle: "short",
+                                timeStyle: "short",
+                              })}
+                            </p>
                           )}
                         </div>
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="no-flow" disabled>
-                      No hay flujos disponibles
-                    </SelectItem>
+                        <Badge
+                          variant={
+                            flowStatusVariants[selectedFlow.status ?? ""] ?? "secondary"
+                          }
+                          className="whitespace-nowrap"
+                        >
+                          {flowStatusLabels[selectedFlow.status ?? ""] ??
+                            selectedFlow.status ??
+                            "Sin estado"}
+                        </Badge>
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 text-gray-700 sm:grid-cols-2">
+                        <div className="rounded-md border border-gray-200 bg-white p-3">
+                          <p className="text-xs uppercase tracking-wide text-gray-500">
+                            Palabra clave
+                          </p>
+                          <p className="mt-1 flex items-center gap-2 font-medium text-gray-800">
+                            <GitBranch className="h-4 w-4 text-[#4bc3fe]" />
+                            {selectedFlow.trigger || "Sin definir"}
+                          </p>
+                        </div>
+                        <div className="rounded-md border border-gray-200 bg-white p-3">
+                          <p className="text-xs uppercase tracking-wide text-gray-500">
+                            Número asignado
+                          </p>
+                          <p className="mt-1 flex items-center gap-2 font-medium text-gray-800">
+                            <Phone className="h-4 w-4 text-[#4bc3fe]" />
+                            {selectedFlow.phoneNumber || "Sin número"}
+                          </p>
+                        </div>
+                        <div className="rounded-md border border-gray-200 bg-white p-3">
+                          <p className="text-xs uppercase tracking-wide text-gray-500">
+                            Campañas masivas
+                          </p>
+                          <p className="mt-1 font-medium text-gray-800">
+                            {numberFormatter.format(
+                              selectedFlow._count?.broadcasts ?? 0,
+                            )}
+                          </p>
+                        </div>
+                        <div className="rounded-md border border-gray-200 bg-white p-3">
+                          <p className="text-xs uppercase tracking-wide text-gray-500">
+                            Sesiones activas
+                          </p>
+                          <p className="mt-1 font-medium text-gray-800">
+                            {numberFormatter.format(selectedFlow._count?.sessions ?? 0)}
+                          </p>
+                        </div>
+                      </div>
+                      {selectedFlow.status && selectedFlow.status !== "Active" && (
+                        <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                          <AlertTriangle className="mt-0.5 h-4 w-4" />
+                          <span>
+                            Este flujo está marcado como
+                            {" "}
+                            {flowStatusLabels[selectedFlow.status] ?? selectedFlow.status}.
+                            Actívalo para continuar automáticamente la
+                            conversación luego del envío masivo.
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   )}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-gray-500">
-                Asocia la campaña a un flujo creado en el constructor para
-                continuar la conversación automáticamente.
-              </p>
-              {!loadingFlows && flows.length === 0 && (
-                <p className="text-xs text-red-500">
-                  Debes crear y activar un flujo antes de enviar campañas masivas.
-                </p>
+                </>
               )}
             </div>
 
