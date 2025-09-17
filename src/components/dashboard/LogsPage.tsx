@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { MoreVertical } from "lucide-react";
 import { itemVariants } from "@/lib/animations";
 import Table from "@/components/dashboard/Table";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 
 const LogsPage = () => {
@@ -81,7 +82,59 @@ const LogsPage = () => {
   ];
 
   if (loading) {
-    return <div>Cargando...</div>;
+    return (
+      <div className="p-6">
+        <motion.div
+          variants={itemVariants}
+          className="overflow-hidden rounded-lg bg-white shadow-md"
+        >
+          <div className="space-y-2 border-b border-gray-100 p-6">
+            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-3 w-64" />
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full bg-white">
+              <thead className="bg-gray-50">
+                <tr>
+                  {columns.map((column: { key: string; label: string }) => (
+                    <th
+                      key={`logs-loading-header-${column.key}`}
+                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
+                    >
+                      {column.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {Array.from({ length: 6 }).map((_, rowIndex) => (
+                  <tr key={`logs-loading-row-${rowIndex}`}>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm">
+                      <div className="space-y-2">
+                        <Skeleton className="h-4 w-44" />
+                        <Skeleton className="h-3 w-32" />
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm">
+                      <Skeleton className="h-4 w-32" />
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm">
+                      <Skeleton className="h-4 w-40" />
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm">
+                      <Skeleton className="h-6 w-24 rounded-full" />
+                    </td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm">
+                      <Skeleton className="h-6 w-6 rounded-full" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </motion.div>
+      </div>
+    );
   }
 
   return (

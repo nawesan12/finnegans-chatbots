@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { containerVariants, itemVariants } from "@/lib/animations";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 
 interface ContactTag {
@@ -58,8 +59,39 @@ const ContactDetails = ({ contactId }: { contactId: string }) => {
 
   if (loading) {
     return (
-      <div className="p-6">
-        <div className="bg-white rounded-lg shadow-md p-6">Cargando contacto...</div>
+      <div className="p-6 space-y-6">
+        <Skeleton className="h-4 w-32" />
+        <div className="space-y-6">
+          <div className="space-y-6 rounded-lg bg-white p-6 shadow-md">
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+              <div className="space-y-3">
+                <Skeleton className="h-7 w-48" />
+                <Skeleton className="h-4 w-56" />
+                <Skeleton className="h-6 w-40" />
+              </div>
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-44" />
+                <Skeleton className="h-4 w-44" />
+              </div>
+            </div>
+            <div className="border-t border-gray-100 pt-4">
+              <Skeleton className="h-4 w-32" />
+              <div className="mt-4 flex flex-wrap gap-2">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <Skeleton
+                    key={`contact-tag-skeleton-${index}`}
+                    className="h-6 w-20 rounded-full"
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="space-y-3 rounded-lg bg-white p-6 shadow-md">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-3/4" />
+          </div>
+        </div>
       </div>
     );
   }
