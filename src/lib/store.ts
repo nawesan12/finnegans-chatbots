@@ -30,10 +30,10 @@ export const useAuthStore = create<AuthState>()(
   ),
 );
 
-useAuthStore.persist.onFinishHydration(() => {
+useAuthStore?.persist?.onFinishHydration(() => {
   useAuthStore.setState({ hasHydrated: true });
 });
 
-if (useAuthStore.persist.hasHydrated()) {
+if (useAuthStore?.persist?.hasHydrated()) {
   useAuthStore.setState({ hasHydrated: true });
 }
