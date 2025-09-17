@@ -1,8 +1,26 @@
 "use client";
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+} from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MoreVertical, ChevronLeft, Save, Plus } from "lucide-react";
-import { itemVariants } from "@/lib/animations";
+import {
+  MoreVertical,
+  ChevronLeft,
+  Save,
+  Plus,
+  Loader2,
+  Share2,
+  PlayCircle,
+  Hash,
+  Clock3,
+  Search,
+} from "lucide-react";
+import { containerVariants, itemVariants } from "@/lib/animations";
+import MetricCard from "@/components/dashboard/MetricCard";
 import Table from "@/components/dashboard/Table";
 import FlowBuilder, {
   FlowBuilderHandle,
@@ -10,128 +28,377 @@ import FlowBuilder, {
 } from "@/components/flow-builder";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { useAuthStore } from "@/lib/store";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue,
+} from "@/components/ui/select";
+
+type FlowStatus = "Active" | "Draft" | "Inactive" | string;
+type StatusFilter = "all" | "Active" | "Draft" | "Inactive";
+
+type FlowWithCounts = {
+  id: string;
+  name: string;
+  trigger: string;
+  status: FlowStatus;
+  phoneNumber?: string | null;
+  userId: string;
+  createdAt: string;
+  updatedAt: string;
+  definition?: FlowData | null;
+  _count?: {
+    broadcasts: number;
+    sessions: number;
+  };
+};
+
+type EditingFlow = (Partial<FlowWithCounts> & { id: string | null }) | null;
+
+const statusFilters: { value: StatusFilter; label: string }[] = [
+  { value: "all", label: "Todos" },
+  { value: "Active", label: "Activos" },
+  { value: "Draft", label: "Borradores" },
+  { value: "Inactive", label: "Inactivos" },
+];
 
 const FlowsPage = () => {
-  const [flows, setFlows] = useState([]);
-  const [loading, setLoading] = useState(true);
-  //eslint-disable-next-line
-  const [editingFlow, setEditingFlow] = useState<any>(null);
+  const { user } = useAuthStore();
+  const [flows, setFlows] = useState<FlowWithCounts[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [editingFlow, setEditingFlow] = useState<EditingFlow>(null);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const flowBuilderRef = useRef<FlowBuilderHandle>(null);
 
-  const fetchFlows = async () => {
+  const fetchFlows = useCallback(async () => {
+    if (!user?.id) {
+      setFlows([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
-      const response = await fetch("/api/flows");
-      if (!response.ok) throw new Error("Failed to fetch flows");
-      const data = await response.json();
+      const response = await fetch(`/api/flows?userId=${user.id}`);
+      if (!response.ok) {
+        throw new Error("No se pudieron obtener los flujos");
+      }
+      const data: FlowWithCounts[] = await response.json();
       setFlows(data);
     } catch (error) {
-      //@ts-expect-error bla
-      toast.error(error?.message);
+      toast.error(
+        (error as Error)?.message ?? "Error al cargar los flujos disponibles",
+      );
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
 
   useEffect(() => {
     fetchFlows();
-  }, []);
+  }, [fetchFlows]);
+
+  const numberFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat("es-AR", {
+        maximumFractionDigits: 0,
+      }),
+    [],
+  );
+
+  const metrics = useMemo(() => {
+    const total = flows.length;
+    const active = flows.filter((flow) => flow.status === "Active").length;
+    const uniqueTriggers = new Set(
+      flows
+        .map((flow) => flow.trigger?.toLowerCase().trim())
+        .filter((value): value is string => Boolean(value)),
+    ).size;
+    const updatedRecently = flows.filter((flow) => {
+      if (!flow.updatedAt) return false;
+      const updatedAt = new Date(flow.updatedAt).getTime();
+      const now = Date.now();
+      const thirtyDays = 1000 * 60 * 60 * 24 * 30;
+      return now - updatedAt <= thirtyDays;
+    }).length;
+
+    return [
+      {
+        title: "Flujos creados",
+        value: numberFormatter.format(total),
+        change:
+          active > 0
+            ? `${numberFormatter.format(active)} activos actualmente`
+            : "Activa tu primer flujo",
+        icon: Share2,
+      },
+      {
+        title: "Flujos activos",
+        value: numberFormatter.format(active),
+        change:
+          total > 0
+            ? `${Math.round((active / total) * 100)}% del total`
+            : "Aún sin flujos publicados",
+        icon: PlayCircle,
+      },
+      {
+        title: "Palabras clave únicas",
+        value: numberFormatter.format(uniqueTriggers),
+        change:
+          uniqueTriggers === total
+            ? "Sin disparadores duplicados"
+            : "Revisa disparadores repetidos",
+        icon: Hash,
+      },
+      {
+        title: "Actualizados recientemente",
+        value: numberFormatter.format(updatedRecently),
+        change:
+          updatedRecently > 0
+            ? "En los últimos 30 días"
+            : "Actualiza tus flujos más antiguos",
+        icon: Clock3,
+      },
+    ];
+  }, [flows, numberFormatter]);
+
+  const filteredFlows = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    return flows.filter((flow) => {
+      const matchesStatus =
+        statusFilter === "all" || flow.status === statusFilter;
+      if (!matchesStatus) return false;
+
+      if (!term) return true;
+
+      const nameMatch = flow.name.toLowerCase().includes(term);
+      const triggerMatch = flow.trigger?.toLowerCase().includes(term) ?? false;
+      const phoneMatch =
+        flow.phoneNumber?.toLowerCase().includes(term) ?? false;
+
+      return nameMatch || triggerMatch || phoneMatch;
+    });
+  }, [flows, statusFilter, searchTerm]);
 
   const handleCreateNewFlow = () => {
+    if (!user?.id) {
+      toast.error("Necesitas iniciar sesión para crear flujos");
+      return;
+    }
+
     setEditingFlow({
-      id: null, // No ID for a new flow
+      id: null,
       name: "Nuevo flujo",
-      definition: null, // Start with a blank canvas
+      definition: null,
+      status: "Draft",
+      trigger: "default",
+      phoneNumber: "",
+      userId: user.id,
     });
   };
 
   const handleSaveFlow = async () => {
     if (!editingFlow || !flowBuilderRef.current) return;
+    if (!user?.id) {
+      toast.error("Necesitas iniciar sesión para guardar flujos");
+      return;
+    }
+
+    const trimmedName = editingFlow.name?.trim();
+    if (!trimmedName) {
+      toast.error("Asigna un nombre al flujo antes de guardar");
+      return;
+    }
 
     try {
-      const flowData = flowBuilderRef?.current?.getFlowData();
+      setIsSaving(true);
+      const flowData = flowBuilderRef.current.getFlowData();
+      const triggerNode = flowData?.nodes?.find(
+        (node) => node.type === "trigger",
+      );
+      const keyword = String(
+        ((triggerNode?.data as { keyword?: string })?.keyword ??
+          editingFlow.trigger ??
+          "default") || "default",
+      ).trim();
+      const normalizedTrigger = keyword.length ? keyword : "default";
+      const normalizedPhone = editingFlow.phoneNumber?.trim() || null;
+      const isNewFlow = !editingFlow.id;
 
-      const isNewFlow = !editingFlow?.id;
-
-      const url = isNewFlow ? "/api/flows" : `/api/flows/${editingFlow?.id}`;
+      const url = isNewFlow ? "/api/flows" : `/api/flows/${editingFlow.id}`;
       const method = isNewFlow ? "POST" : "PUT";
 
       const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: editingFlow?.name,
+          name: trimmedName,
+          trigger: normalizedTrigger,
+          status: editingFlow.status ?? "Draft",
           definition: flowData,
-
-          phoneNumber: editingFlow?.phoneNumber,
+          phoneNumber: normalizedPhone,
+          userId: user.id,
         }),
       });
 
-      if (!response.ok)
-        throw new Error(`Failed to ${isNewFlow ? "create" : "save"} flow`);
+      if (!response.ok) {
+        throw new Error(
+          `No se pudo ${isNewFlow ? "crear" : "guardar"} el flujo`,
+        );
+      }
 
-      const updatedFlow = await response.json();
-      setEditingFlow(updatedFlow);
-      toast.success(`Flow ${isNewFlow ? "created" : "saved"} successfully!`);
-      fetchFlows(); // Refresh the list
+      const updatedFlow: FlowWithCounts = await response.json();
+      setEditingFlow({
+        ...updatedFlow,
+        phoneNumber: updatedFlow.phoneNumber ?? "",
+      });
+      toast.success(
+        `Flujo ${isNewFlow ? "creado" : "actualizado"} correctamente`,
+      );
+      await fetchFlows();
     } catch (error) {
-      //@ts-expect-error bla
-      toast.error(error?.message);
+      toast.error(
+        (error as Error)?.message ?? "Ocurrió un error al guardar el flujo",
+      );
+    } finally {
+      setIsSaving(false);
     }
   };
 
+  const handleStatusChange = useCallback(
+    async (flowId: string, nextStatus: string) => {
+      const flow = flows.find((item) => item.id === flowId);
+      if (!flow) return;
+
+      try {
+        setUpdatingStatusId(flowId);
+        const response = await fetch(`/api/flows/${flowId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: flow.name,
+            trigger: flow.trigger,
+            status: nextStatus,
+            definition: flow.definition,
+            phoneNumber: flow.phoneNumber ?? null,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("No se pudo actualizar el estado del flujo");
+        }
+
+        const updated = await response.json();
+        setFlows((prev) =>
+          prev.map((item) =>
+            item.id === flowId
+              ? { ...item, ...updated, _count: item._count }
+              : item,
+          ),
+        );
+        toast.success("Estado del flujo actualizado");
+      } catch (error) {
+        toast.error(
+          (error as Error)?.message ?? "Error al actualizar el estado",
+        );
+      } finally {
+        setUpdatingStatusId(null);
+      }
+    },
+    [flows],
+  );
+
   const columns = useMemo(
     () => [
-      { key: "name", label: "Nombre del Flujo" },
-      { key: "phoneNumber", label: "Número de Teléfono" },
-      { key: "trigger", label: "Palabra Clave de Activación" },
+      {
+        key: "name",
+        label: "Nombre del flujo",
+        render: (row: FlowWithCounts) => (
+          <div className="space-y-1">
+            <p className="font-semibold text-gray-800">{row.name}</p>
+            <p className="text-xs text-gray-500">
+              Actualizado{" "}
+              {new Date(row.updatedAt).toLocaleString("es-AR", {
+                dateStyle: "short",
+                timeStyle: "short",
+              })}
+            </p>
+          </div>
+        ),
+      },
+      {
+        key: "phoneNumber",
+        label: "Número de teléfono",
+        render: (row: FlowWithCounts) => row.phoneNumber || "Sin asignar",
+      },
+      { key: "trigger", label: "Palabra clave" },
       {
         key: "status",
         label: "Estado",
-        //@ts-expect-error bla
-        render: (row) => {
-          const colors = {
-            Active: "bg-green-100 text-green-800",
-            Draft: "bg-yellow-100 text-yellow-800",
-            Inactive: "bg-gray-100 text-gray-800",
-          };
-          return (
-            <span
-              className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                //@ts-expect-error bla
-                colors[row.status] || "bg-gray-100 text-gray-800"
-              }`}
+        render: (row: FlowWithCounts) => (
+          <div className="flex items-center gap-2">
+            <Select
+              value={row.status}
+              onValueChange={(value) => handleStatusChange(row.id, value)}
+              disabled={updatingStatusId === row.id}
             >
-              {row.status}
-            </span>
-          );
-        },
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Seleccionar estado" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Active">Activo</SelectItem>
+                <SelectItem value="Draft">Borrador</SelectItem>
+                <SelectItem value="Inactive">Inactivo</SelectItem>
+              </SelectContent>
+            </Select>
+            {updatingStatusId === row.id && (
+              <Loader2 className="h-3 w-3 animate-spin text-gray-400" />
+            )}
+          </div>
+        ),
       },
       {
-        key: "updatedAt",
-        label: "Ultimo modificado", //@ts-expect-error bla
-        render: (row) => new Date(row.updatedAt).toLocaleString(),
+        key: "broadcasts",
+        label: "Campañas",
+        render: (row: FlowWithCounts) =>
+          numberFormatter.format(row._count?.broadcasts ?? 0),
+      },
+      {
+        key: "sessions",
+        label: "Sesiones",
+        render: (row: FlowWithCounts) =>
+          numberFormatter.format(row._count?.sessions ?? 0),
       },
       {
         key: "actions",
-        label: "Acciones", //@ts-expect-error bla
-        render: (row) => (
+        label: "Acciones",
+        render: (row: FlowWithCounts) => (
           <div className="flex space-x-2">
             <button
-              onClick={() => setEditingFlow(row)}
-              className="text-[#4bc3fe] hover:text-indigo-900 font-medium"
+              onClick={() => setEditingFlow({ ...row })}
+              className="font-medium text-[#4bc3fe] hover:text-indigo-900"
             >
               Editar
             </button>
-            <button className="text-gray-500 hover:text-gray-800">
+            <button
+              className="text-gray-500 transition hover:text-gray-800"
+              title="Más acciones"
+            >
               <MoreVertical className="h-5 w-5" />
             </button>
           </div>
         ),
       },
     ],
-    [],
+    [handleStatusChange, numberFormatter, updatingStatusId],
   );
 
   const initialFlow = useMemo<Partial<FlowData> | null>(
@@ -139,8 +406,15 @@ const FlowsPage = () => {
     [editingFlow?.definition],
   );
 
-  if (loading && !editingFlow) {
-    return <div>Cargando flujos...</div>;
+  const isInitialLoading = loading && !flows.length && !editingFlow;
+
+  if (isInitialLoading) {
+    return (
+      <div className="flex h-full items-center justify-center py-16 text-sm text-gray-500">
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        Cargando flujos...
+      </div>
+    );
   }
 
   return (
@@ -152,59 +426,170 @@ const FlowsPage = () => {
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: 300 }}
           transition={{ duration: 0.4 }}
-          className="h-full flex flex-col absolute top-0 left-0 w-full bg-white"
+          className="absolute left-0 top-0 flex h-full w-full flex-col bg-white"
         >
-          <div className="p-4 bg-white border-b flex items-center justify-between z-10">
-            <button
-              onClick={() => setEditingFlow(null)}
-              className="text-gray-600 hover:text-gray-900 flex items-center"
-            >
-              <ChevronLeft className="h-5 w-5 mr-1" /> Volver a Flujos
-            </button>
-            <h2 className="text-xl font-semibold text-gray-800">
-              {editingFlow?.name}
-            </h2>
-            <div className="flex items-center gap-4">
-              <Input
-                placeholder="Phone Number"
-                value={editingFlow.phoneNumber || ""}
-                onChange={(e) =>
-                  setEditingFlow({
-                    ...editingFlow,
-                    phoneNumber: e.target.value,
-                  })
-                }
-                className="w-64"
-              />
+          <div className="border-b bg-white p-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <button
-                onClick={handleSaveFlow}
-                className="flex items-center gap-2 bg-[#4bc3fe] text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-indigo-700"
+                onClick={() => setEditingFlow(null)}
+                className="flex items-center text-sm text-gray-600 transition hover:text-gray-900"
               >
-                <Save className="h-5 w-5 mr-1" /> Guardar Flujo
+                <ChevronLeft className="mr-1 h-5 w-5" />
+                Volver a flujos
               </button>
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                <Input
+                  placeholder="Nombre del flujo"
+                  value={editingFlow?.name ?? ""}
+                  onChange={(event) =>
+                    setEditingFlow((current) =>
+                      current
+                        ? { ...current, name: event.target.value }
+                        : current,
+                    )
+                  }
+                  className="w-full sm:w-64"
+                />
+                <Select
+                  value={(editingFlow?.status as string) ?? "Draft"}
+                  onValueChange={(value) =>
+                    setEditingFlow((current) =>
+                      current ? { ...current, status: value } : current,
+                    )
+                  }
+                >
+                  <SelectTrigger className="w-full sm:w-40">
+                    <SelectValue placeholder="Estado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Draft">Borrador</SelectItem>
+                    <SelectItem value="Active">Activo</SelectItem>
+                    <SelectItem value="Inactive">Inactivo</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  placeholder="Número de WhatsApp"
+                  value={editingFlow?.phoneNumber ?? ""}
+                  onChange={(event) =>
+                    setEditingFlow((current) =>
+                      current
+                        ? { ...current, phoneNumber: event.target.value }
+                        : current,
+                    )
+                  }
+                  className="w-full sm:w-56"
+                />
+                <Button
+                  type="button"
+                  onClick={handleSaveFlow}
+                  className="bg-[#4bc3fe] text-white hover:bg-indigo-700"
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <span className="flex items-center gap-2 text-sm font-medium">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Guardando...
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-2 text-sm font-semibold">
+                      <Save className="h-4 w-4" />
+                      Guardar flujo
+                    </span>
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
-          <div className="flex-1">
-            <FlowBuilder ref={flowBuilderRef} initialFlow={initialFlow} />;
+          <div className="min-h-0 flex-1">
+            <FlowBuilder ref={flowBuilderRef} initialFlow={initialFlow} />
           </div>
         </motion.div>
       ) : (
-        <motion.div key="flow-list" className="p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl font-bold text-gray-800">Flujos</h1>
-            <button
-              onClick={handleCreateNewFlow}
-              className="flex items-center gap-2 bg-[#8694ff] text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-indigo-700"
-            >
-              <Plus className="h-5 w-5" />
-              Crear flujo
-            </button>
+        <motion.div key="flow-list" className="space-y-6 p-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-800">Flujos</h1>
+              <p className="text-sm text-gray-500">
+                Diseña las automatizaciones que continuarán tus envíos masivos.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={fetchFlows}
+                disabled={loading}
+              >
+                {loading ? (
+                  <span className="flex items-center gap-2 text-sm">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Actualizando...
+                  </span>
+                ) : (
+                  "Actualizar"
+                )}
+              </Button>
+              <Button
+                type="button"
+                onClick={handleCreateNewFlow}
+                className="bg-[#8694ff] text-white hover:bg-indigo-700"
+              >
+                <Plus className="mr-2 h-5 w-5" />
+                Crear flujo
+              </Button>
+            </div>
           </div>
+
+          <motion.div
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+            className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4"
+          >
+            {metrics.map((metric) => (
+              <MetricCard key={metric.title} {...metric} />
+            ))}
+          </motion.div>
+
           <motion.div
             variants={itemVariants}
-            className="bg-white rounded-lg shadow-md"
+            className="rounded-lg bg-white shadow-md"
           >
-            <Table columns={columns} data={flows} />
+            <div className="space-y-4 p-6">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-wrap items-center gap-2">
+                  {statusFilters.map((status) => (
+                    <Button
+                      key={status.value}
+                      type="button"
+                      variant={
+                        statusFilter === status.value ? "default" : "outline"
+                      }
+                      size="sm"
+                      onClick={() => setStatusFilter(status.value)}
+                    >
+                      {status.label}
+                    </Button>
+                  ))}
+                </div>
+                <div className="relative w-full max-w-sm">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                  <Input
+                    value={searchTerm}
+                    onChange={(event) => setSearchTerm(event.target.value)}
+                    placeholder="Buscar por nombre, palabra clave o número"
+                    className="pl-9"
+                  />
+                </div>
+              </div>
+              {loading && flows.length > 0 && (
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Actualizando listado...
+                </div>
+              )}
+              <Table columns={columns} data={filteredFlows} />
+            </div>
           </motion.div>
         </motion.div>
       )}

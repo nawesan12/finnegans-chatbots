@@ -18,6 +18,14 @@ export async function GET(request: Request) {
       orderBy: {
         updatedAt: "desc",
       },
+      include: {
+        _count: {
+          select: {
+            broadcasts: true,
+            sessions: true,
+          },
+        },
+      },
     });
     return NextResponse.json(flows);
   } catch (error) {
