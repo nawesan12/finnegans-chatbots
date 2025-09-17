@@ -1,32 +1,71 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { verifyToken } from "@/lib/auth";
 
 const prisma = new PrismaClient();
 
-export async function GET() {
+export async function GET(request: Request) {
+  const authHeader = request.headers.get("Authorization");
+
+  if (!authHeader?.startsWith("Bearer ")) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const token = authHeader.split(" ")[1];
+  const payload = verifyToken(token);
+
+  if (!payload) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const totalContacts = await prisma.contact.count();
-    const totalFlows = await prisma.flow.count();
-    const totalLogs = await prisma.log.count();
-    const activeFlows = await prisma.flow.count({
-        where: { status: 'Active' }
-    });
+    const { userId } = payload;
 
-    // Placeholder for more complex metrics
-    const messagesSent = totalLogs * 5;
-    const messagesReceived = totalLogs * 4;
-    const avgResponseTime = "N/A";
-    const flowSuccessRate = "N/A";
+    const [
+      totalContacts,
+      totalFlows,
+      activeConversations,
+      totalSessions,
+      completedSessions,
+      totalLogs,
+    ] = await Promise.all([
+      prisma.contact.count({ where: { userId } }),
+      prisma.flow.count({ where: { userId } }),
+      prisma.session.count({
+        where: {
+          flow: { userId },
+          status: { notIn: ["Completed", "Errored"] },
+        },
+      }),
+      prisma.session.count({
+        where: {
+          flow: { userId },
+        },
+      }),
+      prisma.session.count({
+        where: {
+          flow: { userId },
+          status: "Completed",
+        },
+      }),
+      prisma.log.count({
+        where: {
+          flow: { userId },
+        },
+      }),
+    ]);
 
+    const flowSuccessRate =
+      totalSessions > 0
+        ? Number(((completedSessions / totalSessions) * 100).toFixed(1))
+        : 0;
 
     const metrics = {
       totalContacts,
       totalFlows,
-      activeConversations: activeFlows, // Placeholder
-      messagesSent, // Placeholder
-      messagesReceived, // Placeholder
-      avgResponseTime, // Placeholder
-      flowSuccessRate, // Placeholder
+      activeConversations,
+      messagesSent: totalLogs,
+      flowSuccessRate,
     };
 
     return NextResponse.json(metrics);
@@ -34,7 +73,7 @@ export async function GET() {
     console.error("Error fetching metrics:", error);
     return NextResponse.json(
       { error: "Internal Server Error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
