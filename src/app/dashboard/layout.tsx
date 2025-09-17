@@ -19,11 +19,10 @@ export default function DashboardLayout({
   const [isAddContactModalOpen, setIsAddContactModalOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
-  const { token, user, hasHydrated } = useAuthStore((state) => ({
-    token: state.token,
-    user: state.user,
-    hasHydrated: state.hasHydrated,
-  }));
+
+  const token = useAuthStore((state) => state.token);
+  const user = useAuthStore((state) => state.user);
+  const hasHydrated = useAuthStore((state) => state.hasHydrated);
 
   useEffect(() => {
     if (!hasHydrated) {

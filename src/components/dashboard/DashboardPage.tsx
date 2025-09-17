@@ -43,10 +43,8 @@ const chartData = [
 ];
 
 const DashboardPage = () => {
-  const { token, hasHydrated } = useAuthStore((state) => ({
-    token: state.token,
-    hasHydrated: state.hasHydrated,
-  }));
+  const token = useAuthStore((state) => state.token);
+  const hasHydrated = useAuthStore((state) => state.hasHydrated);
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [recentLogs, setRecentLogs] = useState<RecentLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -157,13 +155,12 @@ const DashboardPage = () => {
   }, [hasHydrated, token]);
 
   const metricCards = useMemo(() => {
-    const data: DashboardMetrics =
-      metrics ?? {
-        totalContacts: 0,
-        activeConversations: 0,
-        messagesSent: 0,
-        flowSuccessRate: 0,
-      };
+    const data: DashboardMetrics = metrics ?? {
+      totalContacts: 0,
+      activeConversations: 0,
+      messagesSent: 0,
+      flowSuccessRate: 0,
+    };
 
     return [
       {
@@ -306,7 +303,7 @@ const DashboardPage = () => {
               const contactDisplayName =
                 contactNameValue && contactNameValue.length > 0
                   ? contactNameValue
-                  : log.contact?.phone ?? "Contacto sin nombre";
+                  : (log.contact?.phone ?? "Contacto sin nombre");
 
               const flowNameValue = log.flow?.name?.trim();
               const flowDisplayName =
@@ -319,10 +316,7 @@ const DashboardPage = () => {
                 : "--";
 
               return (
-                <li
-                  key={log.id}
-                  className="flex items-center justify-between"
-                >
+                <li key={log.id} className="flex items-center justify-between">
                   <div>
                     <p className="font-medium text-gray-700">
                       {contactDisplayName}
