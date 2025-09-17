@@ -117,6 +117,52 @@ const defaultEdges: Edge[] = [
 
 const DRAFT_KEY = "flowbuilder_draft_v1";
 
+const FlowFileSchema = z.object({
+  nodes: z
+    .array(
+      z
+        .object({
+          id: z.string(),
+          type: z.string(),
+          position: z
+            .object({
+              x: z.number().optional(),
+              y: z.number().optional(),
+            })
+            .optional(),
+          data: z.unknown().optional(),
+        })
+        .passthrough(),
+    )
+    .default([]),
+  edges: z
+    .array(
+      z
+        .object({
+          id: z.string(),
+          source: z.string(),
+          target: z.string(),
+          sourceHandle: z.string().nullable().optional(),
+          targetHandle: z.string().nullable().optional(),
+        })
+        .passthrough(),
+    )
+    .default([]),
+});
+
+const deepClone = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map((item) => deepClone(item));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, val]) => [
+        key,
+        deepClone(val),
+      ]),
+    );
+  }
+  return value;
+};
+
 const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
   ({ initialFlow }, ref) => {
     const [nodes, setNodes, onNodesChange] =
@@ -126,30 +172,70 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
     const [selected, setSelected] = useState<Node | null>(null);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [zoomLevel, setZoomLevel] = useState<number | undefined>(undefined);
-    const rfRef = useRef(null);
+    const rfRef = useRef<any>(null);
+    const historyRef = useRef<{ past: string[]; future: string[] }>({
+      past: [],
+      future: [],
+    });
+    const didRestoreRef = useRef(false);
 
-    // Load initial flow or draft
+    const cloneNode = useCallback(
+      (node: Node): Node => ({
+        ...node,
+        data: deepClone(node.data) as Node["data"],
+        position: {
+          x: typeof node.position?.x === "number" ? node.position.x : 0,
+          y: typeof node.position?.y === "number" ? node.position.y : 0,
+        },
+      }),
+      [],
+    );
+
+    const applyFlow = useCallback(
+      (flow: FlowData) => {
+        const nextNodes = flow.nodes.map((node) => cloneNode(node));
+        const nextEdges = flow.edges.map((edge) => ({ ...edge }));
+
+        historyRef.current.past = [];
+        historyRef.current.future = [];
+
+        setNodes(nextNodes);
+        setEdges(nextEdges);
+        setSelected(null);
+        setSelectedIds([]);
+
+        requestAnimationFrame(() =>
+          rfRef.current?.fitView?.({ padding: 0.2 }),
+        );
+      },
+      [cloneNode, setEdges, setNodes, setSelected, setSelectedIds],
+    );
+
+    // Load initial flow or draft once
     useEffect(() => {
       if (initialFlow?.nodes && initialFlow?.edges) {
-        setNodes(initialFlow.nodes);
-        setEdges(initialFlow.edges);
-        setTimeout(() => rfRef.current?.fitView?.({ padding: 0.2 }), 0);
+        applyFlow({ nodes: initialFlow.nodes, edges: initialFlow.edges });
+        didRestoreRef.current = true;
         return;
       }
+
+      if (didRestoreRef.current) return;
+
       try {
         const raw = localStorage.getItem(DRAFT_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed.nodes) && Array.isArray(parsed.edges)) {
-            setNodes(parsed.nodes);
-            setEdges(parsed.edges);
-            setTimeout(() => rfRef.current?.fitView?.({ padding: 0.2 }), 0);
-          }
-        }
+        if (!raw) return;
+        const parsed = FlowFileSchema.safeParse(JSON.parse(raw));
+        if (!parsed.success) return;
+        applyFlow({
+          nodes: parsed.data.nodes as unknown as Node[],
+          edges: parsed.data.edges as unknown as Edge[],
+        });
       } catch {
-        // ignore
+        // ignore drafts with errores
+      } finally {
+        didRestoreRef.current = true;
       }
-    }, [initialFlow, setNodes, setEdges]);
+    }, [applyFlow, initialFlow]);
 
     // Expose ref API
     //eslint-disable-next-line
@@ -168,13 +254,23 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
     }, [nodes, edges]);
 
     // add node
-    const addNode = (type: string) => {
-      const id = makeId();
-      const y = (nodes.at(-1)?.position?.y || 0) + 140;
-      const x = nodes.at(-1)?.position?.x || 0;
-      const data = { name: `${type}-${id}`, ...getStarterData(type) };
-      setNodes((nds) => nds.concat({ id, type, data, position: { x, y } }));
-    };
+    const addNode = useCallback(
+      (type: string) => {
+        const id = makeId();
+        const last = nodes.at(-1);
+        const position = {
+          x: last?.position?.x ?? 0,
+          y: (last?.position?.y ?? 0) + 140,
+        };
+        const data = { name: `${type}-${id}`, ...getStarterData(type) };
+        const newNode: Node = { id, type, data, position };
+
+        setNodes((nds) => nds.concat(newNode));
+        setSelected(newNode);
+        setSelectedIds([id]);
+      },
+      [nodes, setNodes, setSelected, setSelectedIds],
+    );
 
     // Prevent invalid / duplicate connections
     const onConnect = useCallback(
@@ -215,15 +311,22 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
     const handleEdit = useCallback((node: Node) => setSelected(node), []);
     const handleDuplicate = useCallback(
       (node: Node) => {
-        const newNode: Node = {
-          ...node,
-          id: makeId(),
-          position: { x: node.position.x + 20, y: node.position.y + 20 },
+        const id = makeId();
+        const base = cloneNode(node);
+        const duplicate: Node = {
+          ...base,
+          id,
+          position: {
+            x: (base.position?.x ?? 0) + 20,
+            y: (base.position?.y ?? 0) + 20,
+          },
           selected: false,
         };
-        setNodes((nds) => nds.concat(newNode));
+        setNodes((nds) => nds.concat(duplicate));
+        setSelected(duplicate);
+        setSelectedIds([id]);
       },
-      [setNodes],
+      [cloneNode, setNodes, setSelected, setSelectedIds],
     );
 
     const handleDelete = useCallback(
@@ -233,17 +336,22 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
           eds.filter((ed) => ed.source !== nodeId && ed.target !== nodeId),
         );
         setSelected(null);
+        setSelectedIds((ids) => ids.filter((id) => id !== nodeId));
       },
-      [setNodes, setEdges],
+      [setNodes, setEdges, setSelectedIds],
     );
 
-    const safeWriteClipboard = async (text: string, ok: string) => {
+    const safeWriteClipboard = useCallback(async (text: string, ok: string) => {
       try {
         await navigator.clipboard.writeText(text);
         toast.success(ok);
       } catch {
         const ta = document.createElement("textarea");
         ta.value = text;
+        ta.setAttribute("readonly", "true");
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        ta.style.pointerEvents = "none";
         document.body.appendChild(ta);
         ta.select();
         try {
@@ -253,21 +361,25 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
           document.body.removeChild(ta);
         }
       }
-    };
-
-    const handleCopyWebhook = useCallback((node: Node) => {
-      const webhookUrl = `${window.location.origin}/api/webhook?flowId=${node.id}`;
-      safeWriteClipboard(
-        webhookUrl,
-        "URL del webhook copiada al portapapeles!",
-      );
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const handleCopyId = useCallback((nodeId: string) => {
-      safeWriteClipboard(nodeId, "ID copiado al portapapeles!");
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    const handleCopyWebhook = useCallback(
+      (node: Node) => {
+        const webhookUrl = `${window.location.origin}/api/webhook?flowId=${node.id}`;
+        safeWriteClipboard(
+          webhookUrl,
+          "URL del webhook copiada al portapapeles!",
+        );
+      },
+      [safeWriteClipboard],
+    );
+
+    const handleCopyId = useCallback(
+      (nodeId: string) => {
+        safeWriteClipboard(nodeId, "ID copiado al portapapeles!");
+      },
+      [safeWriteClipboard],
+    );
 
     const updateSelected = useCallback(
       (patch: Partial<Node>) => {
@@ -317,19 +429,27 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
           left: 0,
           top: 0,
         };
-        const pos = rfRef.current?.project?.({
-          x: e.clientX - bounds.left,
-          y: e.clientY - bounds.top,
-        });
+        const position =
+          rfRef.current?.project?.({
+            x: e.clientX - bounds.left,
+            y: e.clientY - bounds.top,
+          }) || ({ x: 0, y: 0 } as const);
         const id = makeId();
         const data = { name: `${type}-${id}`, ...getStarterData(type) };
-        setTimeout(() => {
-          setNodes((nds) =>
-            nds.concat({ id, type, position: pos || { x: 0, y: 0 }, data }),
-          );
-        }, 0);
+        const newNode: Node = {
+          id,
+          type,
+          position: {
+            x: position.x,
+            y: position.y,
+          },
+          data,
+        };
+        setNodes((nds) => nds.concat(newNode));
+        setSelected(newNode);
+        setSelectedIds([id]);
       },
-      [setNodes],
+      [setNodes, setSelected, setSelectedIds],
     );
 
     const onDragOver = useCallback((e: React.DragEvent) => {
@@ -338,90 +458,46 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
     }, []);
 
     // import / export
-    const handleImport = (e: any) => {
-      const file =
-        e?.target?.files?.[0] ||
-        e?.target?.files?.item?.(0) ||
-        e?.target?.files?.[0] ||
-        e?.target?.files?.[0];
-      const f = e?.target?.files?.[0] ?? e?.target?.files?.item?.(0);
-      const picked =
-        (e?.target?.files && e.target.files[0]) ||
-        e?.target?.files?.item?.(0) ||
-        e?.target?.files?.[0] ||
-        e?.target?.files?.[0];
-      const real = file || f || picked;
-      const chosen = real ?? e?.target?.files?.[0];
-      const selectedFile = chosen;
-      const fileToUse = selectedFile || e?.target?.files?.[0];
-      const finalFile = fileToUse || e?.target?.files?.[0];
-      const fileObj = selectedFile || finalFile;
-      const pickedFile = fileObj || e?.target?.files?.[0];
+    const handleImport = useCallback(
+      async (
+        event:
+          | React.ChangeEvent<HTMLInputElement>
+          | { target?: { files?: FileList | File[] | null; value?: string } },
+      ) => {
+        const fileList = event?.target?.files;
+        const file =
+          fileList && "item" in fileList
+            ? fileList.item(0)
+            : Array.isArray(fileList)
+              ? fileList[0]
+              : fileList?.[0];
 
-      const useFile = pickedFile || e?.target?.files?.[0];
-      const selected = useFile || e?.target?.files?.[0];
-      const fileX = selected || e?.target?.files?.[0];
-
-      const fileFinal = fileX || e?.target?.files?.[0];
-      const fileOk = fileFinal ?? e?.target?.files?.[0];
-
-      const fileReal = fileOk || e?.target?.files?.[0];
-      const fileChosen = fileReal ?? e?.target?.files?.[0];
-
-      const fileUse = fileChosen || e?.target?.files?.[0];
-
-      const fileToRead = fileUse || e?.target?.files?.[0];
-      const f2 = fileToRead;
-
-      const fileIn = f2 ?? e?.target?.files?.[0];
-
-      const fileReady = fileIn || e?.target?.files?.[0];
-
-      const fileCandidate = fileReady || e?.target?.files?.[0];
-      const finalPick = fileCandidate ?? e?.target?.files?.[0];
-
-      const fileObjFinal = finalPick;
-
-      const fileRealUse = fileObjFinal || file;
-      const freader = new FileReader();
-      const chosenFile = fileRealUse || e?.target?.files?.[0];
-
-      const fileInput = chosenFile;
-      const fileToReadReal = fileInput;
-
-      const f0 = fileToReadReal;
-      const fileR = f0;
-      const realFile = fileR;
-      const fReader = new FileReader();
-
-      const chosenOk = realFile || e?.target?.files?.[0];
-      const INPUT = chosenOk;
-
-      const chosenOne = INPUT || e?.target?.files?.[0];
-      const fileChosenOk = chosenOne;
-
-      const fileUseIt = fileChosenOk;
-      const reader = new FileReader();
-
-      const fileFinalOk = fileUseIt;
-      if (!fileFinalOk) return;
-      reader.onload = () => {
-        try {
-          const json = JSON.parse(String(reader.result));
-          if (!Array.isArray(json.nodes) || !Array.isArray(json.edges))
-            throw new Error("Invalid file");
-          setNodes(json.nodes);
-          setEdges(json.edges);
-          toast.success("Flujo importado");
-          setTimeout(() => rfRef.current?.fitView?.({ padding: 0.2 }), 0);
-        } catch {
-          toast.error("Error al importar");
+        if (!file) {
+          toast.error("Seleccioná un archivo .json válido");
+          return;
         }
-      };
-      reader.readAsText(fileFinalOk);
-      // limpia input para permitir reimportar mismo archivo
-      if (e?.target?.value !== undefined) e.target.value = "";
-    };
+
+        try {
+          const text = await file.text();
+          const parsed = FlowFileSchema.parse(JSON.parse(text));
+          applyFlow({
+            nodes: parsed.nodes as unknown as Node[],
+            edges: parsed.edges as unknown as Edge[],
+          });
+          toast.success(
+            `Flujo importado${file.name ? ` (${file.name})` : ""}`,
+          );
+        } catch {
+          toast.error("Error al importar: archivo inválido");
+        } finally {
+          const target = event?.target as HTMLInputElement | undefined;
+          if (target && "value" in target) {
+            target.value = "";
+          }
+        }
+      },
+      [applyFlow],
+    );
 
     const handleExport = useCallback(() => {
       const payload = JSON.stringify({ nodes, edges }, null, 2);
@@ -444,6 +520,8 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       const triggerSet = new Set(triggerKeys);
       if (triggerSet.size !== triggerKeys.length)
         problems.push("Palabras clave de disparador duplicadas");
+      if (!triggers.length)
+        problems.push("El flujo necesita al menos un nodo trigger");
 
       nodes.forEach((n) => {
         try {
@@ -487,13 +565,57 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
         } catch (e) {
           problems.push(`${n.id} (${n.type}): ${String(e)}`);
         }
-        if (n.type !== "end" && !edges.some((e) => e.source === n.id)) {
+        const outgoingFromNode = edges.filter((e) => e.source === n.id);
+        if (n.type !== "end" && outgoingFromNode.length === 0) {
           if (n.type !== "options" && n.type !== "condition") {
             problems.push(`${n.id}: sin conexión de salida`);
           }
         }
         if (n.type !== "trigger" && !edges.some((e) => e.target === n.id)) {
           problems.push(`${n.id}: inaccesible (sin conexión entrante)`);
+        }
+
+        if (n.type === "options") {
+          const opts = Array.isArray(n.data?.options) ? n.data.options : [];
+          const missing: string[] = [];
+          opts.forEach((_, idx) => {
+            if (!outgoingFromNode.some((e) => e.sourceHandle === `opt-${idx}`)) {
+              missing.push(`#${idx + 1}`);
+            }
+          });
+          if (!outgoingFromNode.some((e) => e.sourceHandle === "no-match")) {
+            missing.push("No Match");
+          }
+          if (missing.length) {
+            problems.push(
+              `${n.id}: opciones sin salida (${missing.join(", ")})`,
+            );
+          }
+        }
+
+        if (n.type === "condition") {
+          const hasTrue = outgoingFromNode.some(
+            (e) => e.sourceHandle === "true",
+          );
+          const hasFalse = outgoingFromNode.some(
+            (e) => e.sourceHandle === "false",
+          );
+          if (!hasTrue || !hasFalse) {
+            const missing = [
+              !hasTrue ? '"true"' : null,
+              !hasFalse ? '"false"' : null,
+            ]
+              .filter(Boolean)
+              .join(", ");
+            problems.push(`${n.id}: condición sin rama ${missing}`);
+          }
+        }
+
+        if (n.type === "goto") {
+          const targetId = (n.data as any)?.targetNodeId;
+          if (targetId && !nodes.some((candidate) => candidate.id === targetId)) {
+            problems.push(`${n.id}: destino ${targetId} inexistente`);
+          }
         }
       });
 
@@ -503,17 +625,21 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
 
     // auto layout
     const doAutoLayout = () => {
-      const layout = getLayoutedElements(nodes, edges, "TB");
+      const layout = getLayoutedElements(nodes, edges, "TB", {
+        translateToOrigin: true,
+        snapToGrid: 8,
+      });
       setNodes(layout.nodes);
+      setEdges(layout.edges);
+      requestAnimationFrame(() => rfRef.current?.fitView?.({ padding: 0.2 }));
     };
 
     // undo / redo (snapshot stack)
-    const historyRef = useRef<{ past: string[]; future: string[] }>({
-      past: [],
-      future: [],
-    });
     useEffect(() => {
-      historyRef.current.past.push(JSON.stringify({ nodes, edges }));
+      const snapshot = JSON.stringify({ nodes, edges });
+      const past = historyRef.current.past;
+      if (past[past.length - 1] === snapshot) return;
+      historyRef.current.past = [...past, snapshot].slice(-200);
       historyRef.current.future = [];
     }, [nodes, edges]);
 
@@ -525,7 +651,9 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       const prev = JSON.parse(past[past.length - 1]);
       setNodes(prev.nodes);
       setEdges(prev.edges);
-    }, [setNodes, setEdges]);
+      setSelected(null);
+      setSelectedIds([]);
+    }, [setEdges, setNodes, setSelected, setSelectedIds]);
 
     const redo = useCallback(() => {
       const next = historyRef.current.future.pop();
@@ -534,7 +662,9 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       const state = JSON.parse(next);
       setNodes(state.nodes);
       setEdges(state.edges);
-    }, [setNodes, setEdges]);
+      setSelected(null);
+      setSelectedIds([]);
+    }, [setEdges, setNodes, setSelected, setSelectedIds]);
 
     // keyboard shortcuts
     useEffect(() => {
@@ -638,35 +768,6 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       handleCopyId,
     ]);
 
-    const didFitOnceRef = useRef(false);
-
-    useEffect(() => {
-      if (initialFlow?.nodes && initialFlow?.edges) {
-        setNodes(initialFlow.nodes);
-        setEdges(initialFlow.edges);
-        if (!didFitOnceRef.current) {
-          didFitOnceRef.current = true;
-          setTimeout(() => rfRef.current?.fitView?.({ padding: 0.2 }), 0);
-        }
-        return;
-      }
-      try {
-        const raw = localStorage.getItem(DRAFT_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed.nodes) && Array.isArray(parsed.edges)) {
-            setNodes(parsed.nodes);
-            setEdges(parsed.edges);
-            if (!didFitOnceRef.current) {
-              didFitOnceRef.current = true;
-              setTimeout(() => rfRef.current?.fitView?.({ padding: 0.2 }), 0);
-            }
-          }
-        }
-      } catch {}
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [initialFlow]); // no incluyas setNodes/setEdges
-
     const lastSelIdsRef = useRef<string[]>([]);
     const shallowEqual = (a: string[], b: string[]) =>
       a.length === b.length && a.every((id, i) => id === b[i]);
@@ -693,16 +794,46 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       [],
     );
 
+    const miniMapNodeColor = useCallback((node: Node) => {
+      switch (node.type) {
+        case "trigger":
+          return "#22c55e";
+        case "message":
+          return "#3b82f6";
+        case "options":
+          return "#f59e0b";
+        case "delay":
+          return "#fb923c";
+        case "condition":
+          return "#a855f7";
+        case "api":
+          return "#06b6d4";
+        case "assign":
+          return "#f472b6";
+        case "media":
+          return "#14b8a6";
+        case "handoff":
+          return "#d946ef";
+        case "goto":
+          return "#64748b";
+        case "end":
+        default:
+          return "#94a3b8";
+      }
+    }, []);
+
+    const miniMapNodeStroke = useCallback(
+      (node: Node) => (node.selected ? "#0ea5e9" : "#475569"),
+      [],
+    );
+
     return (
       <div className="h-screen w-full grid grid-cols-12 gap-0">
         <div className="col-span-12">
           <Topbar
             onNew={() => {
-              setNodes(defaultNodes);
-              setEdges(defaultEdges);
-              setSelected(null);
+              applyFlow({ nodes: defaultNodes, edges: defaultEdges });
               toast.message("Nuevo flujo creado");
-              setTimeout(() => rfRef.current?.fitView?.({ padding: 0.2 }), 0);
             }}
             onImport={handleImport}
             onExport={handleExport}
@@ -742,7 +873,7 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-          <Palette onAdd={(type) => addNode(type)} />
+          <Palette onAdd={addNode} />
           <Separator className="my-4" />
           <div className="text-xs text-muted-foreground">
             Consejo: clickeá o arrastrá nodos al lienzo.
@@ -780,7 +911,18 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
             elevateNodesOnSelect
             selectionMode="partial"
             deleteKeyCode={null}
-          />
+          >
+            <Background color="#e2e8f0" variant="lines" gap={24} />
+            <MiniMap
+              className="!bg-white/80"
+              pannable
+              zoomable
+              nodeColor={miniMapNodeColor}
+              nodeStrokeColor={miniMapNodeStroke}
+              nodeStrokeWidth={2}
+            />
+            <Controls position="bottom-left" showInteractive={false} />
+          </ReactFlow>
         </div>
 
         {/* Right: Inspector + Simulator */}
