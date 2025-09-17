@@ -178,8 +178,29 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
         }
 
         try {
-          await executeFlow(session!, text, (uid, to, payload) =>
-            sendMessage(uid, to, payload),
+          const incomingMeta = {
+            type: msg.type ?? null,
+            rawText: msg.text?.body ?? textRaw ?? null,
+            interactive: msg.interactive
+              ? {
+                  type: msg.interactive.type ?? null,
+                  id:
+                    msg.interactive.button_reply?.id ??
+                    msg.interactive.list_reply?.id ??
+                    null,
+                  title:
+                    msg.interactive.button_reply?.title ??
+                    msg.interactive.list_reply?.title ??
+                    null,
+                }
+              : null,
+          };
+
+          await executeFlow(
+            session!,
+            text,
+            (uid, to, payload) => sendMessage(uid, to, payload),
+            incomingMeta,
           );
         } catch (err) {
           console.error("executeFlow error:", err);
