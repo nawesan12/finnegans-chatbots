@@ -18,6 +18,7 @@ import {
   Hash,
   Clock3,
   Search,
+  Megaphone,
 } from "lucide-react";
 import { containerVariants, itemVariants } from "@/lib/animations";
 import MetricCard from "@/components/dashboard/MetricCard";
@@ -37,6 +38,7 @@ import {
   SelectItem,
   SelectValue,
 } from "@/components/ui/select";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 type FlowStatus = "Active" | "Draft" | "Inactive" | string;
 type StatusFilter = "all" | "Active" | "Draft" | "Inactive";
@@ -77,6 +79,78 @@ const FlowsPage = () => {
   const [isSaving, setIsSaving] = useState(false);
 
   const flowBuilderRef = useRef<FlowBuilderHandle>(null);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const updateOpenParam = useCallback(
+    (value: string | null) => {
+      if (!pathname) return;
+      const params = new URLSearchParams(searchParams.toString());
+      if (value) {
+        params.set("open", value);
+      } else {
+        params.delete("open");
+      }
+      const query = params.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname, {
+        scroll: false,
+      });
+    },
+    [pathname, router, searchParams],
+  );
+
+  const openFlowForEditing = useCallback(
+    (flow: FlowWithCounts, options?: { skipUrl?: boolean }) => {
+      setEditingFlow({
+        ...flow,
+        phoneNumber: flow.phoneNumber ?? "",
+      });
+      if (!options?.skipUrl) {
+        updateOpenParam(flow.id);
+      }
+    },
+    [updateOpenParam],
+  );
+
+  const startNewFlow = useCallback(
+    (options?: { skipUrl?: boolean }) => {
+      if (!user?.id) {
+        toast.error("Necesitas iniciar sesión para crear flujos");
+        return;
+      }
+
+      setEditingFlow({
+        id: null,
+        name: "Nuevo flujo",
+        definition: null,
+        status: "Draft",
+        trigger: "default",
+        phoneNumber: "",
+        userId: user.id,
+      });
+
+      if (!options?.skipUrl) {
+        updateOpenParam("new");
+      }
+    },
+    [updateOpenParam, user?.id],
+  );
+
+  const handleCloseEditing = useCallback(() => {
+    setEditingFlow(null);
+    updateOpenParam(null);
+  }, [updateOpenParam]);
+
+  const handleGoToBroadcasts = useCallback(() => {
+    if (!editingFlow?.id) {
+      toast.message(
+        "Guarda el flujo antes de usarlo en campañas masivas",
+      );
+      return;
+    }
+    router.push(`/dashboard/broadcasts?flowId=${editingFlow.id}`);
+  }, [editingFlow?.id, router]);
 
   const fetchFlows = useCallback(async () => {
     if (!user?.id) {
@@ -105,6 +179,27 @@ const FlowsPage = () => {
   useEffect(() => {
     fetchFlows();
   }, [fetchFlows]);
+
+  useEffect(() => {
+    const openParam = searchParams.get("open");
+    if (!openParam) return;
+
+    if (openParam === "new") {
+      if (!editingFlow && user?.id) {
+        startNewFlow({ skipUrl: true });
+      }
+      return;
+    }
+
+    if (!flows.length || editingFlow?.id === openParam) {
+      return;
+    }
+
+    const flowToOpen = flows.find((flow) => flow.id === openParam);
+    if (flowToOpen) {
+      openFlowForEditing(flowToOpen, { skipUrl: true });
+    }
+  }, [editingFlow, flows, openFlowForEditing, searchParams, startNewFlow, user?.id]);
 
   const numberFormatter = useMemo(
     () =>
@@ -189,20 +284,7 @@ const FlowsPage = () => {
   }, [flows, statusFilter, searchTerm]);
 
   const handleCreateNewFlow = () => {
-    if (!user?.id) {
-      toast.error("Necesitas iniciar sesión para crear flujos");
-      return;
-    }
-
-    setEditingFlow({
-      id: null,
-      name: "Nuevo flujo",
-      definition: null,
-      status: "Draft",
-      trigger: "default",
-      phoneNumber: "",
-      userId: user.id,
-    });
+    startNewFlow();
   };
 
   const handleSaveFlow = async () => {
@@ -256,10 +338,7 @@ const FlowsPage = () => {
       }
 
       const updatedFlow: FlowWithCounts = await response.json();
-      setEditingFlow({
-        ...updatedFlow,
-        phoneNumber: updatedFlow.phoneNumber ?? "",
-      });
+      openFlowForEditing(updatedFlow);
       toast.success(
         `Flujo ${isNewFlow ? "creado" : "actualizado"} correctamente`,
       );
@@ -383,7 +462,7 @@ const FlowsPage = () => {
         render: (row: FlowWithCounts) => (
           <div className="flex space-x-2">
             <button
-              onClick={() => setEditingFlow({ ...row })}
+              onClick={() => openFlowForEditing(row)}
               className="font-medium text-[#4bc3fe] hover:text-indigo-900"
             >
               Editar
@@ -398,7 +477,7 @@ const FlowsPage = () => {
         ),
       },
     ],
-    [handleStatusChange, numberFormatter, updatingStatusId],
+    [handleStatusChange, numberFormatter, openFlowForEditing, updatingStatusId],
   );
 
   const initialFlow = useMemo<Partial<FlowData> | null>(
@@ -431,7 +510,7 @@ const FlowsPage = () => {
           <div className="border-b bg-white p-4">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <button
-                onClick={() => setEditingFlow(null)}
+                onClick={handleCloseEditing}
                 className="flex items-center text-sm text-gray-600 transition hover:text-gray-900"
               >
                 <ChevronLeft className="mr-1 h-5 w-5" />
@@ -479,6 +558,14 @@ const FlowsPage = () => {
                   }
                   className="w-full sm:w-56"
                 />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleGoToBroadcasts}
+                >
+                  <Megaphone className="mr-2 h-4 w-4" />
+                  Usar en campañas
+                </Button>
                 <Button
                   type="button"
                   onClick={handleSaveFlow}
