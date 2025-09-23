@@ -129,11 +129,14 @@ model Broadcast {
 }
 
 model BroadcastRecipient {
-  id          String   @id @default(cuid())
-  status      String   @default("Pending")
-  error       String?
-  sentAt      DateTime?
-  createdAt   DateTime @default(now())
+  id              String   @id @default(cuid())
+  status          String   @default("Pending")
+  error           String?
+  messageId       String?  @unique
+  conversationId  String?
+  statusUpdatedAt DateTime?
+  sentAt          DateTime?
+  createdAt       DateTime @default(now())
 
   broadcastId String
   broadcast   Broadcast @relation(fields: [broadcastId], references: [id])

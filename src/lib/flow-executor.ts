@@ -16,6 +16,7 @@ import {
   GoToDataSchema,
 } from "@/components/flow-builder/types";
 import prisma from "@/lib/prisma";
+import type { SendMessageResult } from "@/lib/meta";
 
 // Infer types from Zod schemas
 type TriggerData = z.infer<typeof TriggerDataSchema>;
@@ -57,7 +58,7 @@ type SendMessage = (
     | { type: "text"; text: string }
     | { type: "media"; mediaType: string; url: string; caption?: string }
     | { type: "options"; text: string; options: string[] },
-) => Promise<void | boolean>;
+) => Promise<SendMessageResult>;
 
 type IncomingMessageMeta = {
   type?: string | null;
@@ -543,10 +544,11 @@ export async function executeFlow(
               text,
             },
           );
-          if (sendResult === false) {
+          if (!sendResult?.success) {
             console.error(
               "Failed to send text message to",
               session.contact.phone,
+              sendResult?.error ?? "",
             );
           } else {
             recordOutbound("text", { text });
@@ -567,10 +569,11 @@ export async function executeFlow(
               options,
             },
           );
-          if (sendResult === false) {
+          if (!sendResult?.success) {
             console.error(
               "Failed to send options message to",
               session.contact.phone,
+              sendResult?.error ?? "",
             );
           } else {
             recordOutbound("options", { text, options });
@@ -650,10 +653,11 @@ export async function executeFlow(
             session.contact.phone,
             { type: "media", ...mediaPayload },
           );
-          if (sendResult === false) {
+          if (!sendResult?.success) {
             console.error(
               "Failed to send media message to",
               session.contact.phone,
+              sendResult?.error ?? "",
             );
           } else {
             recordOutbound("media", mediaPayload);

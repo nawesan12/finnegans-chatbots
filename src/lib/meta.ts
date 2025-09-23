@@ -1,4 +1,9 @@
-import type { Contact, Flow, Session as PrismaSession } from "@prisma/client";
+import type {
+  Contact,
+  Flow,
+  Prisma,
+  Session as PrismaSession,
+} from "@prisma/client";
 
 import prisma from "@/lib/prisma";
 import { executeFlow } from "./flow-executor";
@@ -77,14 +82,38 @@ interface WAMessage {
   // otros campos posibles (image, video, etc) omitidos
 }
 
+interface WAStatusError {
+  code?: number | string;
+  title?: string;
+  message?: string;
+  error_data?: { details?: string };
+}
+
+interface WAStatusConversation {
+  id?: string;
+  origin?: { type?: string };
+}
+
 interface WAStatus {
   id?: string;
   status?: string;
   timestamp?: string;
   recipient_id?: string;
-  conversation?: Record<string, unknown>;
-  pricing?: Record<string, unknown>;
-  errors?: Array<Record<string, unknown>>;
+  conversation?: WAStatusConversation;
+  pricing?: { billable?: boolean; pricing_model?: string };
+  errors?: WAStatusError[];
+}
+
+interface WAContactProfile {
+  name?: string;
+}
+
+interface WAContact {
+  wa_id?: string;
+  profile?: WAContactProfile;
+  display_phone_number?: string;
+  phone_number?: string;
+  name?: string;
 }
 
 interface WAChangeValue {
@@ -96,12 +125,12 @@ interface WAChangeValue {
     wa_id?: string;
     whatsapp_business_account_id?: string;
   };
-  contacts?: Array<Record<string, unknown>>;
-  errors?: Array<Record<string, unknown>>;
+  contacts?: WAContact[];
+  errors?: WAStatusError[];
 }
 
 interface WAEntry {
-  changes: { value: WAChangeValue }[];
+  changes?: { value?: WAChangeValue }[];
 }
 
 export interface MetaWebhookEvent {
@@ -111,6 +140,160 @@ export interface MetaWebhookEvent {
 
 /* ===== Utilidades ===== */
 const toLcTrim = (s?: string) => (s ?? "").trim().toLowerCase();
+
+const BROADCAST_SUCCESS_STATUSES = new Set(["Sent", "Delivered", "Read"]);
+const BROADCAST_FAILURE_STATUSES = new Set(["Failed"]);
+
+const WHATSAPP_STATUS_MAP: Record<string, string> = {
+  sent: "Sent",
+  delivered: "Delivered",
+  read: "Read",
+  failed: "Failed",
+  undelivered: "Failed",
+  deleted: "Failed",
+  warning: "Warning",
+  pending: "Pending",
+  queued: "Pending",
+};
+
+type ContactIndexEntry = { name: string | null };
+
+function mapWhatsappStatus(rawStatus?: string | null): string | null {
+  if (!rawStatus) return null;
+  const normalized = rawStatus.trim().toLowerCase();
+  const mapped = WHATSAPP_STATUS_MAP[normalized];
+  if (mapped) return mapped;
+  const capitalized = rawStatus.trim();
+  if (!capitalized) return null;
+  return capitalized.charAt(0).toUpperCase() + capitalized.slice(1);
+}
+
+function extractStatusError(errors?: WAStatusError[] | null): string | null {
+  if (!errors?.length) return null;
+  const [first] = errors;
+  if (!first) return null;
+
+  const details =
+    typeof first.error_data === "object" && first.error_data
+      ? (first.error_data as { details?: string }).details
+      : undefined;
+  if (typeof details === "string" && details.trim()) {
+    return details.trim();
+  }
+
+  if (typeof first.message === "string" && first.message.trim()) {
+    return first.message.trim();
+  }
+
+  if (typeof first.title === "string" && first.title.trim()) {
+    return first.title.trim();
+  }
+
+  if (typeof first.code === "string" || typeof first.code === "number") {
+    return `Error code ${String(first.code)}`;
+  }
+
+  return null;
+}
+
+function parseStatusTimestamp(timestamp?: string | null): Date | null {
+  if (!timestamp) return null;
+  const numeric = Number(timestamp);
+  if (Number.isFinite(numeric) && numeric > 0) {
+    // WhatsApp timestamps are seconds
+    return new Date(numeric * 1000);
+  }
+  const parsed = new Date(timestamp);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+async function adjustBroadcastAggregates(
+  broadcastId: string,
+  previousStatus?: string | null,
+  nextStatus?: string | null,
+) {
+  if (!nextStatus || previousStatus === nextStatus) {
+    return;
+  }
+
+  const prevSuccess = previousStatus
+    ? BROADCAST_SUCCESS_STATUSES.has(previousStatus)
+    : false;
+  const nextSuccess = BROADCAST_SUCCESS_STATUSES.has(nextStatus);
+  const prevFailure = previousStatus
+    ? BROADCAST_FAILURE_STATUSES.has(previousStatus)
+    : false;
+  const nextFailure = BROADCAST_FAILURE_STATUSES.has(nextStatus);
+
+  let successDelta = 0;
+  let failureDelta = 0;
+
+  if (nextSuccess && !prevSuccess) {
+    successDelta += 1;
+  } else if (!nextSuccess && prevSuccess) {
+    successDelta -= 1;
+  }
+
+  if (nextFailure && !prevFailure) {
+    failureDelta += 1;
+  } else if (!nextFailure && prevFailure) {
+    failureDelta -= 1;
+  }
+
+  if (!successDelta && !failureDelta) {
+    return;
+  }
+
+  const data: Prisma.BroadcastUpdateInput = {};
+
+  if (successDelta > 0) {
+    data.successCount = { increment: successDelta };
+  } else if (successDelta < 0) {
+    data.successCount = { decrement: Math.abs(successDelta) };
+  }
+
+  if (failureDelta > 0) {
+    data.failureCount = { increment: failureDelta };
+  } else if (failureDelta < 0) {
+    data.failureCount = { decrement: Math.abs(failureDelta) };
+  }
+
+  try {
+    await prisma.broadcast.update({ where: { id: broadcastId }, data });
+  } catch (error) {
+    console.error("Failed to update broadcast aggregates:", error);
+  }
+}
+
+function indexWhatsappContacts(
+  contacts?: WAContact[] | null,
+): Map<string, ContactIndexEntry> {
+  const map = new Map<string, ContactIndexEntry>();
+  if (!Array.isArray(contacts)) {
+    return map;
+  }
+
+  for (const contact of contacts) {
+    const waId = typeof contact?.wa_id === "string" ? contact.wa_id.trim() : "";
+    if (!waId) continue;
+
+    const profileName =
+      typeof contact?.profile?.name === "string"
+        ? contact.profile.name.trim()
+        : undefined;
+    const fallbackName =
+      typeof contact?.name === "string" ? contact.name.trim() : undefined;
+    const name = profileName && profileName.length > 0
+      ? profileName
+      : fallbackName && fallbackName.length > 0
+        ? fallbackName
+        : null;
+
+    map.set(waId, { name });
+  }
+
+  return map;
+}
 
 async function resolveUserForPhoneNumber(phoneNumberId: string) {
   const user = await prisma.user.findFirst({
@@ -184,6 +367,83 @@ async function recordSessionSnapshot(sessionId: string) {
   }
 }
 
+async function processBroadcastStatuses(
+  userId: string,
+  statuses: WAStatus[],
+) {
+  for (const status of statuses) {
+    if (!status) continue;
+
+    const messageId =
+      typeof status.id === "string" && status.id.trim().length > 0
+        ? status.id.trim()
+        : null;
+
+    if (!messageId) continue;
+
+    try {
+      const recipient = await prisma.broadcastRecipient.findFirst({
+        where: {
+          messageId,
+          broadcast: { userId },
+        },
+        select: { id: true, status: true, broadcastId: true },
+      });
+
+      if (!recipient) {
+        continue;
+      }
+
+      const nextStatus = mapWhatsappStatus(status.status ?? null);
+      const statusTimestamp = parseStatusTimestamp(status.timestamp ?? null);
+      const conversationId =
+        typeof status.conversation?.id === "string" &&
+        status.conversation.id.trim().length > 0
+          ? status.conversation.id.trim()
+          : null;
+
+      const updateData: Prisma.BroadcastRecipientUpdateInput = {
+        statusUpdatedAt: statusTimestamp ?? new Date(),
+      };
+
+      if (nextStatus) {
+        updateData.status = nextStatus;
+        if (!BROADCAST_FAILURE_STATUSES.has(nextStatus)) {
+          updateData.error = null;
+        }
+      }
+
+      if (conversationId) {
+        updateData.conversationId = conversationId;
+      }
+
+      if (BROADCAST_FAILURE_STATUSES.has(nextStatus ?? "")) {
+        const errorMessage =
+          extractStatusError(status.errors ?? null) ??
+          "Meta reported delivery failure";
+        updateData.error = errorMessage;
+      }
+
+      await prisma.broadcastRecipient.update({
+        where: { id: recipient.id },
+        data: updateData,
+      });
+
+      await adjustBroadcastAggregates(
+        recipient.broadcastId,
+        recipient.status,
+        nextStatus,
+      );
+    } catch (error) {
+      console.error(
+        "Failed to process broadcast status update for message:",
+        messageId,
+        error,
+      );
+    }
+  }
+}
+
 /** Extrae un texto “humano” del mensaje (texto o título de botón/lista). */
 function extractUserText(msg: WAMessage): string | null {
   if (!msg) return null;
@@ -204,12 +464,11 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
   if (data.object !== "whatsapp_business_account" || !data.entry?.length)
     return;
 
-  for (const entry of data.entry) {
-    for (const change of entry.changes) {
-      const val = change.value;
+  for (const entry of data.entry ?? []) {
+    for (const change of entry.changes ?? []) {
+      const val = change?.value;
       const phoneNumberId = val?.metadata?.phone_number_id;
-      const messages = val?.messages || [];
-      if (!phoneNumberId || !messages.length) continue;
+      if (!phoneNumberId) continue;
 
       // Resolvemos el “owner” del número
       const user = await resolveUserForPhoneNumber(phoneNumberId);
@@ -217,6 +476,16 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
         console.error("User not found for phone number ID:", phoneNumberId);
         continue;
       }
+
+      const statuses = Array.isArray(val?.statuses) ? val.statuses : [];
+      if (statuses.length) {
+        await processBroadcastStatuses(user.id, statuses);
+      }
+
+      const messages = Array.isArray(val?.messages) ? val.messages : [];
+      if (!messages.length) continue;
+
+      const contactIndex = indexWhatsappContacts(val?.contacts);
 
       // Procesamos cada mensaje (Meta puede agruparlos)
       for (const msg of messages) {
@@ -227,14 +496,37 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
         const from = msg.from;
         const text = textRaw; // no transformamos acá (executeFlow ya hace matching robusto)
 
+        const contactProfile = contactIndex.get(from);
+        const contactName = contactProfile?.name ?? null;
+
         // Contacto: upsert seguro para ese usuario
         let contact = await prisma.contact.findFirst({
           where: { phone: from, userId: user.id },
         });
         if (!contact) {
           contact = await prisma.contact.create({
-            data: { phone: from, userId: user.id },
+            data: {
+              phone: from,
+              userId: user.id,
+              ...(contactName ? { name: contactName } : {}),
+            },
           });
+        } else if (contactName) {
+          const existingName = contact.name?.trim();
+          if (existingName !== contactName) {
+            try {
+              contact = await prisma.contact.update({
+                where: { id: contact.id },
+                data: { name: contactName },
+              });
+            } catch (error) {
+              console.error(
+                "Failed to update contact name for",
+                from,
+                error,
+              );
+            }
+          }
         }
 
         const existingSession =
@@ -353,6 +645,15 @@ type SendMessagePayload =
     }
   | { type: "options"; text: string; options: string[] };
 
+export type SendMessageResult =
+  | { success: true; messageId?: string | null; conversationId?: string | null }
+  | {
+      success: false;
+      error?: string;
+      status?: number;
+      details?: unknown;
+    };
+
 const GRAPH_VERSION = "v20.0";
 const API_TIMEOUT_MS = 15000;
 
@@ -360,7 +661,7 @@ export async function sendMessage(
   userId: string,
   to: string,
   message: SendMessagePayload,
-): Promise<boolean> {
+): Promise<SendMessageResult> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { metaAccessToken: true, metaPhoneNumberId: true },
@@ -372,8 +673,9 @@ export async function sendMessage(
   const phoneNumberId = user?.metaPhoneNumberId ?? envConfig.phoneNumberId;
 
   if (!accessToken || !phoneNumberId) {
-    console.error("Missing Meta API credentials for user:", userId);
-    return false;
+    const errorMessage = "Missing Meta API credentials";
+    console.error(errorMessage, "for user:", userId);
+    return { success: false, error: errorMessage };
   }
 
   const url = `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`;
@@ -453,25 +755,55 @@ export async function sendMessage(
       signal: ctrl.signal,
     });
 
-    if (!res.ok) {
-      const txt = await res.text().catch(() => "");
-      console.error(
-        "Error sending message:",
-        res.status,
-        txt || res.statusText,
-      );
-      return false;
+    const raw = await res.text().catch(() => "");
+    let json: unknown;
+
+    if (raw) {
+      try {
+        json = JSON.parse(raw);
+      } catch {
+        json = undefined;
+      }
     }
+
+    if (!res.ok) {
+      const errorPayload = json as
+        | { error?: { message?: string; error_user_msg?: string } }
+        | undefined;
+      const graphMessage =
+        errorPayload?.error?.error_user_msg ?? errorPayload?.error?.message;
+      const fallback = raw || res.statusText || "Meta API request failed";
+      const errorMessage = graphMessage?.trim().length
+        ? graphMessage
+        : fallback;
+      console.error("Error sending message:", res.status, errorMessage);
+      return {
+        success: false,
+        status: res.status,
+        error: errorMessage,
+        details: json,
+      };
+    }
+
+    const response = json as
+      | { messages?: Array<{ id?: string }>; contacts?: Array<{ wa_id?: string }> }
+      | undefined;
+    const messageId =
+      response?.messages?.find((m) => typeof m?.id === "string")?.id ?? null;
+
+    return { success: true, messageId };
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       console.error("Error sending message: request timeout");
-      return false;
+      return { success: false, error: "Request to Meta timed out" };
     }
     console.error("Error sending message:", error);
-    return false;
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : "Unknown error while sending message",
+    };
   } finally {
     clearTimeout(t);
   }
-
-  return true;
 }

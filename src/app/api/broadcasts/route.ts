@@ -215,24 +215,28 @@ export async function POST(request: Request) {
           data: {
             status: "Failed",
             error: "Contact not found",
+            statusUpdatedAt: new Date(),
           },
         });
         continue;
       }
 
       try {
-        const ok = await sendMessage(userId, contact.phone, {
+        const sendResult = await sendMessage(userId, contact.phone, {
           type: "text",
           text: normalizedMessage,
         });
 
-        if (ok) {
+        if (sendResult.success) {
           successCount += 1;
           await prisma.broadcastRecipient.update({
             where: { id: recipient.id },
             data: {
               status: "Sent",
               sentAt: new Date(),
+              statusUpdatedAt: new Date(),
+              messageId: sendResult.messageId ?? null,
+              error: null,
             },
           });
         } else {
@@ -241,7 +245,8 @@ export async function POST(request: Request) {
             where: { id: recipient.id },
             data: {
               status: "Failed",
-              error: "Meta API request failed",
+              error: sendResult.error ?? "Meta API request failed",
+              statusUpdatedAt: new Date(),
             },
           });
         }
@@ -253,6 +258,7 @@ export async function POST(request: Request) {
           data: {
             status: "Failed",
             error: "Unexpected error",
+            statusUpdatedAt: new Date(),
           },
         });
       }
