@@ -1,7 +1,5 @@
-import { PrismaClient } from "@prisma/client";
+import prisma from "@/lib/prisma";
 import { executeFlow } from "./flow-executor";
-
-const prisma = new PrismaClient();
 
 /* ===== Tipos del webhook de Meta (simplificados y seguros) ===== */
 type WAMessageType =
@@ -51,7 +49,7 @@ interface WAEntry {
   changes: { value: WAChangeValue }[];
 }
 
-interface MetaWebhookEvent {
+export interface MetaWebhookEvent {
   object?: string;
   entry?: WAEntry[];
 }

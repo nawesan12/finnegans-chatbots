@@ -1,36 +1,34 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-## Getting Started
+## Environment variables
 
-First, run the development server:
+Create a `.env.local` file in the project root (or configure the variables in your hosting provider) with at least the following keys:
 
 ```bash
+DATABASE_URL="postgresql://..."
+DIRECT_URL="postgresql://..." # Optional, used for Prisma accelerated connections
+JWT_SECRET="a-long-random-string"
+META_VERIFY_TOKEN="the-token-you-configured-in-meta"
+```
+
+The app stores the WhatsApp Business credentials (`metaAppSecret`, `metaAccessToken`, and `metaPhoneNumberId`) per user through the dashboard settings UI, so they are not read from environment variables.
+
+## Getting started locally
+
+Install dependencies and run the development server:
+
+```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## WhatsApp webhook setup
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Deploy the project (locally or to a provider such as Vercel).
+2. Configure the verify token in your Meta App dashboard and set the same value in the `META_VERIFY_TOKEN` environment variable.
+3. Point the WhatsApp callback URL to `<your-domain>/api/webhook`.
+4. Once the webhook is verified, add the WhatsApp Business API credentials in **Dashboard → Settings** so incoming messages can be processed.
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The webhook route is forced to run on the Node.js runtime and marked as dynamic so it works correctly in serverless environments like Vercel.
