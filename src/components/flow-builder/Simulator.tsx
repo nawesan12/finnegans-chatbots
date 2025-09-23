@@ -1,11 +1,5 @@
 "use client";
-import React, {
-  useState,
-  useMemo,
-  useEffect,
-  useRef,
-  useCallback,
-} from "react";
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -21,20 +15,7 @@ import {
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-
-// Tipos livianos
-type NodeAny = {
-  id: string;
-  type: string;
-  data: Record<string, any>;
-};
-
-type EdgeAny = {
-  id: string;
-  source: string;
-  target: string;
-  sourceHandle?: string | null;
-};
+import type { FlowEdge, FlowNode } from "./types";
 
 type LogEntry =
   | { type: "user"; text: string; ts: number }
@@ -42,22 +23,43 @@ type LogEntry =
   | { type: "options"; text?: string; options: string[]; ts: number }
   | { type: "system"; text: string; ts: number };
 
-type SimContext = { vars: Record<string, any> };
+type SimContext = { vars: Record<string, unknown> };
 
 const now = () => Date.now();
 
+const resolvePath = (source: unknown, segments: string[]): unknown =>
+  segments.reduce<unknown>((acc, segment) => {
+    if (acc == null) return acc;
+    if (typeof acc !== "object") return undefined;
+    const record = acc as Record<string, unknown>;
+    return record[segment];
+  }, source);
+
 const tpl = (text: string | undefined, ctx: SimContext) =>
   (text ?? "").replace(/\{\{\s*([\w.[\]0-9]+)\s*\}\}/g, (_m, key) => {
-    // Permite nested keys: a.b.c
-    try {
-      const value = key
-        .split(".")
-        .reduce((acc: any, k: string) => (acc == null ? acc : acc[k]), ctx);
-      return value == null ? "" : String(value);
-    } catch {
-      return "";
-    }
+    const value = resolvePath(ctx, key.split("."));
+    return value == null ? "" : String(value);
   });
+
+const setDeepValue = (
+  target: Record<string, unknown>,
+  path: string,
+  value: unknown,
+) => {
+    const segments = path.split(".");
+    let cursor: Record<string, unknown> = target;
+    segments.forEach((segment, index) => {
+      if (index === segments.length - 1) {
+        cursor[segment] = value as unknown;
+        return;
+      }
+      const existing = cursor[segment];
+      if (typeof existing !== "object" || existing === null) {
+        cursor[segment] = {};
+      }
+      cursor = cursor[segment] as Record<string, unknown>;
+    });
+  };
 
 // Eval “segura” de condición: solo recibe `context`
 const evalCondition = (expression: string, context: SimContext) => {
@@ -66,24 +68,22 @@ const evalCondition = (expression: string, context: SimContext) => {
     throw new Error("Expresión no permitida");
   }
   // Evalúa en función pura
-  // eslint-disable-next-line no-new-func
   const fn = new Function("context", `return (!!(${expression}))`);
   return !!fn(context);
 };
 
-//eslint-disable-next-line
 export function Simulator({
   nodes,
   edges,
 }: {
-  nodes: NodeAny[];
-  edges: EdgeAny[];
+  nodes: FlowNode[];
+  edges: FlowEdge[];
 }) {
   const [input, setInput] = useState("/start");
   const [log, setLog] = useState<LogEntry[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  const [pausedNode, setPausedNode] = useState<NodeAny | null>(null);
+  const [pausedNode, setPausedNode] = useState<FlowNode | null>(null);
   const [context, setContext] = useState<SimContext>({ vars: {} });
   const [ignoreDelays, setIgnoreDelays] = useState(false);
   const [stepMode, setStepMode] = useState(false);
@@ -117,7 +117,7 @@ export function Simulator({
   const idMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
 
   const outgoing = useMemo(() => {
-    const map = new Map<string, EdgeAny[]>();
+    const map = new Map<string, FlowEdge[]>();
     edges.forEach((e) => {
       const arr = map.get(e.source) || [];
       arr.push(e);
@@ -127,7 +127,8 @@ export function Simulator({
   }, [edges]);
 
   const addLog = useCallback((entry: Omit<LogEntry, "ts">) => {
-    setLog((prev) => [...prev, { ...entry, ts: now() } as LogEntry]);
+    const withTimestamp: LogEntry = { ...entry, ts: now() };
+    setLog((prev) => prev.concat(withTimestamp));
   }, []);
 
   // Autoscroll
@@ -160,23 +161,21 @@ export function Simulator({
   }, []);
 
   const execute = useCallback(
-    async (startNodeObj: NodeAny | string) => {
-      let current: NodeAny | null =
+    async (startNodeObj: FlowNode | string) => {
+      let current: FlowNode | null =
         typeof startNodeObj === "string"
-          ? idMap.get(startNodeObj) || null
+          ? idMap.get(startNodeObj) ?? null
           : startNodeObj;
 
       const visited = new Set<string>();
       let guard = 0;
 
       while (current && guard < 500) {
-        // Step mode support
         await maybeStepPause();
 
         if (!mountedRef.current) return;
-        guard++;
+        guard += 1;
 
-        // loop guard por id
         if (visited.has(current.id)) {
           addLog({ type: "system", text: "Error: Loop detected" });
           awaitingStepRef.current = false;
@@ -187,142 +186,158 @@ export function Simulator({
 
         const runtimeContext = contextRef.current;
 
-        // Tipos
-        if (current.type === "message") {
-          const text = tpl(current.data?.text, runtimeContext);
-          addLog({ type: "bot", text });
-        }
-
-        if (current.type === "media") {
-          const mt = (current.data?.mediaType || "").toString().toUpperCase();
-          const url = tpl(current.data?.url, runtimeContext);
-          const caption = tpl(current.data?.caption, runtimeContext);
-          addLog({
-            type: "bot",
-            text: `[${mt || "MEDIA"}] ${url} ${caption || ""}`.trim(),
-          });
-        }
-
-        if (current.type === "assign") {
-          const key = current.data?.key as string;
-          const rawValue = current.data?.value as string;
-          if (key) {
-            const value = tpl(rawValue, runtimeContext);
-            setContext((prev) => {
-              const next = { vars: { ...prev.vars } };
-              // Soporta keys tipo a.b.c
-              key.split(".").reduce((acc, k, idx, arr) => {
-                if (idx === arr.length - 1) acc[k] = value;
-                else acc[k] = acc[k] ?? {};
-                return acc[k];
-              }, next.vars as any);
-              contextRef.current = next;
-              return next;
-            });
+        switch (current.type) {
+          case "trigger": {
+            break;
           }
-        }
-
-        if (current.type === "delay") {
-          const seconds = Number(current.data?.seconds || 0);
-          addLog({ type: "system", text: `⏱ Wait ${seconds}s` });
-          if (!ignoreDelays && seconds > 0) {
-            await wait(seconds * 1000);
+          case "message": {
+            const text = tpl(current.data?.text, runtimeContext);
+            addLog({ type: "bot", text });
+            break;
           }
-        }
-
-        if (current.type === "options") {
-          const opts = (current.data?.options || []) as string[];
-          const text = tpl(current.data?.text, runtimeContext);
-          addLog({ type: "options", text, options: opts });
-          awaitingStepRef.current = false;
-          setAwaitingStep(false);
-          setIsPaused(true);
-          setPausedNode(current);
-          return; // pausa hasta que el user responda
-        }
-
-        if (current.type === "api") {
-          const method = String(current.data?.method || "GET").toUpperCase();
-          const url = tpl(current.data?.url, runtimeContext);
-          const headers = current.data?.headers || {};
-          const bodyRaw = current.data?.body || "";
-          const assignTo = current.data?.assignTo || "apiResult";
-          addLog({ type: "system", text: `Calling ${method} ${url}` });
-
-          try {
-            abortRef.current?.abort();
-            abortRef.current = new AbortController();
-
-            const init: RequestInit = {
-              method,
-              headers,
-              signal: abortRef.current.signal,
-            };
-            if (method !== "GET" && method !== "HEAD") {
-              init.body = tpl(bodyRaw, runtimeContext);
+          case "media": {
+            const mediaType = current.data?.mediaType ?? "";
+            const url = tpl(current.data?.url, runtimeContext);
+            const caption = tpl(current.data?.caption, runtimeContext);
+            const display =
+              `[${mediaType.toUpperCase() || "MEDIA"}] ${url} ${caption || ""}`.trim();
+            addLog({ type: "bot", text: display });
+            break;
+          }
+          case "assign": {
+            const key = current.data?.key;
+            const rawValue = current.data?.value ?? "";
+            if (typeof key === "string" && key.trim()) {
+              const value = tpl(rawValue, runtimeContext);
+              setContext((prev) => {
+                const nextVars = structuredClone(prev.vars) as Record<string, unknown>;
+                setDeepValue(nextVars, key, value);
+                const nextContext: SimContext = { vars: nextVars };
+                contextRef.current = nextContext;
+                return nextContext;
+              });
             }
+            break;
+          }
+          case "delay": {
+            const seconds = Number(current.data?.seconds ?? 0);
+            addLog({ type: "system", text: `⏱ Wait ${seconds}s` });
+            if (!ignoreDelays && seconds > 0) {
+              await wait(seconds * 1000);
+            }
+            break;
+          }
+          case "options": {
+            const options = current.data?.options ?? [];
+            const dataWithText = current.data as { text?: string };
+            const prompt = tpl(dataWithText?.text, runtimeContext);
+            addLog({ type: "options", text: prompt, options });
+            awaitingStepRef.current = false;
+            setAwaitingStep(false);
+            setIsPaused(true);
+            setPausedNode(current);
+            return;
+          }
+          case "api": {
+            const method = (current.data?.method ?? "GET").toString().toUpperCase();
+            const url = tpl(current.data?.url, runtimeContext);
+            const bodyRaw = current.data?.body ?? "";
+            const assignTo = current.data?.assignTo ?? "apiResult";
+            const rawHeaders = current.data?.headers ?? {};
+            const headers = Object.fromEntries(
+              Object.entries(rawHeaders).filter(
+                (entry): entry is [string, string] => typeof entry[1] === "string",
+              ),
+            );
+            addLog({ type: "system", text: `Calling ${method} ${url}` });
 
-            const res = await fetch(url, init);
-            const text = await res.text();
-            let parsed: unknown = text;
             try {
-              parsed = JSON.parse(text);
-            } catch {
-              // keep as text
-            }
+              abortRef.current?.abort();
+              abortRef.current = new AbortController();
 
-            setContext((prev) => {
-              const next = { vars: { ...prev.vars, [assignTo]: parsed } };
-              contextRef.current = next;
-              return next;
-            });
-            addLog({ type: "system", text: `Stored result in ${assignTo}` });
-          } catch (e: any) {
-            if (e?.name === "AbortError") {
-              addLog({ type: "system", text: "API call aborted" });
-            } else {
-              addLog({ type: "system", text: `API error: ${String(e)}` });
+              const init: RequestInit = {
+                method,
+                headers,
+                signal: abortRef.current.signal,
+              };
+              if (method !== "GET" && method !== "HEAD") {
+                init.body = tpl(bodyRaw, runtimeContext);
+              }
+
+              const res = await fetch(url, init);
+              const responseText = await res.text();
+              let parsed: unknown = responseText;
+              try {
+                parsed = JSON.parse(responseText);
+              } catch {
+                // texto plano
+              }
+
+              setContext((prev) => {
+                const nextContext: SimContext = {
+                  vars: { ...prev.vars, [assignTo]: parsed },
+                };
+                contextRef.current = nextContext;
+                return nextContext;
+              });
+              addLog({ type: "system", text: `Stored result in ${assignTo}` });
+            } catch (error: unknown) {
+              if (error instanceof DOMException && error.name === "AbortError") {
+                addLog({ type: "system", text: "API call aborted" });
+              } else {
+                const message = error instanceof Error ? error.message : String(error);
+                addLog({ type: "system", text: `API error: ${message}` });
+              }
             }
+            break;
           }
-        }
-
-        if (current.type === "condition") {
-          try {
-            const res = evalCondition(
-              String(current.data?.expression || "false"),
-              runtimeContext,
-            );
-            const edgesFrom = outgoing.get(current.id) || [];
-            const edge = edgesFrom.find(
-              (ed) => ed.sourceHandle === (res ? "true" : "false"),
-            );
-            current = edge ? idMap.get(edge.target) || null : null;
+          case "condition": {
+            try {
+              const result = evalCondition(
+                String(current.data?.expression ?? "false"),
+                runtimeContext,
+              );
+              const edgesFrom = outgoing.get(current.id) ?? [];
+              const edge = edgesFrom.find(
+                (candidate) => candidate.sourceHandle === (result ? "true" : "false"),
+              );
+              current = edge ? idMap.get(edge.target) ?? null : null;
+              continue;
+            } catch (error: unknown) {
+              const message = error instanceof Error ? error.message : String(error);
+              addLog({ type: "system", text: `Condition error: ${message}` });
+            }
+            break;
+          }
+          case "goto": {
+            const nextId = current.data?.targetNodeId ?? "";
+            current = nextId ? idMap.get(nextId) ?? null : null;
             continue;
-          } catch (e) {
-            addLog({ type: "system", text: `Condition error: ${String(e)}` });
+          }
+          case "end": {
+            addLog({ type: "system", text: "🏁 End" });
+            current = null;
+            break;
+          }
+          default: {
+            break;
           }
         }
 
-        if (current.type === "goto") {
-          const nextId = String(current.data?.targetNodeId || "");
-          current = nextId ? idMap.get(nextId) || null : null;
-          continue;
-        }
-
-        if (current.type === "end") {
-          addLog({ type: "system", text: "🏁 End" });
+        if (!current) {
           break;
         }
 
-        // Siguiente por primera arista de salida
-        const nextEdge = (outgoing.get(current.id) || [])[0];
-        current = nextEdge ? idMap.get(nextEdge.target) || null : null;
+        const nextEdge = outgoing.get(current.id)?.[0];
+        current = nextEdge ? idMap.get(nextEdge.target) ?? null : null;
       }
 
       awaitingStepRef.current = false;
       setAwaitingStep(false);
 
-      if (guard >= 500) addLog({ type: "system", text: "Guard limit reached" });
+      if (guard >= 500) {
+        addLog({ type: "system", text: "Guard limit reached" });
+      }
     },
     [
       addLog,
@@ -349,41 +364,55 @@ export function Simulator({
 
       try {
         if (isPaused && pausedNode) {
-          const userText = messageToSend.toLowerCase().trim();
-          const opts: string[] = pausedNode.data?.options || [];
-          const idx = opts.findIndex(
-            (o) => o.toLowerCase().trim() === userText,
-          );
-
-          let nextNodeId: string | undefined;
-          const edgesFrom = outgoing.get(pausedNode.id) || [];
-          if (idx !== -1) {
-            const handleId = `opt-${idx}`;
-            const edge = edgesFrom.find((e) => e.sourceHandle === handleId);
-            nextNodeId = edge?.target;
+          if (pausedNode.type !== "options") {
+            setIsPaused(false);
+            setPausedNode(null);
           } else {
-            const edge = edgesFrom.find((e) => e.sourceHandle === "no-match");
-            nextNodeId = edge?.target;
-          }
+            const userText = messageToSend.toLowerCase().trim();
+            const opts = pausedNode.data?.options ?? [];
+            const idx = opts.findIndex(
+              (option) => option.toLowerCase().trim() === userText,
+            );
 
-          setIsPaused(false);
-          setPausedNode(null);
+            let nextNodeId: string | undefined;
+            const edgesFrom = outgoing.get(pausedNode.id) ?? [];
+            if (idx !== -1) {
+              const handleId = `opt-${idx}`;
+              nextNodeId = edgesFrom.find(
+                (edge) => edge.sourceHandle === handleId,
+              )?.target;
+            } else {
+              nextNodeId = edgesFrom.find(
+                (edge) => edge.sourceHandle === "no-match",
+              )?.target;
+            }
 
-          if (nextNodeId) {
-            await execute(idMap.get(nextNodeId) || null);
-          } else {
-            addLog({ type: "system", text: "No path for this option." });
+            setIsPaused(false);
+            setPausedNode(null);
+
+            if (nextNodeId) {
+              const nextNode = idMap.get(nextNodeId);
+              if (nextNode) {
+                await execute(nextNode);
+              } else {
+                addLog({
+                  type: "system",
+                  text: `No node found for id ${nextNodeId}`,
+                });
+              }
+            } else {
+              addLog({ type: "system", text: "No path for this option." });
+            }
           }
         } else {
-          // Reinicia contexto y busca trigger exacto (case-insensitive)
-          const initial = { vars: {} };
+          const initial: SimContext = { vars: {} };
           contextRef.current = initial;
           setContext(initial);
           const msgLc = messageToSend.toLowerCase();
           const startNode = nodes.find(
-            (n) =>
-              n.type === "trigger" &&
-              String(n.data?.keyword || "").toLowerCase() === msgLc,
+            (node) =>
+              node.type === "trigger" &&
+              (node.data?.keyword ?? "").toLowerCase() === msgLc,
           );
           if (startNode) {
             await execute(startNode);
@@ -402,6 +431,7 @@ export function Simulator({
       idMap,
       input,
       isPaused,
+      isRunning,
       nodes,
       outgoing,
       pausedNode,
@@ -422,14 +452,23 @@ export function Simulator({
   }, []);
 
   const copyLog = useCallback(() => {
-    const text = log
+    const formatted = log
       .map((line) => {
-        const prefix =
-          line.type === "bot" ? "Bot: " : line.type === "user" ? "You: " : "";
-        return `${new Date(line.ts).toLocaleTimeString()} ${prefix}${line.type === "options" ? line.text || "Options" : line.text}`;
+        const time = new Date(line.ts).toLocaleTimeString();
+        switch (line.type) {
+          case "bot":
+            return `${time} Bot: ${line.text}`;
+          case "user":
+            return `${time} You: ${line.text}`;
+          case "options":
+            return `${time} Options: ${line.text ?? "Options"}`;
+          case "system":
+          default:
+            return `${time} ${line.text}`;
+        }
       })
       .join("\n");
-    navigator.clipboard.writeText(text);
+    void navigator.clipboard.writeText(formatted);
   }, [log]);
 
   const downloadJSON = useCallback(() => {

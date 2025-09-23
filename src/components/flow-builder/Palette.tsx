@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Search, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import type { FlowNodeType } from "./types";
 
 import {
   FileUp,
@@ -21,7 +22,7 @@ import {
 
 // ---------- Types ----------
 export type PaletteItem = {
-  type: string;
+  type: FlowNodeType;
   label: string;
   icon: LucideIcon;
   hint: string;
@@ -32,7 +33,7 @@ export type PaletteItem = {
 };
 
 type PaletteProps = {
-  onAdd: (type: string) => void;
+  onAdd: (type: FlowNodeType) => void;
   /** Si querés inyectar/overridear los items desde afuera */
   items?: PaletteItem[];
   className?: string;

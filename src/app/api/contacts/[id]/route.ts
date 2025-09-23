@@ -1,15 +1,19 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import prisma from "@/lib/prisma";
+import { getAuthPayload } from "@/lib/auth";
 
 export async function GET(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  const auth = getAuthPayload(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const contact = await prisma.contact.findUnique({
-      where: { id: params.id },
+    const contact = await prisma.contact.findFirst({
+      where: { id: params.id, userId: auth.userId },
       include: {
         tags: {
           include: {
@@ -37,12 +41,17 @@ export async function PUT(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  const auth = getAuthPayload(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = await request.json();
     const { name, phone, tags: newTagNames = [] } = body;
 
-    const contact = await prisma.contact.findUnique({
-      where: { id: params.id },
+    const contact = await prisma.contact.findFirst({
+      where: { id: params.id, userId: auth.userId },
       include: { tags: { include: { tag: true } } },
     });
 
@@ -88,16 +97,32 @@ export async function DELETE(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  const auth = getAuthPayload(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    // First, delete related TagsOnContacts entries
-    await prisma.tagsOnContacts.deleteMany({
-      where: { contactId: params.id },
+    const contact = await prisma.contact.findFirst({
+      where: { id: params.id, userId: auth.userId },
+      select: { id: true },
     });
 
-    // Then, delete the contact itself
-    await prisma.contact.delete({
-      where: { id: params.id },
-    });
+    if (!contact) {
+      return NextResponse.json({ error: "Contact not found" }, { status: 404 });
+    }
+
+    await prisma.$transaction([
+      prisma.tagsOnContacts.deleteMany({
+        where: { contactId: contact.id },
+      }),
+      prisma.session.deleteMany({ where: { contactId: contact.id } }),
+      prisma.log.deleteMany({ where: { contactId: contact.id } }),
+      prisma.broadcastRecipient.deleteMany({ where: { contactId: contact.id } }),
+      prisma.contact.delete({
+        where: { id: contact.id },
+      }),
+    ]);
 
     return new NextResponse(null, { status: 204 });
   } catch (error) {

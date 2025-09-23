@@ -8,6 +8,7 @@ import Header from "@/components/dashboard/Header";
 import ImportContactsModal from "@/components/ImportContactsModal";
 import AddContactModal from "@/components/AddContactModal";
 import { pageVariants, pageTransition } from "@/lib/animations";
+import { DashboardActionsProvider } from "@/lib/dashboard-context";
 
 export default function DashboardLayout({
   children,
@@ -68,41 +69,48 @@ export default function DashboardLayout({
   };
 
   return (
-    <div className="flex h-screen bg-gray-100 font-sans">
-      <Sidebar
-        isCollapsed={isSidebarCollapsed}
-        setIsCollapsed={setIsSidebarCollapsed}
-      />
-      <main className="flex-1 flex flex-col overflow-x-hidden relative">
-        <Header
-          title={getPageTitle(pathname)}
-          onImportClick={handleOpenImportModal}
-          onNewContactClick={handleOpenAddContactModal}
+    <DashboardActionsProvider
+      value={{
+        openImportContacts: handleOpenImportModal,
+        openNewContact: handleOpenAddContactModal,
+      }}
+    >
+      <div className="flex h-screen bg-gray-100 font-sans">
+        <Sidebar
+          isCollapsed={isSidebarCollapsed}
+          setIsCollapsed={setIsSidebarCollapsed}
         />
-        <div className="flex-1 overflow-y-auto">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={pathname}
-              initial="initial"
-              animate="in"
-              exit="out"
-              variants={pageVariants}
-              transition={pageTransition}
-            >
-              {children}
-            </motion.div>
-          </AnimatePresence>
-        </div>
-      </main>
-      <ImportContactsModal
-        isOpen={isImportModalOpen}
-        onClose={() => setIsImportModalOpen(false)}
-      />
-      <AddContactModal
-        open={isAddContactModalOpen}
-        onOpenChange={setIsAddContactModalOpen}
-        userId={user.id}
-      />
-    </div>
+        <main className="flex-1 flex flex-col overflow-x-hidden relative">
+          <Header
+            title={getPageTitle(pathname)}
+            onImportClick={handleOpenImportModal}
+            onNewContactClick={handleOpenAddContactModal}
+          />
+          <div className="flex-1 overflow-y-auto">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={pathname}
+                initial="initial"
+                animate="in"
+                exit="out"
+                variants={pageVariants}
+                transition={pageTransition}
+              >
+                {children}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </main>
+        <ImportContactsModal
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+        />
+        <AddContactModal
+          open={isAddContactModalOpen}
+          onOpenChange={setIsAddContactModalOpen}
+          userId={user.id}
+        />
+      </div>
+    </DashboardActionsProvider>
   );
 }

@@ -1,5 +1,5 @@
 "use client";
-import React, { memo, useCallback } from "react";
+import React, { memo } from "react";
 import type { NodeProps } from "reactflow";
 import { Handle, Position } from "reactflow";
 import { Badge } from "@/components/ui/badge";
@@ -28,20 +28,19 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 
-/* =========================
-   Tipos de datos por nodo
-   ========================= */
-type TriggerData = { keyword?: string };
-type MessageData = { useTemplate?: boolean; text?: string };
-type OptionsData = { options?: string[] };
-type DelayData = { seconds?: number };
-type ConditionData = { expression?: string };
-type ApiData = { method?: string; url?: string; assignTo?: string };
-type AssignData = { key?: string; value?: string };
-type MediaData = { mediaType?: string; url?: string; caption?: string };
-type HandoffData = { queue?: string; note?: string };
-type GoToData = { targetNodeId?: string };
-type EndData = { reason?: string };
+import type {
+  TriggerNodeData,
+  MessageNodeData,
+  OptionsNodeData,
+  DelayNodeData,
+  ConditionNodeData,
+  ApiNodeData,
+  AssignNodeData,
+  MediaNodeData,
+  HandoffNodeData,
+  GoToNodeData,
+  EndNodeData,
+} from "./types";
 
 type NodeCommonHandlers = {
   onEdit: () => void;
@@ -55,23 +54,6 @@ type NodeCommonHandlers = {
    Utils
    ========================= */
 const safeUpper = (v?: string) => (v ? String(v).toUpperCase() : "");
-const copyWithFallback = async (text: string) => {
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {
-    // Fallback para navegadores sin permiso
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    document.body.appendChild(ta);
-    ta.select();
-    try {
-      document.execCommand("copy");
-    } finally {
-      document.body.removeChild(ta);
-    }
-  }
-};
-
 /* =========================
    Shell: contenedor visual
    ========================= */
@@ -202,7 +184,12 @@ const CommonHandles = memo(function CommonHandles({
 const TriggerNode = memo(function TriggerNode({
   data,
   selected,
-}: NodeProps<TriggerData> & NodeCommonHandlers) {
+  onEdit,
+  onDuplicate,
+  onDelete,
+  onCopyWebhook,
+  onCopyId,
+}: NodeProps<TriggerNodeData> & NodeCommonHandlers) {
   const keyword = data?.keyword ?? "(set keyword)";
   return (
     <div className="relative">
@@ -211,7 +198,11 @@ const TriggerNode = memo(function TriggerNode({
         title="Trigger"
         color="border-green-300"
         selected={!!selected}
-        {...(data as any)}
+        onEdit={onEdit}
+        onDuplicate={onDuplicate}
+        onDelete={onDelete}
+        onCopyWebhook={onCopyWebhook}
+        onCopyId={onCopyId}
       >
         <div className="text-muted-foreground">
           Keyword: <Badge variant="secondary">{keyword}</Badge>
@@ -230,7 +221,7 @@ const MessageNode = memo(function MessageNode({
   onDelete,
   onCopyWebhook,
   onCopyId,
-}: NodeProps<MessageData> & NodeCommonHandlers) {
+}: NodeProps<MessageNodeData> & NodeCommonHandlers) {
   const text = data?.text ?? "";
   return (
     <div className="relative">
@@ -266,7 +257,7 @@ const OptionsNode = memo(function OptionsNode({
   onDelete,
   onCopyWebhook,
   onCopyId,
-}: NodeProps<OptionsData> & NodeCommonHandlers) {
+}: NodeProps<OptionsNodeData> & NodeCommonHandlers) {
   const options = data?.options ?? [];
   // porcentajes para distribuir uniformemente los handles
   const handlePercents =
@@ -340,7 +331,7 @@ const DelayNode = memo(function DelayNode({
   onDelete,
   onCopyWebhook,
   onCopyId,
-}: NodeProps<DelayData> & NodeCommonHandlers) {
+}: NodeProps<DelayNodeData> & NodeCommonHandlers) {
   const seconds = data?.seconds ?? 0;
   return (
     <div className="relative">
@@ -372,7 +363,7 @@ const ConditionNode = memo(function ConditionNode({
   onDelete,
   onCopyWebhook,
   onCopyId,
-}: NodeProps<ConditionData> & NodeCommonHandlers) {
+}: NodeProps<ConditionNodeData> & NodeCommonHandlers) {
   const exp = data?.expression ?? "";
   return (
     <div className="relative">
@@ -419,7 +410,7 @@ const APICallNode = memo(function APICallNode({
   onDelete,
   onCopyWebhook,
   onCopyId,
-}: NodeProps<ApiData> & NodeCommonHandlers) {
+}: NodeProps<ApiNodeData> & NodeCommonHandlers) {
   const method = data?.method ?? "GET";
   const url = data?.url ?? "(set URL)";
   const assignTo = data?.assignTo ?? "response";
@@ -458,7 +449,7 @@ const AssignVarNode = memo(function AssignVarNode({
   onDelete,
   onCopyWebhook,
   onCopyId,
-}: NodeProps<AssignData> & NodeCommonHandlers) {
+}: NodeProps<AssignNodeData> & NodeCommonHandlers) {
   const k = data?.key ?? "context.foo";
   const v = data?.value ?? "bar";
   return (
@@ -491,7 +482,7 @@ const MediaNode = memo(function MediaNode({
   onDelete,
   onCopyWebhook,
   onCopyId,
-}: NodeProps<MediaData> & NodeCommonHandlers) {
+}: NodeProps<MediaNodeData> & NodeCommonHandlers) {
   const type = safeUpper(data?.mediaType) || "MEDIA";
   const url = data?.url ?? "(set URL)";
   return (
@@ -530,7 +521,7 @@ const HandoffNode = memo(function HandoffNode({
   onDelete,
   onCopyWebhook,
   onCopyId,
-}: NodeProps<HandoffData> & NodeCommonHandlers) {
+}: NodeProps<HandoffNodeData> & NodeCommonHandlers) {
   const queue = data?.queue ?? "default";
   const note = data?.note;
   return (
@@ -566,7 +557,7 @@ const GoToNode = memo(function GoToNode({
   onDelete,
   onCopyWebhook,
   onCopyId,
-}: NodeProps<GoToData> & NodeCommonHandlers) {
+}: NodeProps<GoToNodeData> & NodeCommonHandlers) {
   const target = data?.targetNodeId || "(select)";
   return (
     <div className="relative">
@@ -598,7 +589,7 @@ const EndNode = memo(function EndNode({
   onDelete,
   onCopyWebhook,
   onCopyId,
-}: NodeProps<EndData> & NodeCommonHandlers) {
+}: NodeProps<EndNodeData> & NodeCommonHandlers) {
   const reason = data?.reason || "end";
   return (
     <div className="relative">

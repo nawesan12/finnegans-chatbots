@@ -1,39 +1,58 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
+import { useAuthStore } from "@/lib/store";
 
 const SettingsPage = () => {
   const [metaVerifyToken, setMetaVerifyToken] = useState("");
   const [metaAppSecret, setMetaAppSecret] = useState("");
   const [metaAccessToken, setMetaAccessToken] = useState("");
   const [metaPhoneNumberId, setMetaPhoneNumberId] = useState("");
+  const token = useAuthStore((state) => state.token);
+  const hasHydrated = useAuthStore((state) => state.hasHydrated);
+
+  const fetchSettings = useCallback(async () => {
+    if (!token) {
+      setMetaVerifyToken("");
+      setMetaAppSecret("");
+      setMetaAccessToken("");
+      setMetaPhoneNumberId("");
+      return;
+    }
+
+    const response = await fetch("/api/settings", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (response.ok) {
+      const data = await response.json();
+      setMetaVerifyToken(data.metaVerifyToken || "");
+      setMetaAppSecret(data.metaAppSecret || "");
+      setMetaAccessToken(data.metaAccessToken || "");
+      setMetaPhoneNumberId(data.metaPhoneNumberId || "");
+    } else {
+      toast.error("No se pudieron cargar los ajustes actuales");
+    }
+  }, [token]);
 
   useEffect(() => {
-    const fetchSettings = async () => {
-      const token = localStorage.getItem("token");
-      const response = await fetch("/api/settings", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setMetaVerifyToken(data.metaVerifyToken || "");
-        setMetaAppSecret(data.metaAppSecret || "");
-        setMetaAccessToken(data.metaAccessToken || "");
-        setMetaPhoneNumberId(data.metaPhoneNumberId || "");
-      }
-    };
+    if (!hasHydrated) {
+      return;
+    }
     fetchSettings();
-  }, []);
+  }, [fetchSettings, hasHydrated]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const token = localStorage.getItem("token");
+    if (!token) {
+      toast.error("No se pudo autenticar la sesión actual");
+      return;
+    }
     const response = await fetch("/api/settings", {
       method: "POST",
       headers: {

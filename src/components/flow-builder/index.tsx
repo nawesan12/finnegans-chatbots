@@ -16,9 +16,14 @@ import {
   useEdgesState,
   useNodesState,
   MarkerType,
+} from "reactflow";
+import type {
   Connection,
-  Edge,
-  Node,
+  NodeProps,
+  NodeTypes,
+  OnSelectionChangeParams,
+  ReactFlowInstance,
+  Viewport,
 } from "reactflow";
 import "reactflow/dist/style.css";
 import { toast } from "sonner";
@@ -45,6 +50,15 @@ import {
   HandoffDataSchema,
   EndDataSchema,
   waTextLimit,
+  flowNodeTypes,
+  isFlowNodeType,
+} from "./types";
+import type {
+  FlowBuilderHandle,
+  FlowData,
+  FlowEdge,
+  FlowNode,
+  FlowNodeType,
 } from "./types";
 import { getLayoutedElements, makeId, getStarterData } from "./helpers";
 import { nodeTypes } from "./nodes";
@@ -54,17 +68,25 @@ import { Topbar } from "./Toolbar";
 import { Palette } from "./Palette";
 import { z } from "zod";
 
-// Exportá estos tipos
-export type RFNode = Node;
-export type RFEdge = Edge;
-
-export type FlowData = { nodes: RFNode[]; edges: RFEdge[] };
-export type FlowBuilderHandle = { getFlowData: () => FlowData };
+export type { FlowBuilderHandle, FlowData } from "./types";
 
 type FlowBuilderProps = {
   initialFlow?: Partial<FlowData> | null;
 };
-const defaultNodes: Node[] = [
+type ImportEvent =
+  | React.ChangeEvent<HTMLInputElement>
+  | { target?: { files?: FileList | File[] | null; value?: string } };
+type NodeCommonHandlers = {
+  onEdit: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  onCopyWebhook: () => void;
+  onCopyId: () => void;
+};
+type NodeRenderer = (
+  props: NodeProps<FlowNode["data"]> & NodeCommonHandlers,
+) => JSX.Element;
+const defaultNodes: FlowNode[] = [
   {
     id: "n1",
     type: "trigger",
@@ -98,7 +120,7 @@ const defaultNodes: Node[] = [
   },
 ];
 
-const defaultEdges: Edge[] = [
+const defaultEdges: FlowEdge[] = [
   {
     id: "e1-2",
     source: "n1",
@@ -117,37 +139,33 @@ const defaultEdges: Edge[] = [
 
 const DRAFT_KEY = "flowbuilder_draft_v1";
 
+const FlowNodeSchema = z
+  .object({
+    id: z.string(),
+    type: z.enum(flowNodeTypes),
+    position: z
+      .object({
+        x: z.number().optional(),
+        y: z.number().optional(),
+      })
+      .optional(),
+    data: z.unknown().optional(),
+  })
+  .passthrough();
+
+const FlowEdgeSchema = z
+  .object({
+    id: z.string(),
+    source: z.string(),
+    target: z.string(),
+    sourceHandle: z.string().nullable().optional(),
+    targetHandle: z.string().nullable().optional(),
+  })
+  .passthrough();
+
 const FlowFileSchema = z.object({
-  nodes: z
-    .array(
-      z
-        .object({
-          id: z.string(),
-          type: z.string(),
-          position: z
-            .object({
-              x: z.number().optional(),
-              y: z.number().optional(),
-            })
-            .optional(),
-          data: z.unknown().optional(),
-        })
-        .passthrough(),
-    )
-    .default([]),
-  edges: z
-    .array(
-      z
-        .object({
-          id: z.string(),
-          source: z.string(),
-          target: z.string(),
-          sourceHandle: z.string().nullable().optional(),
-          targetHandle: z.string().nullable().optional(),
-        })
-        .passthrough(),
-    )
-    .default([]),
+  nodes: z.array(FlowNodeSchema).default([]),
+  edges: z.array(FlowEdgeSchema).default([]),
 });
 
 const deepClone = (value: unknown): unknown => {
@@ -166,13 +184,13 @@ const deepClone = (value: unknown): unknown => {
 const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
   ({ initialFlow }, ref) => {
     const [nodes, setNodes, onNodesChange] =
-      useNodesState<Node[]>(defaultNodes);
+      useNodesState<FlowNode>(defaultNodes);
     const [edges, setEdges, onEdgesChange] =
-      useEdgesState<Edge[]>(defaultEdges);
-    const [selected, setSelected] = useState<Node | null>(null);
+      useEdgesState<FlowEdge>(defaultEdges);
+    const [selected, setSelected] = useState<FlowNode | null>(null);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [zoomLevel, setZoomLevel] = useState<number | undefined>(undefined);
-    const rfRef = useRef<any>(null);
+    const rfRef = useRef<ReactFlowInstance<FlowNode, FlowEdge> | null>(null);
     const historyRef = useRef<{ past: string[]; future: string[] }>({
       past: [],
       future: [],
@@ -180,9 +198,9 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
     const didRestoreRef = useRef(false);
 
     const cloneNode = useCallback(
-      (node: Node): Node => ({
+      (node: FlowNode): FlowNode => ({
         ...node,
-        data: deepClone(node.data) as Node["data"],
+        data: deepClone(node.data) as FlowNode["data"],
         position: {
           x: typeof node.position?.x === "number" ? node.position.x : 0,
           y: typeof node.position?.y === "number" ? node.position.y : 0,
@@ -194,7 +212,7 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
     const applyFlow = useCallback(
       (flow: FlowData) => {
         const nextNodes = flow.nodes.map((node) => cloneNode(node));
-        const nextEdges = flow.edges.map((edge) => ({ ...edge }));
+        const nextEdges = flow.edges.map((edge) => ({ ...edge } as FlowEdge));
 
         historyRef.current.past = [];
         historyRef.current.future = [];
@@ -214,7 +232,10 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
     // Load initial flow or draft once
     useEffect(() => {
       if (initialFlow?.nodes && initialFlow?.edges) {
-        applyFlow({ nodes: initialFlow.nodes, edges: initialFlow.edges });
+        applyFlow({
+          nodes: initialFlow.nodes as FlowNode[],
+          edges: initialFlow.edges as FlowEdge[],
+        });
         didRestoreRef.current = true;
         return;
       }
@@ -226,19 +247,25 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
         if (!raw) return;
         const parsed = FlowFileSchema.safeParse(JSON.parse(raw));
         if (!parsed.success) return;
-        applyFlow({
-          nodes: parsed.data.nodes as unknown as Node[],
-          edges: parsed.data.edges as unknown as Edge[],
-        });
+        const parsedNodes = parsed.data.nodes.map((node) => ({
+          ...node,
+          position: {
+            x: node.position?.x ?? 0,
+            y: node.position?.y ?? 0,
+          },
+        })) as FlowNode[];
+        const parsedEdges = parsed.data.edges.map((edge) => ({
+          ...edge,
+        })) as FlowEdge[];
+        applyFlow({ nodes: parsedNodes, edges: parsedEdges });
       } catch {
-        // ignore drafts with errores
+        // ignore drafts con errores
       } finally {
         didRestoreRef.current = true;
       }
     }, [applyFlow, initialFlow]);
 
     // Expose ref API
-    //eslint-disable-next-line
     useImperativeHandle(ref, () => ({
       getFlowData: () => ({ nodes, edges }),
     }));
@@ -255,15 +282,18 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
 
     // add node
     const addNode = useCallback(
-      (type: string) => {
+      (type: FlowNodeType) => {
         const id = makeId();
         const last = nodes.at(-1);
         const position = {
           x: last?.position?.x ?? 0,
           y: (last?.position?.y ?? 0) + 140,
         };
-        const data = { name: `${type}-${id}`, ...getStarterData(type) };
-        const newNode: Node = { id, type, data, position };
+        const data = {
+          name: `${type}-${id}`,
+          ...getStarterData(type),
+        } as FlowNode["data"];
+        const newNode: FlowNode = { id, type, data, position };
 
         setNodes((nds) => nds.concat(newNode));
         setSelected(newNode);
@@ -305,15 +335,29 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       [setEdges],
     );
 
-    const onNodeClick = (_: any, node: Node) => setSelected(node);
+    const onNodeClick = (
+      _: React.MouseEvent,
+      node: FlowNode,
+    ) => setSelected(node);
     const onPaneClick = () => setSelected(null);
 
-    const handleEdit = useCallback((node: Node) => setSelected(node), []);
+    const handleEdit = useCallback(
+      (nodeId: string) => {
+        const found = nodes.find((node) => node.id === nodeId) ?? null;
+        setSelected(found);
+        if (found) {
+          setSelectedIds([nodeId]);
+        }
+      },
+      [nodes, setSelected, setSelectedIds],
+    );
     const handleDuplicate = useCallback(
-      (node: Node) => {
+      (nodeId: string) => {
+        const source = nodes.find((node) => node.id === nodeId);
+        if (!source) return;
         const id = makeId();
-        const base = cloneNode(node);
-        const duplicate: Node = {
+        const base = cloneNode(source);
+        const duplicate: FlowNode = {
           ...base,
           id,
           position: {
@@ -326,7 +370,7 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
         setSelected(duplicate);
         setSelectedIds([id]);
       },
-      [cloneNode, setNodes, setSelected, setSelectedIds],
+      [cloneNode, nodes, setNodes, setSelected, setSelectedIds],
     );
 
     const handleDelete = useCallback(
@@ -364,8 +408,8 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
     }, []);
 
     const handleCopyWebhook = useCallback(
-      (node: Node) => {
-        const webhookUrl = `${window.location.origin}/api/webhook?flowId=${node.id}`;
+      (nodeId: string) => {
+        const webhookUrl = `${window.location.origin}/api/webhook?flowId=${nodeId}`;
         safeWriteClipboard(
           webhookUrl,
           "URL del webhook copiada al portapapeles!",
@@ -382,67 +426,64 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
     );
 
     const updateSelected = useCallback(
-      (patch: Partial<Node>) => {
-        setSelected((s) => {
-          if (!s) return s;
+      (patch: { data: FlowNode["data"] }) => {
+        setSelected((current) => {
+          if (!current) return current;
 
-          const newSelected = {
-            ...s,
-            ...patch,
-            data: { ...s.data, ...(patch as any).data },
-          } as Node;
+          const nextData = {
+            ...current.data,
+            ...patch.data,
+          } as FlowNode["data"];
+          const nextNode: FlowNode = { ...current, data: nextData };
 
-          setNodes((nds) => nds.map((n) => (n.id === s.id ? newSelected : n)));
+          setNodes((nodesState) =>
+            nodesState.map((node) => (node.id === current.id ? nextNode : node)),
+          );
 
-          if (
-            s.type === "options" &&
-            (patch as any).data &&
-            Object.prototype.hasOwnProperty.call((patch as any).data, "options")
-          ) {
-            const opts = ((patch as any).data?.options || []) as unknown[];
-            const handles = new Set(opts.map((_, i: number) => `opt-${i}`));
+          const optionsUpdate = (patch.data as { options?: unknown }).options;
+          if (current.type === "options" && Array.isArray(optionsUpdate)) {
+            const handles = new Set(
+              optionsUpdate.map((_, index) => `opt-${index}`),
+            );
             handles.add("no-match");
-            setEdges((eds) =>
-              eds.filter(
-                (e) =>
+            setEdges((edgeState) =>
+              edgeState.filter(
+                (edge) =>
                   !(
-                    e.source === s.id &&
-                    e.sourceHandle &&
-                    !handles.has(e.sourceHandle)
+                    edge.source === current.id &&
+                    edge.sourceHandle &&
+                    !handles.has(edge.sourceHandle)
                   ),
               ),
             );
           }
 
-          return newSelected;
+          return nextNode;
         });
       },
-      [setNodes, setEdges],
+      [setEdges, setNodes],
     );
 
     const onDrop = useCallback(
-      (e: React.DragEvent) => {
+      (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
         const type = e.dataTransfer.getData("application/wa-node");
-        if (!type) return;
-        const bounds = (rfRef.current as any)?.getBoundingClientRect?.() || {
-          left: 0,
-          top: 0,
-        };
-        const position =
-          rfRef.current?.project?.({
-            x: e.clientX - bounds.left,
-            y: e.clientY - bounds.top,
-          }) || ({ x: 0, y: 0 } as const);
+        if (!isFlowNodeType(type)) return;
+        const bounds = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const projected = rfRef.current?.project?.({
+          x: e.clientX - bounds.left,
+          y: e.clientY - bounds.top,
+        });
+        const position = projected ?? { x: 0, y: 0 };
         const id = makeId();
-        const data = { name: `${type}-${id}`, ...getStarterData(type) };
-        const newNode: Node = {
+        const data = {
+          name: `${type}-${id}`,
+          ...getStarterData(type),
+        } as FlowNode["data"];
+        const newNode: FlowNode = {
           id,
           type,
-          position: {
-            x: position.x,
-            y: position.y,
-          },
+          position,
           data,
         };
         setNodes((nds) => nds.concat(newNode));
@@ -459,11 +500,7 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
 
     // import / export
     const handleImport = useCallback(
-      async (
-        event:
-          | React.ChangeEvent<HTMLInputElement>
-          | { target?: { files?: FileList | File[] | null; value?: string } },
-      ) => {
+      async (event: ImportEvent) => {
         const fileList = event?.target?.files;
         const file =
           fileList && "item" in fileList
@@ -480,10 +517,17 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
         try {
           const text = await file.text();
           const parsed = FlowFileSchema.parse(JSON.parse(text));
-          applyFlow({
-            nodes: parsed.nodes as unknown as Node[],
-            edges: parsed.edges as unknown as Edge[],
-          });
+          const nodesFromFile = parsed.nodes.map((node) => ({
+            ...node,
+            position: {
+              x: node.position?.x ?? 0,
+              y: node.position?.y ?? 0,
+            },
+          })) as FlowNode[];
+          const edgesFromFile = parsed.edges.map((edge) => ({
+            ...edge,
+          })) as FlowEdge[];
+          applyFlow({ nodes: nodesFromFile, edges: edgesFromFile });
           toast.success(
             `Flujo importado${file.name ? ` (${file.name})` : ""}`,
           );
@@ -491,7 +535,7 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
           toast.error("Error al importar: archivo inválido");
         } finally {
           const target = event?.target as HTMLInputElement | undefined;
-          if (target && "value" in target) {
+          if (target) {
             target.value = "";
           }
         }
@@ -612,7 +656,7 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
         }
 
         if (n.type === "goto") {
-          const targetId = (n.data as any)?.targetNodeId;
+          const targetId = n.data?.targetNodeId ?? "";
           if (targetId && !nodes.some((candidate) => candidate.id === targetId)) {
             problems.push(`${n.id}: destino ${targetId} inexistente`);
           }
@@ -648,7 +692,7 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       if (past.length <= 1) return;
       const current = past.pop();
       if (current) historyRef.current.future.push(current);
-      const prev = JSON.parse(past[past.length - 1]);
+      const prev = JSON.parse(past[past.length - 1]) as FlowData;
       setNodes(prev.nodes);
       setEdges(prev.edges);
       setSelected(null);
@@ -659,7 +703,7 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       const next = historyRef.current.future.pop();
       if (!next) return;
       historyRef.current.past.push(next);
-      const state = JSON.parse(next);
+      const state = JSON.parse(next) as FlowData;
       setNodes(state.nodes);
       setEdges(state.edges);
       setSelected(null);
@@ -669,11 +713,12 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
     // keyboard shortcuts
     useEffect(() => {
       const onKey = (e: KeyboardEvent) => {
-        const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+        const targetElement = e.target as HTMLElement | null;
+        const tag = targetElement?.tagName?.toLowerCase();
         const typing =
           tag === "input" ||
           tag === "textarea" ||
-          (e.target as any)?.isContentEditable;
+          targetElement?.isContentEditable === true;
 
         if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
           e.preventDefault();
@@ -720,11 +765,6 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
     const zoomOut = () => rfRef.current?.zoomOut?.();
     const fitView = () => rfRef.current?.fitView?.();
 
-    // track zoom level to show in Topbar
-    const onMoveEnd = (_evt: any, viewport: { zoom: number }) => {
-      if (typeof viewport?.zoom === "number") setZoomLevel(viewport.zoom);
-    };
-
     // export to WA spec (outline)
     const exportForWhatsApp = () => {
       const spec = {
@@ -745,27 +785,28 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       URL.revokeObjectURL(url);
     };
 
-    const memoizedNodeTypes = useMemo(() => {
-      const custom: Record<string, any> = {};
-      for (const [key, NodeType] of Object.entries(nodeTypes)) {
-        custom[key] = (props: any) => (
-          <NodeType
+    const memoizedNodeTypes = useMemo<NodeTypes>(() => {
+      const wrapped: Partial<NodeTypes> = {};
+      const entries = Object.entries(nodeTypes) as [FlowNodeType, NodeRenderer][];
+      entries.forEach(([key, Component]) => {
+        wrapped[key] = (props: NodeProps<FlowNode["data"]>) => (
+          <Component
             {...props}
-            onEdit={() => handleEdit(props)}
-            onDuplicate={() => handleDuplicate(props)}
+            onEdit={() => handleEdit(props.id)}
+            onDuplicate={() => handleDuplicate(props.id)}
             onDelete={() => handleDelete(props.id)}
-            onCopyWebhook={() => handleCopyWebhook(props)}
+            onCopyWebhook={() => handleCopyWebhook(props.id)}
             onCopyId={() => handleCopyId(props.id)}
           />
         );
-      }
-      return custom;
+      });
+      return wrapped as NodeTypes;
     }, [
-      handleEdit,
-      handleDuplicate,
-      handleDelete,
-      handleCopyWebhook,
       handleCopyId,
+      handleCopyWebhook,
+      handleDelete,
+      handleDuplicate,
+      handleEdit,
     ]);
 
     const lastSelIdsRef = useRef<string[]>([]);
@@ -773,21 +814,24 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       a.length === b.length && a.every((id, i) => id === b[i]);
 
     const handleSelectionChange = useCallback(
-      (sel: { nodes?: Node[] } | null) => {
-        const ids = (sel?.nodes || []).map((n) => n.id);
-        if (shallowEqual(ids, lastSelIdsRef.current)) return; // 👈 evita setState redundante
+      (selection: OnSelectionChangeParams | null) => {
+        const ids = (selection?.nodes ?? []).map((node) => node.id);
+        if (shallowEqual(ids, lastSelIdsRef.current)) return;
         lastSelIdsRef.current = ids;
         setSelectedIds(ids);
 
-        const first = (sel?.nodes || [])[0] ?? null;
-        // Evita setSelected si no cambió realmente
-        setSelected((prev) => (prev?.id === first?.id ? prev : first));
+        if (ids.length) {
+          const first = nodes.find((node) => node.id === ids[0]) ?? null;
+          setSelected(first);
+        } else {
+          setSelected(null);
+        }
       },
-      [],
+      [nodes],
     );
 
     const handleMoveEnd = useCallback(
-      (_evt: any, viewport: { zoom: number }) => {
+      (_evt: React.MouseEvent, viewport: Viewport) => {
         if (typeof viewport?.zoom !== "number") return;
         setZoomLevel((prev) => (prev === viewport.zoom ? prev : viewport.zoom));
       },

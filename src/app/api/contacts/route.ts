@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import prisma from "@/lib/prisma";
+import { getAuthPayload } from "@/lib/auth";
 
-const prisma = new PrismaClient();
+export async function GET(request: Request) {
+  const auth = getAuthPayload(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-export async function GET() {
   try {
     const contacts = await prisma.contact.findMany({
+      where: { userId: auth.userId },
       include: {
         tags: {
           include: {
@@ -13,6 +19,7 @@ export async function GET() {
           },
         },
       },
+      orderBy: { updatedAt: "desc" },
     });
     return NextResponse.json(contacts);
   } catch (error) {
@@ -25,35 +32,52 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const auth = getAuthPayload(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = await request.json();
-    const { name, phone, userId, tags } = body;
+    const name = typeof body?.name === "string" ? body.name.trim() : "";
+    const phone = typeof body?.phone === "string" ? body.phone.trim() : "";
+    const tags = Array.isArray(body?.tags) ? body.tags : [];
 
-    // Basic validation
-    if (!name || !phone || !userId) {
+    if (!phone) {
       return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 }
+        { error: "Phone number is required" },
+        { status: 400 },
       );
     }
 
+    const normalizedTags = tags
+      .map((tag: unknown) =>
+        typeof tag === "object" && tag !== null && "name" in tag
+          ? String((tag as { name: unknown }).name).trim()
+          : "",
+      )
+      .filter((tagName: string): tagName is string => tagName.length > 0);
+
+    const uniqueTagNames = Array.from(new Set(normalizedTags));
+
     const newContact = await prisma.contact.create({
       data: {
-        name,
+        name: name || null,
         phone,
-        user: { connect: { id: userId } },
-        tags: tags
-          ? {
-              create: tags.map((tag: { name: string }) => ({
-                tag: {
-                  connectOrCreate: {
-                    where: { name: tag.name },
-                    create: { name: tag.name },
+        user: { connect: { id: auth.userId } },
+        tags:
+          uniqueTagNames.length > 0
+            ? {
+                create: uniqueTagNames.map((tagName) => ({
+                  tag: {
+                    connectOrCreate: {
+                      where: { name: tagName },
+                      create: { name: tagName },
+                    },
                   },
-                },
-              })),
-            }
-          : undefined,
+                })),
+              }
+            : undefined,
       },
       include: {
         tags: { include: { tag: true } },
@@ -62,6 +86,15 @@ export async function POST(request: Request) {
 
     return NextResponse.json(newContact, { status: 201 });
   } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return NextResponse.json(
+        { error: "A contact with that phone already exists" },
+        { status: 409 },
+      );
+    }
     console.error("Error creating contact:", error);
     return NextResponse.json(
       { error: "Internal Server Error" },
