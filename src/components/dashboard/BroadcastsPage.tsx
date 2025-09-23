@@ -60,6 +60,9 @@ interface BroadcastRecipient {
   status: string;
   error?: string | null;
   sentAt?: string | null;
+  statusUpdatedAt?: string | null;
+  messageId?: string | null;
+  conversationId?: string | null;
   contact?: { id: string; name?: string | null; phone: string } | null;
   createdAt?: string;
 }
@@ -100,6 +103,10 @@ const statusLabels: Record<string, string> = {
   Failed: "Fallido",
   Sent: "Enviado",
   Pending: "Pendiente",
+  Delivered: "Entregado",
+  Read: "Leído",
+  Warning: "Advertencia",
+  Queued: "En cola",
 };
 
 const statusVariants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -109,6 +116,10 @@ const statusVariants: Record<string, "default" | "secondary" | "destructive" | "
   Failed: "destructive",
   Sent: "default",
   Pending: "secondary",
+  Delivered: "default",
+  Read: "default",
+  Warning: "secondary",
+  Queued: "secondary",
 };
 
 const flowStatusLabels: Record<string, string> = {
