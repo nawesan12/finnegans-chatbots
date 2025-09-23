@@ -1,4 +1,4 @@
-import { PrismaClient, Session, Prisma } from "@prisma/client";
+import type { Prisma, Session } from "@prisma/client";
 import { z } from "zod";
 import {
   Node,
@@ -15,8 +15,7 @@ import {
   EndDataSchema,
   GoToDataSchema,
 } from "@/components/flow-builder/types";
-
-const prisma = new PrismaClient();
+import prisma from "@/lib/prisma";
 
 // Infer types from Zod schemas
 type TriggerData = z.infer<typeof TriggerDataSchema>;
