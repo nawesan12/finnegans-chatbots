@@ -1,21 +1,21 @@
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 
-import { processWebhookEvent } from "@/lib/meta";
+import { getMetaEnvironmentConfig, processWebhookEvent } from "@/lib/meta";
 import type { MetaWebhookEvent } from "@/lib/meta";
 import prisma from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const META_VERIFY_TOKEN = process.env.META_VERIFY_TOKEN ?? null;
+const envMetaConfig = getMetaEnvironmentConfig();
 
 async function isVerifyTokenValid(token: string | null) {
   if (!token) {
     return false;
   }
 
-  if (META_VERIFY_TOKEN && token === META_VERIFY_TOKEN) {
+  if (envMetaConfig.verifyToken && token === envMetaConfig.verifyToken) {
     return true;
   }
 
@@ -102,18 +102,29 @@ export async function POST(request: Request) {
 
     const user = await prisma.user.findFirst({
       where: { metaPhoneNumberId: phoneNumberId },
-      select: { metaAppSecret: true },
+      select: { id: true, metaAppSecret: true },
     });
 
-    if (!user?.metaAppSecret) {
+    let appSecret = user?.metaAppSecret ?? null;
+
+    if (
+      !appSecret &&
+      envMetaConfig.phoneNumberId &&
+      envMetaConfig.appSecret &&
+      envMetaConfig.phoneNumberId === phoneNumberId
+    ) {
+      appSecret = envMetaConfig.appSecret;
+    }
+
+    if (!appSecret) {
       console.error(
-        "User not found or metaAppSecret not set for phone number ID:",
+        "User/app secret not configured for phone number ID:",
         phoneNumberId,
       );
       return NextResponse.json({ error: "User not configured" }, { status: 404 });
     }
 
-    const hmac = crypto.createHmac("sha256", user.metaAppSecret);
+    const hmac = crypto.createHmac("sha256", appSecret);
     hmac.update(body);
     const expectedSignature = `sha256=${hmac.digest("hex")}`;
 
