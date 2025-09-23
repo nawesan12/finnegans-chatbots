@@ -50,7 +50,6 @@ import {
   HandoffDataSchema,
   EndDataSchema,
   waTextLimit,
-  flowNodeTypes,
   isFlowNodeType,
 } from "./types";
 import type {
@@ -67,6 +66,7 @@ import { Simulator } from "./Simulator";
 import { Topbar } from "./Toolbar";
 import { Palette } from "./Palette";
 import { z } from "zod";
+import { sanitizeFlowDefinition } from "@/lib/flow-schema";
 
 export type { FlowBuilderHandle, FlowData } from "./types";
 
@@ -139,35 +139,6 @@ const defaultEdges: FlowEdge[] = [
 
 const DRAFT_KEY = "flowbuilder_draft_v1";
 
-const FlowNodeSchema = z
-  .object({
-    id: z.string(),
-    type: z.enum(flowNodeTypes),
-    position: z
-      .object({
-        x: z.number().optional(),
-        y: z.number().optional(),
-      })
-      .optional(),
-    data: z.unknown().optional(),
-  })
-  .passthrough();
-
-const FlowEdgeSchema = z
-  .object({
-    id: z.string(),
-    source: z.string(),
-    target: z.string(),
-    sourceHandle: z.string().nullable().optional(),
-    targetHandle: z.string().nullable().optional(),
-  })
-  .passthrough();
-
-const FlowFileSchema = z.object({
-  nodes: z.array(FlowNodeSchema).default([]),
-  edges: z.array(FlowEdgeSchema).default([]),
-});
-
 const deepClone = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map((item) => deepClone(item));
   if (value && typeof value === "object") {
@@ -179,6 +150,23 @@ const deepClone = (value: unknown): unknown => {
     );
   }
   return value;
+};
+
+const toFlowState = (definition: FlowData): { nodes: FlowNode[]; edges: FlowEdge[] } => {
+  const sanitized = sanitizeFlowDefinition(definition);
+  const nextNodes = sanitized.nodes.map((node) => ({
+    ...node,
+    data: deepClone(node.data ?? {}) as FlowNode["data"],
+    position: {
+      x: typeof node.position?.x === "number" ? node.position.x : 0,
+      y: typeof node.position?.y === "number" ? node.position.y : 0,
+    },
+  })) as FlowNode[];
+  const nextEdges = sanitized.edges.map((edge) => ({
+    ...edge,
+  })) as FlowEdge[];
+
+  return { nodes: nextNodes, edges: nextEdges };
 };
 
 const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
@@ -210,9 +198,10 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
     );
 
     const applyFlow = useCallback(
-      (flow: FlowData) => {
-        const nextNodes = flow.nodes.map((node) => cloneNode(node));
-        const nextEdges = flow.edges.map((edge) => ({ ...edge } as FlowEdge));
+      (flow: unknown) => {
+        const { nodes: nextNodes, edges: nextEdges } = toFlowState(
+          sanitizeFlowDefinition(flow),
+        );
 
         historyRef.current.past = [];
         historyRef.current.future = [];
@@ -226,16 +215,13 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
           rfRef.current?.fitView?.({ padding: 0.2 }),
         );
       },
-      [cloneNode, setEdges, setNodes, setSelected, setSelectedIds],
+      [setEdges, setNodes, setSelected, setSelectedIds],
     );
 
     // Load initial flow or draft once
     useEffect(() => {
       if (initialFlow?.nodes && initialFlow?.edges) {
-        applyFlow({
-          nodes: initialFlow.nodes as FlowNode[],
-          edges: initialFlow.edges as FlowEdge[],
-        });
+        applyFlow(initialFlow);
         didRestoreRef.current = true;
         return;
       }
@@ -245,19 +231,8 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       try {
         const raw = localStorage.getItem(DRAFT_KEY);
         if (!raw) return;
-        const parsed = FlowFileSchema.safeParse(JSON.parse(raw));
-        if (!parsed.success) return;
-        const parsedNodes = parsed.data.nodes.map((node) => ({
-          ...node,
-          position: {
-            x: node.position?.x ?? 0,
-            y: node.position?.y ?? 0,
-          },
-        })) as FlowNode[];
-        const parsedEdges = parsed.data.edges.map((edge) => ({
-          ...edge,
-        })) as FlowEdge[];
-        applyFlow({ nodes: parsedNodes, edges: parsedEdges });
+        const parsed = sanitizeFlowDefinition(JSON.parse(raw));
+        applyFlow(parsed);
       } catch {
         // ignore drafts con errores
       } finally {
@@ -267,12 +242,14 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
 
     // Expose ref API
     useImperativeHandle(ref, () => ({
-      getFlowData: () => ({ nodes, edges }),
+      getFlowData: () => sanitizeFlowDefinition({ nodes, edges }),
     }));
 
     // Autosave draft
     useEffect(() => {
-      const payload = JSON.stringify({ nodes, edges });
+      const payload = JSON.stringify(
+        sanitizeFlowDefinition({ nodes, edges }),
+      );
       try {
         localStorage.setItem(DRAFT_KEY, payload);
       } catch {
@@ -516,18 +493,8 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
 
         try {
           const text = await file.text();
-          const parsed = FlowFileSchema.parse(JSON.parse(text));
-          const nodesFromFile = parsed.nodes.map((node) => ({
-            ...node,
-            position: {
-              x: node.position?.x ?? 0,
-              y: node.position?.y ?? 0,
-            },
-          })) as FlowNode[];
-          const edgesFromFile = parsed.edges.map((edge) => ({
-            ...edge,
-          })) as FlowEdge[];
-          applyFlow({ nodes: nodesFromFile, edges: edgesFromFile });
+          const parsed = sanitizeFlowDefinition(JSON.parse(text));
+          applyFlow(parsed);
           toast.success(
             `Flujo importado${file.name ? ` (${file.name})` : ""}`,
           );
@@ -544,7 +511,11 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
     );
 
     const handleExport = useCallback(() => {
-      const payload = JSON.stringify({ nodes, edges }, null, 2);
+      const payload = JSON.stringify(
+        sanitizeFlowDefinition({ nodes, edges }),
+        null,
+        2,
+      );
       const blob = new Blob([payload], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -680,7 +651,9 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
 
     // undo / redo (snapshot stack)
     useEffect(() => {
-      const snapshot = JSON.stringify({ nodes, edges });
+      const snapshot = JSON.stringify(
+        sanitizeFlowDefinition({ nodes, edges }),
+      );
       const past = historyRef.current.past;
       if (past[past.length - 1] === snapshot) return;
       historyRef.current.past = [...past, snapshot].slice(-200);
@@ -692,9 +665,10 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       if (past.length <= 1) return;
       const current = past.pop();
       if (current) historyRef.current.future.push(current);
-      const prev = JSON.parse(past[past.length - 1]) as FlowData;
-      setNodes(prev.nodes);
-      setEdges(prev.edges);
+      const prev = sanitizeFlowDefinition(JSON.parse(past[past.length - 1]));
+      const { nodes: prevNodes, edges: prevEdges } = toFlowState(prev);
+      setNodes(prevNodes);
+      setEdges(prevEdges);
       setSelected(null);
       setSelectedIds([]);
     }, [setEdges, setNodes, setSelected, setSelectedIds]);
@@ -703,9 +677,10 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       const next = historyRef.current.future.pop();
       if (!next) return;
       historyRef.current.past.push(next);
-      const state = JSON.parse(next) as FlowData;
-      setNodes(state.nodes);
-      setEdges(state.edges);
+      const state = sanitizeFlowDefinition(JSON.parse(next));
+      const { nodes: nextNodes, edges: nextEdges } = toFlowState(state);
+      setNodes(nextNodes);
+      setEdges(nextEdges);
       setSelected(null);
       setSelectedIds([]);
     }, [setEdges, setNodes, setSelected, setSelectedIds]);
@@ -767,10 +742,10 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
 
     // export to WA spec (outline)
     const exportForWhatsApp = () => {
+      const definition = sanitizeFlowDefinition({ nodes, edges });
       const spec = {
         version: 1,
-        nodes,
-        edges,
+        ...definition,
         notes:
           "Exported for WA; map 'message' to /messages endpoint bodies; 'media' to media messages; 'options' to interactive quick replies, etc.",
       };
