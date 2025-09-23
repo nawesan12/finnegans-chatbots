@@ -1,5 +1,43 @@
+import type { Contact, Flow, Session as PrismaSession } from "@prisma/client";
+
 import prisma from "@/lib/prisma";
 import { executeFlow } from "./flow-executor";
+
+export type MetaEnvironmentConfig = {
+  verifyToken: string | null;
+  appSecret: string | null;
+  accessToken: string | null;
+  phoneNumberId: string | null;
+  businessAccountId: string | null;
+};
+
+export function getMetaEnvironmentConfig(): MetaEnvironmentConfig {
+  return {
+    verifyToken:
+      process.env.META_VERIFY_TOKEN ?? process.env.WHATSAPP_VERIFY_TOKEN ?? null,
+    appSecret:
+      process.env.META_APP_SECRET ??
+      process.env.WHATSAPP_APP_SECRET ??
+      null,
+    accessToken:
+      process.env.META_ACCESS_TOKEN ??
+      process.env.WHATSAPP_KEY ??
+      null,
+    phoneNumberId:
+      process.env.META_PHONE_NUMBER_ID ??
+      process.env.WHATSAPP_NUMBER_ID ??
+      null,
+    businessAccountId:
+      process.env.META_BUSINESS_ACCOUNT_ID ??
+      process.env.ACCOUNT_NUMBER_ID ??
+      null,
+  };
+}
+
+type SessionWithRelations = PrismaSession & {
+  flow: Flow;
+  contact: Contact;
+};
 
 /* ===== Tipos del webhook de Meta (simplificados y seguros) ===== */
 type WAMessageType =
@@ -39,10 +77,27 @@ interface WAMessage {
   // otros campos posibles (image, video, etc) omitidos
 }
 
+interface WAStatus {
+  id?: string;
+  status?: string;
+  timestamp?: string;
+  recipient_id?: string;
+  conversation?: Record<string, unknown>;
+  pricing?: Record<string, unknown>;
+  errors?: Array<Record<string, unknown>>;
+}
+
 interface WAChangeValue {
   messages?: WAMessage[];
-  metadata: { phone_number_id: string };
-  // estados, statuses, etc., ignorados para simplicidad
+  statuses?: WAStatus[];
+  metadata: {
+    phone_number_id: string;
+    display_phone_number?: string;
+    wa_id?: string;
+    whatsapp_business_account_id?: string;
+  };
+  contacts?: Array<Record<string, unknown>>;
+  errors?: Array<Record<string, unknown>>;
 }
 
 interface WAEntry {
@@ -56,6 +111,78 @@ export interface MetaWebhookEvent {
 
 /* ===== Utilidades ===== */
 const toLcTrim = (s?: string) => (s ?? "").trim().toLowerCase();
+
+async function resolveUserForPhoneNumber(phoneNumberId: string) {
+  const user = await prisma.user.findFirst({
+    where: { metaPhoneNumberId: phoneNumberId },
+  });
+
+  if (user) {
+    return user;
+  }
+
+  const envConfig = getMetaEnvironmentConfig();
+
+  if (
+    envConfig.phoneNumberId &&
+    toLcTrim(envConfig.phoneNumberId) === toLcTrim(phoneNumberId)
+  ) {
+    const fallbackUser = await prisma.user.findFirst({
+      orderBy: { createdAt: "asc" },
+    });
+
+    if (fallbackUser) {
+      console.warn(
+        "Falling back to the first user for phone number ID", 
+        phoneNumberId,
+        "based on environment configuration.",
+      );
+      return fallbackUser;
+    }
+  }
+
+  return null;
+}
+
+const LOG_STATUS_MAP: Record<string, string> = {
+  Active: "In Progress",
+  Paused: "In Progress",
+  Completed: "Completed",
+  Errored: "Error",
+};
+
+async function recordSessionSnapshot(sessionId: string) {
+  const sessionSnapshot = await prisma.session.findUnique({
+    where: { id: sessionId },
+    select: {
+      id: true,
+      status: true,
+      context: true,
+      contactId: true,
+      flowId: true,
+    },
+  });
+
+  if (!sessionSnapshot) {
+    return;
+  }
+
+  const logStatus =
+    LOG_STATUS_MAP[sessionSnapshot.status] ?? sessionSnapshot.status ?? "In Progress";
+
+  try {
+    await prisma.log.create({
+      data: {
+        status: logStatus,
+        context: sessionSnapshot.context ?? {},
+        contactId: sessionSnapshot.contactId,
+        flowId: sessionSnapshot.flowId,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to persist session snapshot:", error);
+  }
+}
 
 /** Extrae un texto “humano” del mensaje (texto o título de botón/lista). */
 function extractUserText(msg: WAMessage): string | null {
@@ -85,9 +212,7 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
       if (!phoneNumberId || !messages.length) continue;
 
       // Resolvemos el “owner” del número
-      const user = await prisma.user.findFirst({
-        where: { metaPhoneNumberId: phoneNumberId },
-      });
+      const user = await resolveUserForPhoneNumber(phoneNumberId);
       if (!user) {
         console.error("User not found for phone number ID:", phoneNumberId);
         continue;
@@ -103,15 +228,9 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
         const text = textRaw; // no transformamos acá (executeFlow ya hace matching robusto)
 
         // Contacto: upsert seguro para ese usuario
-        let contact = await prisma.contact.findUnique({
-          where: { phone: from },
+        let contact = await prisma.contact.findFirst({
+          where: { phone: from, userId: user.id },
         });
-        if (contact && contact.userId !== user.id) {
-          console.error(
-            `Contact with phone ${from} exists but belongs to another user.`,
-          );
-          continue;
-        }
         if (!contact) {
           contact = await prisma.contact.create({
             data: { phone: from, userId: user.id },
@@ -126,7 +245,7 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
             },
             include: { flow: true, contact: true },
             orderBy: { updatedAt: "desc" },
-          })) || null;
+          })) as SessionWithRelations | null;
 
         let flow = existingSession?.flow ?? null;
 
@@ -142,7 +261,7 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
           continue;
         }
 
-        let session = existingSession;
+        let session: SessionWithRelations | null = existingSession;
 
         if (!session || session.flowId !== flow.id) {
           session =
@@ -151,14 +270,14 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
                 contactId_flowId: { contactId: contact.id, flowId: flow.id },
               },
               include: { flow: true, contact: true },
-            })) || null;
+            })) as SessionWithRelations | null;
         }
 
         if (!session) {
           session = await prisma.session.create({
             data: { contactId: contact.id, flowId: flow.id, status: "Active" },
             include: { flow: true, contact: true },
-          });
+          }) as SessionWithRelations;
         } else if (
           session.status === "Completed" ||
           session.status === "Errored"
@@ -167,12 +286,12 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
             where: { id: session.id },
             data: { status: "Active", currentNodeId: null, context: {} },
             include: { flow: true, contact: true },
-          });
-        } else if (!(session as any).flow || !(session as any).contact) {
+          }) as SessionWithRelations;
+        } else if (!session.flow || !session.contact) {
           session = await prisma.session.findUnique({
             where: { id: session.id },
             include: { flow: true, contact: true },
-          });
+          }) as SessionWithRelations | null;
         }
 
         try {
@@ -194,18 +313,29 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
               : null,
           };
 
+          if (!session) {
+            console.error("Session could not be resolved for contact", contact.id);
+            continue;
+          }
+
           await executeFlow(
-            session!,
+            session,
             text,
             (uid, to, payload) => sendMessage(uid, to, payload),
             incomingMeta,
           );
         } catch (err) {
           console.error("executeFlow error:", err);
-          await prisma.session.update({
-            where: { id: session!.id },
-            data: { status: "Errored" },
-          });
+          if (session) {
+            await prisma.session.update({
+              where: { id: session.id },
+              data: { status: "Errored" },
+            });
+          }
+        } finally {
+          if (session) {
+            await recordSessionSnapshot(session.id);
+          }
         }
       }
     }
@@ -236,19 +366,24 @@ export async function sendMessage(
     select: { metaAccessToken: true, metaPhoneNumberId: true },
   });
 
-  if (!user?.metaAccessToken || !user?.metaPhoneNumberId) {
+  const envConfig = getMetaEnvironmentConfig();
+
+  const accessToken = user?.metaAccessToken ?? envConfig.accessToken;
+  const phoneNumberId = user?.metaPhoneNumberId ?? envConfig.phoneNumberId;
+
+  if (!accessToken || !phoneNumberId) {
     console.error("Missing Meta API credentials for user:", userId);
     return false;
   }
 
-  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${user.metaPhoneNumberId}/messages`;
+  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`;
   const headers = {
-    Authorization: `Bearer ${user.metaAccessToken}`,
+    Authorization: `Bearer ${accessToken}`,
     "Content-Type": "application/json",
   };
 
   // Construcción del cuerpo según tipo
-  let body: any;
+  let body: Record<string, unknown> | undefined;
   switch (message.type) {
     case "text":
       body = {
@@ -314,7 +449,7 @@ export async function sendMessage(
     const res = await fetch(url, {
       method: "POST",
       headers,
-      body: JSON.stringify(body),
+      body: JSON.stringify(body ?? {}),
       signal: ctrl.signal,
     });
 
@@ -328,7 +463,7 @@ export async function sendMessage(
       return false;
     }
   } catch (error) {
-    if ((error as any)?.name === "AbortError") {
+    if (error instanceof Error && error.name === "AbortError") {
       console.error("Error sending message: request timeout");
       return false;
     }
