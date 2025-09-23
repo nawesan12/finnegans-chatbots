@@ -1,5 +1,6 @@
 import { Node, Edge } from "reactflow";
 import dagre from "dagre";
+import type { FlowNodeDataMap, FlowNodeType } from "./types";
 
 /** Defaults – se usan si el nodo no declara width/height */
 const DEFAULT_NODE_WIDTH = 280;
@@ -22,17 +23,32 @@ type LayoutOptions = {
 };
 
 /** Obtiene el tamaño del nodo desde distintas fuentes, con fallback seguro */
-const getNodeSize = (n: Node) => {
-  // Prioridad: propiedades measures de React Flow -> style -> defaults
-  const width =
-    (typeof (n as any).width === "number" && (n as any).width) ||
-    (typeof n?.style?.width === "number" && (n.style!.width as number)) ||
-    DEFAULT_NODE_WIDTH;
+const parseStyleDimension = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+};
 
-  const height =
-    (typeof (n as any).height === "number" && (n as any).height) ||
-    (typeof n?.style?.height === "number" && (n.style!.height as number)) ||
-    DEFAULT_NODE_HEIGHT;
+const getNodeSize = (n: Node): { width: number; height: number } => {
+  let width = typeof n.width === "number" ? n.width : DEFAULT_NODE_WIDTH;
+  let height = typeof n.height === "number" ? n.height : DEFAULT_NODE_HEIGHT;
+
+  const styleWidth = parseStyleDimension(n.style?.width);
+  const styleHeight = parseStyleDimension(n.style?.height);
+
+  if (styleWidth !== null) {
+    width = styleWidth;
+  }
+  if (styleHeight !== null) {
+    height = styleHeight;
+  }
 
   return { width, height };
 };
@@ -131,14 +147,17 @@ export const makeId = () => {
   return Math.random().toString(36).slice(2, 11);
 };
 
-export const getStarterData = (type: string) => {
-  // Mantiene las mismas keys que ya usás, con defaults razonables
-  const starters: Record<string, unknown> = {
+export const getStarterData = <T extends FlowNodeType>(
+  type: T,
+): Partial<FlowNodeDataMap[T]> => {
+  const starters: { [K in FlowNodeType]: Partial<FlowNodeDataMap[K]> } = {
     trigger: { keyword: "/start" },
     message: { text: "Nuevo mensaje", useTemplate: false },
     options: { options: ["Opcion 1", "Opcion 2"] },
     delay: { seconds: 1 },
-    condition: { expression: "context.input?.toLowerCase?.().includes('ok')" },
+    condition: {
+      expression: "context.input?.toLowerCase?.().includes('ok')",
+    },
     api: {
       url: "https://api.example.com/resource",
       method: "POST",
@@ -156,5 +175,5 @@ export const getStarterData = (type: string) => {
     goto: { targetNodeId: "" },
     end: { reason: "end" },
   };
-  return starters[type] || {};
+  return starters[type];
 };

@@ -1,35 +1,48 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { MoreVertical } from "lucide-react";
 import { itemVariants } from "@/lib/animations";
 import Table from "@/components/dashboard/Table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+import { useAuthStore } from "@/lib/store";
 
 const LogsPage = () => {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const token = useAuthStore((state) => state.token);
+  const hasHydrated = useAuthStore((state) => state.hasHydrated);
+
+  const fetchLogs = useCallback(async () => {
+    if (!token) {
+      setLogs([]);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await fetch("/api/logs", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        throw new Error("Failed to fetch logs");
+      }
+      const data = await response.json();
+      setLogs(data);
+    } catch (error) {
+      toast.error((error as Error)?.message ?? "Error al obtener registros");
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
 
   useEffect(() => {
-    const fetchLogs = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch("/api/logs");
-        if (!response.ok) {
-          throw new Error("Failed to fetch logs");
-        }
-        const data = await response.json();
-        setLogs(data);
-      } catch (error) {
-        //@ts-expect-error bla
-        toast.error(error.message);
-      } finally {
-        setLoading(false);
-      }
-    };
+    if (!hasHydrated) {
+      return;
+    }
     fetchLogs();
-  }, []);
+  }, [fetchLogs, hasHydrated]);
 
   const columns = [
     {

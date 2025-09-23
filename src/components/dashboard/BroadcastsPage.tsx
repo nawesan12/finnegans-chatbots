@@ -146,6 +146,8 @@ const FALLBACK_PREVIEW_CONTACT: { name: string; phone: string } = {
 
 const BroadcastsPage = () => {
   const { user } = useAuthStore();
+  const token = useAuthStore((state) => state.token);
+  const hasHydrated = useAuthStore((state) => state.hasHydrated);
   const router = useRouter();
   const searchParams = useSearchParams();
   const [contacts, setContacts] = useState<ContactItem[]>([]);
@@ -178,9 +180,16 @@ const BroadcastsPage = () => {
   );
 
   const fetchContacts = useCallback(async () => {
+    if (!token) {
+      setContacts([]);
+      return;
+    }
+
     try {
       setLoadingContacts(true);
-      const response = await fetch("/api/contacts");
+      const response = await fetch("/api/contacts", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (!response.ok) {
         throw new Error("No se pudieron cargar los contactos");
       }
@@ -192,13 +201,15 @@ const BroadcastsPage = () => {
     } finally {
       setLoadingContacts(false);
     }
-  }, []);
+  }, [token]);
 
   const fetchBroadcasts = useCallback(async () => {
-    if (!user?.id) return;
+    if (!user?.id || !token) return;
     try {
       setLoadingBroadcasts(true);
-      const response = await fetch(`/api/broadcasts?userId=${user.id}`);
+      const response = await fetch(`/api/broadcasts`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (!response.ok) {
         throw new Error("No se pudieron obtener las campañas");
       }
@@ -211,10 +222,10 @@ const BroadcastsPage = () => {
     } finally {
       setLoadingBroadcasts(false);
     }
-  }, [user?.id]);
+  }, [token, user?.id]);
 
   const fetchFlows = useCallback(async () => {
-    if (!user?.id) {
+    if (!user?.id || !token) {
       setFlows([]);
       setSelectedFlowId("");
       return;
@@ -222,7 +233,9 @@ const BroadcastsPage = () => {
 
     try {
       setLoadingFlows(true);
-      const response = await fetch(`/api/flows?userId=${user.id}`);
+      const response = await fetch(`/api/flows`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (!response.ok) {
         throw new Error("No se pudieron cargar los flujos");
       }
@@ -252,16 +265,21 @@ const BroadcastsPage = () => {
     } finally {
       setLoadingFlows(false);
     }
-  }, [user?.id]);
+  }, [token, user?.id]);
 
   useEffect(() => {
-    if (!user?.id) {
+    if (!hasHydrated) {
+      return;
+    }
+
+    if (!user?.id || !token) {
       setContacts([]);
       setBroadcasts([]);
       setFlows([]);
       setSelectedFlowId("");
       return;
     }
+
     fetchContacts();
     fetchBroadcasts();
     fetchFlows();
@@ -269,6 +287,8 @@ const BroadcastsPage = () => {
     fetchBroadcasts,
     fetchContacts,
     fetchFlows,
+    hasHydrated,
+    token,
     user?.id,
   ]);
 
@@ -300,6 +320,18 @@ const BroadcastsPage = () => {
     const timeoutId = window.setTimeout(() => setPreviewCopied(false), 2000);
     return () => window.clearTimeout(timeoutId);
   }, [previewCopied]);
+
+  useEffect(() => {
+    const handler = () => {
+      if (!token) {
+        return;
+      }
+      void Promise.all([fetchContacts(), fetchBroadcasts()]);
+    };
+
+    window.addEventListener("contacts:updated", handler);
+    return () => window.removeEventListener("contacts:updated", handler);
+  }, [fetchBroadcasts, fetchContacts, token]);
 
   const tags = useMemo(() => {
     const set = new Set<string>();
@@ -629,9 +661,11 @@ const BroadcastsPage = () => {
       }
       const response = await fetch("/api/broadcasts", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: token ? `Bearer ${token}` : "",
+        },
         body: JSON.stringify({
-          userId: user.id,
           title: title.trim() || null,
           message,
           sendToAll,
@@ -665,7 +699,6 @@ const BroadcastsPage = () => {
 
   const exampleCurl = useMemo(() => {
     const payload = {
-      userId: "USER_ID",
       title: "Campaña de bienvenida",
       message: "Hola! Te damos la bienvenida a nuestra comunidad",
       sendToAll: true,
@@ -673,7 +706,7 @@ const BroadcastsPage = () => {
       flowId: "FLOW_ID",
     };
 
-    return `curl -X POST https://tu-dominio.com/api/broadcasts \\n  -H "Content-Type: application/json" \\n  -d '${JSON.stringify(payload, null, 2)}'`;
+    return `curl -X POST https://tu-dominio.com/api/broadcasts \\n  -H "Content-Type: application/json" \\n  -H "Authorization: Bearer YOUR_TOKEN" \\n  -d '${JSON.stringify(payload, null, 2)}'`;
   }, []);
 
   return (

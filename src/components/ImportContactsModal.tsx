@@ -54,6 +54,7 @@ const ImportContactsModal = ({
       // Here you would typically parse the file and add contacts
       console.log("Importing file:", file.name);
       setUploadStatus("success");
+      window.dispatchEvent(new CustomEvent("contacts:updated"));
       setTimeout(() => {
         handleClose();
       }, 1500);

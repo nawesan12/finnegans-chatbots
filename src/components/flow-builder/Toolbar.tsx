@@ -18,9 +18,13 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+type ImportEvent =
+  | React.ChangeEvent<HTMLInputElement>
+  | { target?: { files?: FileList | File[] | null; value?: string } };
+
 type TopbarProps = {
   onNew: () => void;
-  onImport: (e: React.ChangeEvent<HTMLInputElement> | any) => void;
+  onImport: (event: ImportEvent) => void;
   onExport: () => Promise<void> | void;
   onValidate: () => void;
   onAutoLayout: () => void;
@@ -77,18 +81,18 @@ export function Topbar({
     }
   };
 
-  const handleExport = async () => {
-    try {
-      setBusy(true);
-      const maybe = onExport?.();
-      if (maybe instanceof Promise) await maybe;
-      toast.success(`Exportado (${exportName}.json)`);
-    } catch (e) {
-      toast.error("Error al exportar");
-    } finally {
-      setBusy(false);
-    }
-  };
+    const handleExport = useCallback(async () => {
+      try {
+        setBusy(true);
+        const maybe = onExport?.();
+        if (maybe instanceof Promise) await maybe;
+        toast.success(`Exportado (${exportName}.json)`);
+      } catch {
+        toast.error("Error al exportar");
+      } finally {
+        setBusy(false);
+      }
+    }, [exportName, onExport]);
 
   // --- Drag & drop para importar JSON ---
   const handleDragOver = (e: React.DragEvent) => {
@@ -109,7 +113,9 @@ export function Topbar({
       return;
     }
     // Creamos un evento sintético con el file, manteniendo compat con tu onImport
-    const synthetic = { target: { files: [file] } };
+    const synthetic: ImportEvent = {
+      target: { files: [file] as File[] },
+    };
     onImport?.(synthetic);
     toast.success(`Importando ${file.name}…`);
   };
@@ -121,7 +127,7 @@ export function Topbar({
       const el = e.target as HTMLElement;
       const tag = el?.tagName?.toLowerCase();
       const typing =
-        tag === "input" || tag === "textarea" || (el as any)?.isContentEditable;
+        tag === "input" || tag === "textarea" || el?.isContentEditable;
       const mod = e.metaKey || e.ctrlKey;
 
       if (mod && e.key.toLowerCase() === "o") {
@@ -173,16 +179,17 @@ export function Topbar({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [
-    onNew,
-    onAutoLayout,
-    onValidate,
-    onUndo,
-    onRedo,
-    zoomIn,
-    zoomOut,
-    fitView,
-  ]);
+    }, [
+      handleExport,
+      onNew,
+      onAutoLayout,
+      onValidate,
+      onUndo,
+      onRedo,
+      zoomIn,
+      zoomOut,
+      fitView,
+    ]);
 
   const zoomLabel = useMemo(
     () =>

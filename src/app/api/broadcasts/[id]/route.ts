@@ -1,15 +1,19 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import prisma from "@/lib/prisma";
+import { getAuthPayload } from "@/lib/auth";
 
 export async function GET(
   _request: Request,
   { params }: { params: { id: string } },
 ) {
+  const auth = getAuthPayload(_request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const broadcast = await prisma.broadcast.findUnique({
-      where: { id: params.id },
+    const broadcast = await prisma.broadcast.findFirst({
+      where: { id: params.id, userId: auth.userId },
       include: {
         recipients: {
           orderBy: { createdAt: "asc" },

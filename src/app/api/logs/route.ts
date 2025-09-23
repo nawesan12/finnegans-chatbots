@@ -1,14 +1,22 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import prisma from "@/lib/prisma";
+import { getAuthPayload } from "@/lib/auth";
 
-const prisma = new PrismaClient();
+export async function GET(request: Request) {
+  const auth = getAuthPayload(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-export async function GET() {
   try {
+    const { searchParams } = new URL(request.url);
+    const limitParam = searchParams.get("limit");
+    const take = limitParam ? Math.min(Number(limitParam) || 0, 50) : undefined;
+
     const logs = await prisma.log.findMany({
-      orderBy: {
-        createdAt: "desc",
-      },
+      where: { flow: { userId: auth.userId } },
+      orderBy: { createdAt: "desc" },
+      take: take && take > 0 ? take : undefined,
       include: {
         contact: true,
         flow: true,

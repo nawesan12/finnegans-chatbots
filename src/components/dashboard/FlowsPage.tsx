@@ -71,6 +71,8 @@ const statusFilters: { value: StatusFilter; label: string }[] = [
 
 const FlowsPage = () => {
   const { user } = useAuthStore();
+  const token = useAuthStore((state) => state.token);
+  const hasHydrated = useAuthStore((state) => state.hasHydrated);
   const [flows, setFlows] = useState<FlowWithCounts[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [editingFlow, setEditingFlow] = useState<EditingFlow>(null);
@@ -154,7 +156,7 @@ const FlowsPage = () => {
   }, [editingFlow?.id, router]);
 
   const fetchFlows = useCallback(async () => {
-    if (!user?.id) {
+    if (!user?.id || !token) {
       setFlows([]);
       setLoading(false);
       return;
@@ -162,7 +164,9 @@ const FlowsPage = () => {
 
     try {
       setLoading(true);
-      const response = await fetch(`/api/flows?userId=${user.id}`);
+      const response = await fetch(`/api/flows`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (!response.ok) {
         throw new Error("No se pudieron obtener los flujos");
       }
@@ -175,11 +179,19 @@ const FlowsPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [token, user?.id]);
 
   useEffect(() => {
+    if (!hasHydrated) {
+      return;
+    }
+
+    if (!user?.id || !token) {
+      return;
+    }
+
     fetchFlows();
-  }, [fetchFlows]);
+  }, [fetchFlows, hasHydrated, token, user?.id]);
 
   useEffect(() => {
     const openParam = searchParams.get("open");
@@ -321,14 +333,16 @@ const FlowsPage = () => {
 
       const response = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: token ? `Bearer ${token}` : "",
+        },
         body: JSON.stringify({
           name: trimmedName,
           trigger: normalizedTrigger,
           status: editingFlow.status ?? "Draft",
           definition: flowData,
           phoneNumber: normalizedPhone,
-          userId: user.id,
         }),
       });
 
@@ -362,7 +376,10 @@ const FlowsPage = () => {
         setUpdatingStatusId(flowId);
         const response = await fetch(`/api/flows/${flowId}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: token ? `Bearer ${token}` : "",
+          },
           body: JSON.stringify({
             name: flow.name,
             trigger: flow.trigger,
@@ -393,7 +410,7 @@ const FlowsPage = () => {
         setUpdatingStatusId(null);
       }
     },
-    [flows],
+    [flows, token],
   );
 
   const columns = useMemo(

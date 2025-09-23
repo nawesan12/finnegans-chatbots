@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { useAuthStore } from "@/lib/store";
 
 type AddContactModalProps = {
   open: boolean;
@@ -16,13 +17,22 @@ const AddContactModal = ({ open, onOpenChange, userId }: AddContactModalProps) =
   const [phone, setPhone] = useState("");
   const [tags, setTags] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const token = useAuthStore((state) => state.token);
 
   const handleSubmit = async () => {
+    if (!token) {
+      toast.error("No se pudo autenticar la sesión actual");
+      return;
+    }
+
     try {
       setSubmitting(true);
       const response = await fetch("/api/contacts", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           name,
           phone,
@@ -40,6 +50,7 @@ const AddContactModal = ({ open, onOpenChange, userId }: AddContactModalProps) =
       setPhone("");
       setTags("");
       onOpenChange(false);
+      window.dispatchEvent(new CustomEvent("contacts:updated"));
     } catch (err) {
       //@ts-expect-error err
       toast.error(err.message || "Error creating contact");

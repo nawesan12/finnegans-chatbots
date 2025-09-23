@@ -1,20 +1,25 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { Prisma } from "@prisma/client";
+import prisma from "@/lib/prisma";
+import { getAuthPayload } from "@/lib/auth";
 
 export async function GET(request: Request) {
+  const auth = getAuthPayload(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get("userId");
     const status = searchParams.get("status");
 
-    const where: Record<string, unknown> = {};
-    if (userId) where.userId = userId;
+    const where: Prisma.FlowWhereInput = {
+      userId: auth.userId,
+    };
     if (status) where.status = status;
 
     const flows = await prisma.flow.findMany({
-      where: Object.keys(where).length ? where : undefined,
+      where,
       orderBy: {
         updatedAt: "desc",
       },
@@ -38,20 +43,23 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const auth = getAuthPayload(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = await request.json();
-    const { name, trigger, status, definition, userId, phoneNumber } = body;
+    const name = typeof body?.name === "string" ? body.name.trim() : "";
+    const trigger = typeof body?.trigger === "string" ? body.trigger : "";
+    const status = typeof body?.status === "string" ? body.status : "";
+    const definition = body?.definition ?? {};
+    const phoneNumber =
+      typeof body?.phoneNumber === "string" && body.phoneNumber.trim().length
+        ? body.phoneNumber.trim()
+        : null;
 
-    console.log("Received data:", {
-      name,
-      trigger,
-      status,
-      definition,
-      userId,
-      phoneNumber,
-    });
-
-    if (!name || !userId) {
+    if (!name) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 },
@@ -63,9 +71,17 @@ export async function POST(request: Request) {
         name,
         trigger: trigger || "default",
         status: status || "Draft",
-        definition: definition || {},
-        phoneNumber: phoneNumber,
-        user: { connect: { id: userId } },
+        definition: definition ?? {},
+        phoneNumber,
+        user: { connect: { id: auth.userId } },
+      },
+      include: {
+        _count: {
+          select: {
+            broadcasts: true,
+            sessions: true,
+          },
+        },
       },
     });
 

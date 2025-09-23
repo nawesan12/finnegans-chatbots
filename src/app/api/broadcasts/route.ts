@@ -1,16 +1,25 @@
 import { NextResponse } from "next/server";
-import { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { sendMessage } from "@/lib/meta";
-
-const prisma = new PrismaClient();
+import prisma from "@/lib/prisma";
+import { getAuthPayload } from "@/lib/auth";
 
 export async function GET(request: Request) {
+  const auth = getAuthPayload(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId");
 
+    if (userId && userId !== auth.userId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const broadcasts = await prisma.broadcast.findMany({
-      where: userId ? { userId } : undefined,
+      where: { userId: auth.userId },
       orderBy: { createdAt: "desc" },
       include: {
         recipients: {
@@ -35,10 +44,14 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const auth = getAuthPayload(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = await request.json();
     const {
-      userId,
       title,
       message,
       sendToAll,
@@ -46,13 +59,6 @@ export async function POST(request: Request) {
       filterTag,
       flowId,
     } = body ?? {};
-
-    if (!userId || typeof userId !== "string") {
-      return NextResponse.json(
-        { error: "User ID is required" },
-        { status: 400 },
-      );
-    }
 
     if (!message || typeof message !== "string" || !message.trim()) {
       return NextResponse.json(
@@ -79,7 +85,7 @@ export async function POST(request: Request) {
         : null;
 
     const flow = await prisma.flow.findFirst({
-      where: { id: flowId, userId },
+      where: { id: flowId, userId: auth.userId },
       select: { id: true, name: true },
     });
 
@@ -95,7 +101,7 @@ export async function POST(request: Request) {
     if (sendToAll) {
       contacts = await prisma.contact.findMany({
         where: {
-          userId,
+          userId: auth.userId,
           ...(normalizedTag
             ? {
                 tags: {
@@ -121,7 +127,7 @@ export async function POST(request: Request) {
       contacts = await prisma.contact.findMany({
         where: {
           id: { in: contactIds },
-          userId,
+          userId: auth.userId,
           ...(normalizedTag
             ? {
                 tags: {
@@ -152,7 +158,7 @@ export async function POST(request: Request) {
         filterTag: normalizedTag,
         status: "Processing",
         totalRecipients: contacts.length,
-        user: { connect: { id: userId } },
+        user: { connect: { id: auth.userId } },
         flow: { connect: { id: flow.id } },
         recipients: {
           create: contacts.map((contact) => ({
@@ -222,7 +228,7 @@ export async function POST(request: Request) {
       }
 
       try {
-        const sendResult = await sendMessage(userId, contact.phone, {
+        const sendResult = await sendMessage(auth.userId, contact.phone, {
           type: "text",
           text: normalizedMessage,
         });

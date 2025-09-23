@@ -1,5 +1,5 @@
 "use client";
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
 import { Trash2, Plus, MoveUpRight } from "lucide-react";
+import type { FlowNode } from "./types";
 import { waTextLimit } from "./types";
 import {
   Select,
@@ -19,16 +20,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-// --- utils ---
-type AnyNode = {
-  id: string;
-  type: string;
-  data: Record<string, any>;
-};
-
 type InspectorProps = {
-  selectedNode: AnyNode | null;
-  onChange: (partial: Partial<AnyNode>) => void;
+  selectedNode: FlowNode | null;
+  onChange: (partial: { data: FlowNode["data"] }) => void;
 };
 
 const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
@@ -42,25 +36,32 @@ const useDebounced = <T,>(value: T, delay = 180) => {
   return v;
 };
 
-const set = (obj: any, path: string, val: any) => {
+const setNestedValue = (
+  obj: FlowNode["data"] | undefined,
+  path: string,
+  val: unknown,
+): FlowNode["data"] => {
   const parts = path.split(".");
-  const clone = structuredClone(obj ?? {});
-  let cur = clone;
-  for (let i = 0; i < parts.length - 1; i++) {
-    const p = parts[i];
-    cur[p] = cur[p] ?? {};
-    cur = cur[p];
+  const clone = structuredClone((obj ?? {}) as Record<string, unknown>);
+  let cur = clone as Record<string, unknown>;
+  for (let i = 0; i < parts.length - 1; i += 1) {
+    const key = parts[i];
+    const next = cur[key];
+    if (typeof next !== "object" || next === null) {
+      cur[key] = {};
+    }
+    cur = cur[key] as Record<string, unknown>;
   }
   cur[parts[parts.length - 1]] = val;
-  return clone;
+  return clone as FlowNode["data"];
 };
 
 const HeaderJSONField = ({
   value,
   onValidJSON,
 }: {
-  value: Record<string, any> | undefined;
-  onValidJSON: (obj: Record<string, any>) => void;
+  value: Record<string, unknown> | undefined;
+  onValidJSON: (obj: Record<string, unknown>) => void;
 }) => {
   const raw = JSON.stringify(value ?? {}, null, 2);
   const [text, setText] = useState(raw);
@@ -77,9 +78,11 @@ const HeaderJSONField = ({
     try {
       const obj = debouncedText.trim() ? JSON.parse(debouncedText) : {};
       setError(null);
-      onValidJSON(obj);
-    } catch (e: any) {
-      setError(e?.message || "JSON inválido");
+      onValidJSON(obj as Record<string, unknown>);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "JSON inválido";
+      setError(message);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedText]);
@@ -145,22 +148,23 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
   const sn = selectedNode;
 
   const updateData = useCallback(
-    (path: string, val: any) => {
+    (path: string, val: unknown) => {
       if (!sn) return;
-      const nextData = set(sn.data ?? {}, path, val);
+      const nextData = setNestedValue(sn.data, path, val);
       onChange({ data: nextData });
     },
     [sn, onChange],
   );
 
   const handleValidHeaders = useCallback(
-    (obj: Record<string, any>) => updateData("headers", obj),
+    (obj: Record<string, unknown>) => updateData("headers", obj),
     [updateData],
   );
 
   const appendMessage = useCallback(
     (textToInsert: string) => {
       if (!sn) return;
+      if (sn.type !== "message") return;
       const cur = sn.data?.text ?? "";
       const next = (cur + (cur ? " " : "") + textToInsert).trim();
       updateData("text", next);
@@ -181,11 +185,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
     );
   }
 
-  const type = sn.type;
   const name = sn.data?.name ?? "";
-  const textLen = sn.data?.text?.length ?? 0;
-  const overLimit = textLen > waTextLimit;
-  const remaining = Math.max(0, waTextLimit - textLen);
 
   return (
     <Card className="h-full overflow-auto">
@@ -193,7 +193,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <Badge variant="secondary" className="rounded-xl uppercase">
-              {type}
+              {sn.type}
             </Badge>
             <span
               className="truncate max-w-[260px]"
@@ -227,7 +227,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
         <Separator />
 
         {/* TRIGGER */}
-        {type === "trigger" && (
+        {sn.type === "trigger" && (
           <div className="space-y-2">
             <Label>Keyword</Label>
             <Input
@@ -239,17 +239,22 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
         )}
 
         {/* MESSAGE */}
-        {type === "message" && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label>Use Template</Label>
-              <Switch
-                checked={!!sn.data?.useTemplate}
-                onCheckedChange={(v) => updateData("useTemplate", v)}
-              />
-            </div>
+        {sn.type === "message" && (() => {
+          const text = sn.data?.text ?? "";
+          const textLen = text.length;
+          const overLimit = textLen > waTextLimit;
+          const remaining = Math.max(0, waTextLimit - textLen);
 
-            <div className="space-y-1">
+          return (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>Use Template</Label>
+                <Switch
+                  checked={!!sn.data?.useTemplate}
+                  onCheckedChange={(v) => updateData("useTemplate", v)}
+                />
+              </div>
+
               <div className="flex items-center justify-between">
                 <Label>Text</Label>
                 <Badge variant={overLimit ? "destructive" : "secondary"}>
@@ -259,7 +264,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
               </div>
               <Textarea
                 className="min-h-[140px]"
-                value={sn.data?.text || ""}
+                value={text}
                 onChange={(e) => updateData("text", e.target.value)}
                 placeholder="Hello {{ name }}!"
               />
@@ -270,11 +275,11 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
                 <VarHelpers onInsert={appendMessage} />
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* OPTIONS */}
-        {type === "options" && (
+        {sn.type === "options" && (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label>Options</Label>
@@ -292,12 +297,13 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
             </div>
 
             <div className="space-y-2">
-              {(sn.data?.options ?? []).map((opt: string, i: number) => (
+              {(sn.data?.options ?? []).map((opt, i) => (
                 <div key={i} className="flex gap-2">
                   <Input
                     value={opt}
                     onChange={(e) => {
-                      const next = [...sn.data.options];
+                      const currentOptions = sn.data?.options ?? [];
+                      const next = [...currentOptions];
                       next[i] = e.target.value;
                       updateData("options", next);
                     }}
@@ -312,7 +318,8 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
                     variant="ghost"
                     title="Delete option"
                     onClick={() => {
-                      const next = [...sn.data.options];
+                      const currentOptions = sn.data?.options ?? [];
+                      const next = [...currentOptions];
                       next.splice(i, 1);
                       updateData("options", next);
                     }}
@@ -343,7 +350,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
         )}
 
         {/* DELAY */}
-        {type === "delay" && (
+        {sn.type === "delay" && (
           <div className="space-y-2">
             <Label>Seconds</Label>
             <Slider
@@ -360,7 +367,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
         )}
 
         {/* CONDITION */}
-        {type === "condition" && (
+        {sn.type === "condition" && (
           <div className="space-y-2">
             <Label>Expression</Label>
             <Textarea
@@ -380,7 +387,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
         )}
 
         {/* API */}
-        {type === "api" && (
+        {sn.type === "api" && (
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
@@ -439,7 +446,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
         )}
 
         {/* ASSIGN */}
-        {type === "assign" && (
+        {sn.type === "assign" && (
           <div className="space-y-2">
             <Label>Key</Label>
             <Input
@@ -457,7 +464,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
         )}
 
         {/* MEDIA */}
-        {type === "media" && (
+        {sn.type === "media" && (
           <div className="space-y-2">
             <Label>Media URL</Label>
             <Input
@@ -481,7 +488,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
         )}
 
         {/* HANDOFF */}
-        {type === "handoff" && (
+        {sn.type === "handoff" && (
           <div className="space-y-2">
             <Label>Queue</Label>
             <Input
@@ -497,7 +504,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
         )}
 
         {/* GOTO */}
-        {type === "goto" && (
+        {sn.type === "goto" && (
           <div className="space-y-2">
             <Label>Target Node ID</Label>
             <Input
@@ -513,7 +520,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
         )}
 
         {/* END */}
-        {type === "end" && (
+        {sn.type === "end" && (
           <div className="space-y-2">
             <Label>Reason</Label>
             <Input

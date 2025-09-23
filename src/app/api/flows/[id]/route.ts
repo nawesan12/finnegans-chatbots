@@ -1,15 +1,19 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import prisma from "@/lib/prisma";
+import { getAuthPayload } from "@/lib/auth";
 
 export async function GET(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  const auth = getAuthPayload(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const flow = await prisma.flow.findUnique({
-      where: { id: params.id },
+    const flow = await prisma.flow.findFirst({
+      where: { id: params.id, userId: auth.userId },
     });
 
     if (!flow) {
@@ -30,12 +34,26 @@ export async function PUT(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  const auth = getAuthPayload(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = await request.json();
     const { name, trigger, status, definition, phoneNumber } = body;
 
+    const existingFlow = await prisma.flow.findFirst({
+      where: { id: params.id, userId: auth.userId },
+      select: { id: true },
+    });
+
+    if (!existingFlow) {
+      return NextResponse.json({ error: "Flow not found" }, { status: 404 });
+    }
+
     const updatedFlow = await prisma.flow.update({
-      where: { id: params.id },
+      where: { id: existingFlow.id },
       data: {
         name,
         trigger,
@@ -43,6 +61,11 @@ export async function PUT(
         definition,
         phoneNumber,
         updatedAt: new Date(),
+      },
+      include: {
+        _count: {
+          select: { broadcasts: true, sessions: true },
+        },
       },
     });
 
@@ -60,16 +83,30 @@ export async function DELETE(
   request: Request,
   { params }: { params: { id: string } }
 ) {
+  const auth = getAuthPayload(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    // Delete related logs first
-    await prisma.log.deleteMany({
-        where: { flowId: params.id }
+    const flow = await prisma.flow.findFirst({
+      where: { id: params.id, userId: auth.userId },
+      select: { id: true },
     });
 
-    // Then delete the flow
-    await prisma.flow.delete({
-      where: { id: params.id },
-    });
+    if (!flow) {
+      return NextResponse.json({ error: "Flow not found" }, { status: 404 });
+    }
+
+    await prisma.$transaction([
+      prisma.log.deleteMany({ where: { flowId: flow.id } }),
+      prisma.session.deleteMany({ where: { flowId: flow.id } }),
+      prisma.broadcast.updateMany({
+        where: { flowId: flow.id },
+        data: { flowId: null },
+      }),
+      prisma.flow.delete({ where: { id: flow.id } }),
+    ]);
 
     return new NextResponse(null, { status: 204 });
   } catch (error) {

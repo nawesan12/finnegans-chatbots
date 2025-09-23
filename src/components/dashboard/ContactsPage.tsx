@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { MoreVertical, Upload } from "lucide-react";
@@ -7,36 +7,70 @@ import { itemVariants } from "@/lib/animations";
 import Table from "@/components/dashboard/Table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+import { useAuthStore } from "@/lib/store";
+import { useDashboardActions } from "@/lib/dashboard-context";
 
-const ContactsPage = ({ onImportClick }: { onImportClick: () => void }) => {
-  const [contacts, setContacts] = useState([]);
+type ContactTagRelation = { tag: { id: string; name: string } };
+
+type ContactRow = {
+  id: string;
+  name?: string | null;
+  phone: string;
+  updatedAt: string;
+  tags?: ContactTagRelation[];
+};
+
+const ContactsPage = () => {
+  const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const token = useAuthStore((state) => state.token);
+  const hasHydrated = useAuthStore((state) => state.hasHydrated);
+  const dashboardActions = useDashboardActions();
+
+  const fetchContacts = useCallback(async () => {
+    if (!token) {
+      setContacts([]);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await fetch("/api/contacts", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to fetch contacts");
+      }
+      const data: ContactRow[] = await response.json();
+      setContacts(data);
+    } catch (error) {
+      toast.error((error as Error)?.message ?? "Error al obtener contactos");
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
 
   useEffect(() => {
-    const fetchContacts = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch("/api/contacts");
-        if (!response.ok) {
-          throw new Error("Failed to fetch contacts");
-        }
-        const data = await response.json();
-        setContacts(data);
-      } catch (error) {
-        //@ts-expect-error bla
-        toast.error(error?.message);
-      } finally {
-        setLoading(false);
-      }
-    };
+    if (!hasHydrated) {
+      return;
+    }
     fetchContacts();
-  }, []);
+  }, [fetchContacts, hasHydrated]);
+
+  useEffect(() => {
+    const handler = () => {
+      void fetchContacts();
+    };
+    window.addEventListener("contacts:updated", handler);
+    return () => window.removeEventListener("contacts:updated", handler);
+  }, [fetchContacts]);
 
   const columns = [
     {
       key: "name",
       label: "Nombre",
-      render: (row: { id: string; name?: string | null }) => (
+      render: (row: ContactRow) => (
         <Link
           href={`/dashboard/contacts/${row.id}`}
           className="text-[#8694ff] hover:text-indigo-700 font-medium transition-colors"
@@ -49,9 +83,9 @@ const ContactsPage = ({ onImportClick }: { onImportClick: () => void }) => {
     {
       key: "tags",
       label: "Etiquetas",
-      render: (row: { tags: { tag: { id: string; name: string } }[] }) => (
+      render: (row: ContactRow) => (
         <div className="flex space-x-1">
-          {row.tags?.map((t: { tag: { id: string; name: string } }) => (
+          {row.tags?.map((t) => (
             <span
               key={t.tag.id}
               className="px-2 text-xs font-semibold rounded-full bg-gray-200 text-gray-700"
@@ -65,7 +99,7 @@ const ContactsPage = ({ onImportClick }: { onImportClick: () => void }) => {
     {
       key: "updatedAt",
       label: "Last Contact",
-      render: (row: { updatedAt: string }) =>
+      render: (row: ContactRow) =>
         new Date(row.updatedAt).toLocaleDateString(),
     },
     {
@@ -151,7 +185,7 @@ const ContactsPage = ({ onImportClick }: { onImportClick: () => void }) => {
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            onClick={onImportClick}
+            onClick={() => dashboardActions?.openImportContacts?.()}
             className="bg-[#8694ff] text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-indigo-700 flex items-center space-x-2 transition-colors"
           >
             <Upload className="h-4 w-4" />

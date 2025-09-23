@@ -4,8 +4,18 @@ import { motion } from "framer-motion";
 import { containerVariants, itemVariants } from "@/lib/animations";
 import { Inbox } from "lucide-react";
 
-//eslint-disable-next-line
-const Table = ({ columns, data }: { columns: any; data: any }) => {
+type TableColumn<T> = {
+  key: keyof T | string;
+  label: string;
+  render?: (row: T) => React.ReactNode;
+};
+
+type TableProps<T> = {
+  columns: TableColumn<T>[];
+  data: T[];
+};
+
+function Table<T extends { id: string | number }>({ columns, data }: TableProps<T>) {
   if (!data || data.length === 0) {
     return (
       <div className="text-center py-12">
@@ -23,7 +33,7 @@ const Table = ({ columns, data }: { columns: any; data: any }) => {
       <table className="min-w-full bg-white">
         <thead className="bg-gray-50">
           <tr>
-            {columns.map((col: { key: string; label: string }) => (
+            {columns.map((col) => (
               <th
                 key={col.key}
                 className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
@@ -39,40 +49,28 @@ const Table = ({ columns, data }: { columns: any; data: any }) => {
           animate="visible"
           className="divide-y divide-gray-200"
         >
-          {/*eslint-disable-next-line*/}
-          {data.map(
-            (row: {
-              id: string;
-              //eslint-disable-next-line
-              [key: string]: any;
-            }) => (
-              <motion.tr
-                key={row.id}
-                variants={itemVariants}
-                className="hover:bg-gray-50"
-              >
-                {columns.map(
-                  (col: {
-                    key: string;
-                    label: string;
-                    //eslint-disable-next-line
-                    render?: (row: any) => React.ReactNode | undefined;
-                  }) => (
-                    <td
-                      key={col.key}
-                      className="px-6 py-4 whitespace-nowrap text-sm text-gray-700"
-                    >
-                      {col.render ? col.render(row) : row[col.key]}
-                    </td>
-                  ),
-                )}
-              </motion.tr>
-            ),
-          )}
+          {data.map((row) => (
+            <motion.tr
+              key={row.id}
+              variants={itemVariants}
+              className="hover:bg-gray-50"
+            >
+              {columns.map((col) => (
+                <td
+                  key={col.key}
+                  className="px-6 py-4 whitespace-nowrap text-sm text-gray-700"
+                >
+                  {col.render
+                    ? col.render(row)
+                    : (row as Record<string, unknown>)[col.key as keyof T] ?? null}
+                </td>
+              ))}
+            </motion.tr>
+          ))}
         </motion.tbody>
       </table>
     </div>
   );
-};
+}
 
 export default Table;

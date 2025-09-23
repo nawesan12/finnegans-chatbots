@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { containerVariants, itemVariants } from "@/lib/animations";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+import { useAuthStore } from "@/lib/store";
 
 interface ContactTag {
   tag: {
@@ -35,27 +36,42 @@ const formatDate = (dateString: string) =>
 const ContactDetails = ({ contactId }: { contactId: string }) => {
   const [contact, setContact] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(true);
+  const token = useAuthStore((state) => state.token);
+  const hasHydrated = useAuthStore((state) => state.hasHydrated);
 
   useEffect(() => {
+    if (!hasHydrated) {
+      return;
+    }
+
+    if (!token) {
+      setContact(null);
+      setLoading(false);
+      return;
+    }
+
     const fetchContact = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`/api/contacts/${contactId}`);
+        const response = await fetch(`/api/contacts/${contactId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (!response.ok) {
           throw new Error("No se pudo cargar el contacto");
         }
         const data = await response.json();
         setContact(data);
       } catch (error) {
-        //@ts-expect-error bla
-        toast.error(error?.message || "Error al obtener el contacto");
+        toast.error(
+          (error as Error)?.message || "Error al obtener el contacto",
+        );
       } finally {
         setLoading(false);
       }
     };
 
     fetchContact();
-  }, [contactId]);
+  }, [contactId, hasHydrated, token]);
 
   if (loading) {
     return (

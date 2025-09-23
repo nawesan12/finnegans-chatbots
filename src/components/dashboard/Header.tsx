@@ -19,14 +19,12 @@ const Header = ({
 }) => {
   const router = useRouter();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const dropdownRef = useRef(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (
-        dropdownRef?.current && //@ts-expect-error bla
-        !dropdownRef?.current?.contains(event.target as Node)
-      ) {
+      const element = dropdownRef.current;
+      if (element && !element.contains(event.target as Node)) {
         setIsDropdownOpen(false);
       }
     };
