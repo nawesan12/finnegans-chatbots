@@ -1,6 +1,16 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { getAuthPayload } from "@/lib/auth";
+import { sanitizeFlowDefinition } from "@/lib/flow-schema";
+
+const FlowUpdateSchema = z.object({
+  name: z.string().min(1),
+  trigger: z.string().optional(),
+  status: z.string().optional(),
+  definition: z.unknown().optional(),
+  phoneNumber: z.string().optional(),
+});
 
 export async function GET(
   request: Request,
@@ -40,8 +50,31 @@ export async function PUT(
   }
 
   try {
-    const body = await request.json();
-    const { name, trigger, status, definition, phoneNumber } = body;
+    const payload = await request.json();
+    const parsed = FlowUpdateSchema.safeParse(payload);
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid payload" },
+        { status: 400 },
+      );
+    }
+
+    const { name, trigger, status, definition, phoneNumber } = parsed.data;
+    const trimmedName = name.trim();
+
+    if (!trimmedName) {
+      return NextResponse.json(
+        { error: "Missing required fields" },
+        { status: 400 },
+      );
+    }
+
+    const sanitizedDefinition = sanitizeFlowDefinition(definition);
+    const normalizedTrigger = trigger?.trim() || "default";
+    const normalizedStatus = status?.trim() || "Draft";
+    const normalizedPhone =
+      phoneNumber && phoneNumber.trim().length ? phoneNumber.trim() : null;
 
     const existingFlow = await prisma.flow.findFirst({
       where: { id: params.id, userId: auth.userId },
@@ -55,11 +88,11 @@ export async function PUT(
     const updatedFlow = await prisma.flow.update({
       where: { id: existingFlow.id },
       data: {
-        name,
-        trigger,
-        status,
-        definition,
-        phoneNumber,
+        name: trimmedName,
+        trigger: normalizedTrigger,
+        status: normalizedStatus,
+        definition: sanitizedDefinition,
+        phoneNumber: normalizedPhone,
         updatedAt: new Date(),
       },
       include: {
