@@ -124,7 +124,7 @@ const FlowsPage = () => {
       }
 
       setEditingFlow({
-        id: null,
+        id: "",
         name: "Nuevo flujo",
         definition: null,
         status: "Draft",
@@ -147,9 +147,7 @@ const FlowsPage = () => {
 
   const handleGoToBroadcasts = useCallback(() => {
     if (!editingFlow?.id) {
-      toast.message(
-        "Guarda el flujo antes de usarlo en campañas masivas",
-      );
+      toast.message("Guarda el flujo antes de usarlo en campañas masivas");
       return;
     }
     router.push(`/dashboard/broadcasts?flowId=${editingFlow.id}`);
@@ -212,7 +210,14 @@ const FlowsPage = () => {
     if (flowToOpen) {
       openFlowForEditing(flowToOpen, { skipUrl: true });
     }
-  }, [editingFlow, flows, openFlowForEditing, searchParams, startNewFlow, user?.id]);
+  }, [
+    editingFlow,
+    flows,
+    openFlowForEditing,
+    searchParams,
+    startNewFlow,
+    user?.id,
+  ]);
 
   const numberFormatter = useMemo(
     () =>
@@ -322,7 +327,8 @@ const FlowsPage = () => {
       const keyword = String(
         ((triggerNode?.data as { keyword?: string })?.keyword ??
           editingFlow.trigger ??
-          "default") || "default",
+          "default") ||
+          "default",
       ).trim();
       const normalizedTrigger = keyword.length ? keyword : "default";
       const normalizedPhone = editingFlow.phoneNumber?.trim() || null;

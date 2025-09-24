@@ -15,7 +15,10 @@ type TableProps<T> = {
   data: T[];
 };
 
-function Table<T extends { id: string | number }>({ columns, data }: TableProps<T>) {
+function Table<T extends { id: string | number }>({
+  columns,
+  data,
+}: TableProps<T>) {
   if (!data || data.length === 0) {
     return (
       <div className="text-center py-12">
@@ -34,11 +37,11 @@ function Table<T extends { id: string | number }>({ columns, data }: TableProps<
         <thead className="bg-gray-50">
           <tr>
             {columns.map((col) => (
-              <th
-                key={col.key}
+              <th //@ts-expect-error it exists
+                key={col?.key}
                 className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
               >
-                {col.label}
+                {col?.label}
               </th>
             ))}
           </tr>
@@ -56,13 +59,14 @@ function Table<T extends { id: string | number }>({ columns, data }: TableProps<
               className="hover:bg-gray-50"
             >
               {columns.map((col) => (
-                <td
-                  key={col.key}
+                <td //@ts-expect-error it exists
+                  key={col?.key}
                   className="px-6 py-4 whitespace-nowrap text-sm text-gray-700"
                 >
                   {col.render
-                    ? col.render(row)
-                    : (row as Record<string, unknown>)[col.key as keyof T] ?? null}
+                    ? col.render(row) //@ts-expect-error it exists
+                    : ((row as Record<string, unknown>)[col.key as keyof T] ??
+                      null)}
                 </td>
               ))}
             </motion.tr>

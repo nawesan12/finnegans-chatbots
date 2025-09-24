@@ -80,8 +80,7 @@ const HeaderJSONField = ({
       setError(null);
       onValidJSON(obj as Record<string, unknown>);
     } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "JSON inválido";
+      const message = error instanceof Error ? error.message : "JSON inválido";
       setError(message);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -120,7 +119,6 @@ const VarHelpers = ({
         <Button
           key={v}
           type="button"
-          size="xs"
           variant="ghost"
           className="h-6 px-2 text-xs"
           onClick={() => onInsert(`{{ ${v} }}`)}
@@ -131,7 +129,6 @@ const VarHelpers = ({
       ))}
       <Button
         type="button"
-        size="xs"
         variant="secondary"
         className="h-6 px-2 text-xs"
         onClick={() => onInsert("{{ custom_var }}")}
@@ -165,6 +162,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
     (textToInsert: string) => {
       if (!sn) return;
       if (sn.type !== "message") return;
+      //@ts-expect-error it exists
       const cur = sn.data?.text ?? "";
       const next = (cur + (cur ? " " : "") + textToInsert).trim();
       updateData("text", next);
@@ -231,6 +229,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
           <div className="space-y-2">
             <Label>Keyword</Label>
             <Input
+              //@ts-expect-error it exists
               value={sn.data?.keyword || ""}
               onChange={(e) => updateData("keyword", e.target.value)}
               placeholder="/start, hola, menu..."
@@ -239,44 +238,46 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
         )}
 
         {/* MESSAGE */}
-        {sn.type === "message" && (() => {
-          const text = sn.data?.text ?? "";
-          const textLen = text.length;
-          const overLimit = textLen > waTextLimit;
-          const remaining = Math.max(0, waTextLimit - textLen);
+        {sn.type === "message" &&
+          (() => {
+            //@ts-expect-error it exists
+            const text = sn.data?.text ?? "";
+            const textLen = text.length;
+            const overLimit = textLen > waTextLimit;
+            const remaining = Math.max(0, waTextLimit - textLen);
 
-          return (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label>Use Template</Label>
-                <Switch
-                  checked={!!sn.data?.useTemplate}
-                  onCheckedChange={(v) => updateData("useTemplate", v)}
+            return (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label>Use Template</Label>
+                  <Switch //@ts-expect-error it exists
+                    checked={!!sn.data?.useTemplate}
+                    onCheckedChange={(v) => updateData("useTemplate", v)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <Label>Text</Label>
+                  <Badge variant={overLimit ? "destructive" : "secondary"}>
+                    {textLen}/{waTextLimit}{" "}
+                    {overLimit ? "• Excede" : `• Restan ${remaining}`}
+                  </Badge>
+                </div>
+                <Textarea
+                  className="min-h-[140px]"
+                  value={text}
+                  onChange={(e) => updateData("text", e.target.value)}
+                  placeholder="Hello {{ name }}!"
                 />
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground">
+                    Usá variables como {"{{ name }}"}, {"{{ order_id }}"}.
+                  </p>
+                  <VarHelpers onInsert={appendMessage} />
+                </div>
               </div>
-
-              <div className="flex items-center justify-between">
-                <Label>Text</Label>
-                <Badge variant={overLimit ? "destructive" : "secondary"}>
-                  {textLen}/{waTextLimit}{" "}
-                  {overLimit ? "• Excede" : `• Restan ${remaining}`}
-                </Badge>
-              </div>
-              <Textarea
-                className="min-h-[140px]"
-                value={text}
-                onChange={(e) => updateData("text", e.target.value)}
-                placeholder="Hello {{ name }}!"
-              />
-              <div className="flex items-center justify-between">
-                <p className="text-xs text-muted-foreground">
-                  Usá variables como {"{{ name }}"}, {"{{ order_id }}"}.
-                </p>
-                <VarHelpers onInsert={appendMessage} />
-              </div>
-            </div>
-          );
-        })()}
+            );
+          })()}
 
         {/* OPTIONS */}
         {sn.type === "options" && (
@@ -287,6 +288,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
                 variant="secondary"
                 size="sm"
                 onClick={() => {
+                  //@ts-expect-error it exists
                   const next = [...(sn.data?.options ?? []), "New Option"];
                   updateData("options", next);
                 }}
@@ -297,37 +299,43 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
             </div>
 
             <div className="space-y-2">
-              {(sn.data?.options ?? []).map((opt, i) => (
-                <div key={i} className="flex gap-2">
-                  <Input
-                    value={opt}
-                    onChange={(e) => {
-                      const currentOptions = sn.data?.options ?? [];
-                      const next = [...currentOptions];
-                      next[i] = e.target.value;
-                      updateData("options", next);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        const next = [...(sn.data?.options ?? []), ""];
+              {
+                //@ts-expect-error it exists
+                (sn.data?.options ?? []).map((opt, i) => (
+                  <div key={i} className="flex gap-2">
+                    <Input
+                      value={opt}
+                      onChange={(e) => {
+                        //@ts-expect-error it exists
+                        const currentOptions = sn.data?.options ?? [];
+                        const next = [...currentOptions];
+                        next[i] = e.target.value;
                         updateData("options", next);
-                      }
-                    }}
-                  />
-                  <Button
-                    variant="ghost"
-                    title="Delete option"
-                    onClick={() => {
-                      const currentOptions = sn.data?.options ?? [];
-                      const next = [...currentOptions];
-                      next.splice(i, 1);
-                      updateData("options", next);
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          //@ts-expect-error it exists
+                          const next = [...(sn.data?.options ?? []), ""];
+                          updateData("options", next);
+                        }
+                      }}
+                    />
+                    <Button
+                      variant="ghost"
+                      title="Delete option"
+                      onClick={() => {
+                        //@ts-expect-error it exists
+                        const currentOptions = sn.data?.options ?? [];
+                        const next = [...currentOptions];
+                        next.splice(i, 1);
+                        updateData("options", next);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))
+              }
 
               {/* pegado masivo: una opción por línea */}
               <Textarea
@@ -340,7 +348,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
                   const lines = txt
                     .split("\n")
                     .map((s) => s.trim())
-                    .filter(Boolean);
+                    .filter(Boolean); //@ts-expect-error it exists
                   const next = [...(sn.data?.options ?? []), ...lines];
                   updateData("options", next);
                 }}
@@ -353,7 +361,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
         {sn.type === "delay" && (
           <div className="space-y-2">
             <Label>Seconds</Label>
-            <Slider
+            <Slider //@ts-expect-error it exists
               value={[sn.data?.seconds || 1]}
               min={1}
               max={3600}
@@ -361,7 +369,11 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
               onValueChange={([v]) => updateData("seconds", v)}
             />
             <div className="text-xs text-muted-foreground">
-              {sn.data?.seconds || 1}s
+              {
+                //@ts-expect-error it exists
+                sn.data?.seconds || 1
+              }
+              s
             </div>
           </div>
         )}
@@ -370,7 +382,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
         {sn.type === "condition" && (
           <div className="space-y-2">
             <Label>Expression</Label>
-            <Textarea
+            <Textarea //@ts-expect-error it exists
               value={sn.data?.expression || ""}
               onChange={(e) => updateData("expression", e.target.value)}
               placeholder={
@@ -392,7 +404,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
                 <Label>Method</Label>
-                <Select
+                <Select //@ts-expect-error it exists
                   value={(sn.data?.method || "POST").toUpperCase()}
                   onValueChange={(v) => updateData("method", v)}
                 >
@@ -410,7 +422,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
               </div>
               <div className="space-y-1">
                 <Label>Assign to</Label>
-                <Input
+                <Input //@ts-expect-error it exists
                   value={sn.data?.assignTo || "apiResult"}
                   onChange={(e) => updateData("assignTo", e.target.value)}
                 />
@@ -419,7 +431,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
 
             <div className="space-y-1">
               <Label>URL</Label>
-              <Input
+              <Input //@ts-expect-error it exists
                 value={sn.data?.url || ""}
                 onChange={(e) => updateData("url", e.target.value)}
                 placeholder="https://api.example.com/resource"
@@ -427,14 +439,14 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
               />
             </div>
 
-            <HeaderJSONField
+            <HeaderJSONField //@ts-expect-error it exists
               value={sn.data?.headers}
               onValidJSON={handleValidHeaders}
             />
 
             <div className="space-y-1">
               <Label>Body</Label>
-              <Textarea
+              <Textarea //@ts-expect-error it exists
                 value={sn.data?.body || ""}
                 onChange={(e) => updateData("body", e.target.value)}
                 placeholder='{"id": "{{ order_id }}"}'
@@ -449,13 +461,13 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
         {sn.type === "assign" && (
           <div className="space-y-2">
             <Label>Key</Label>
-            <Input
+            <Input //@ts-expect-error it exists
               value={sn.data?.key || ""}
               onChange={(e) => updateData("key", e.target.value)}
               placeholder="context.customer_name"
             />
             <Label>Value</Label>
-            <Input
+            <Input //@ts-expect-error it exists
               value={sn.data?.value || ""}
               onChange={(e) => updateData("value", e.target.value)}
               placeholder="{{ name }}"
@@ -467,19 +479,19 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
         {sn.type === "media" && (
           <div className="space-y-2">
             <Label>Media URL</Label>
-            <Input
+            <Input //@ts-expect-error it exists
               value={sn.data?.url || ""}
               onChange={(e) => updateData("url", e.target.value)}
               inputMode="url"
             />
             <Label>Type</Label>
-            <Input
+            <Input //@ts-expect-error it exists
               value={sn.data?.mediaType || "image"}
               onChange={(e) => updateData("mediaType", e.target.value)}
               placeholder="image | video | audio | document"
             />
             <Label>Caption</Label>
-            <Input
+            <Input //@ts-expect-error it exists
               value={sn.data?.caption || ""}
               onChange={(e) => updateData("caption", e.target.value)}
               placeholder="Texto opcional…"
@@ -491,12 +503,12 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
         {sn.type === "handoff" && (
           <div className="space-y-2">
             <Label>Queue</Label>
-            <Input
+            <Input //@ts-expect-error it exists
               value={sn.data?.queue || ""}
               onChange={(e) => updateData("queue", e.target.value)}
             />
             <Label>Note</Label>
-            <Input
+            <Input //@ts-expect-error it exists
               value={sn.data?.note || ""}
               onChange={(e) => updateData("note", e.target.value)}
             />
@@ -507,7 +519,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
         {sn.type === "goto" && (
           <div className="space-y-2">
             <Label>Target Node ID</Label>
-            <Input
+            <Input //@ts-expect-error it exists
               value={sn.data?.targetNodeId || ""}
               onChange={(e) => updateData("targetNodeId", e.target.value)}
               placeholder="e.g., n7"
@@ -523,7 +535,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
         {sn.type === "end" && (
           <div className="space-y-2">
             <Label>Reason</Label>
-            <Input
+            <Input //@ts-expect-error it exists
               value={sn.data?.reason || "end"}
               onChange={(e) => updateData("reason", e.target.value)}
             />

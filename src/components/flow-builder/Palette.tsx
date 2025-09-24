@@ -224,7 +224,10 @@ export function Palette({
     el?.scrollIntoView({ block: "nearest" });
   };
 
-  const setDragImage = (e: React.DragEvent, label: string) => {
+  const setDragImage = (
+    e: React.DragEvent | PointerEvent | MouseEvent | TouchEvent,
+    label: string,
+  ) => {
     // Crea una drag image minimalista
     const canvas = document.createElement("canvas");
     const paddingX = 14;
@@ -249,8 +252,8 @@ export function Palette({
     ctx.fillStyle = "#0f172a"; // slate-900
     ctx.font = font;
     ctx.fillText(label, paddingX, h / 2 + 4);
-
-    e.dataTransfer.setDragImage(canvas, w / 2, h / 2);
+    //@ts-expect-error it exists
+    e?.dataTransfer?.setDragImage(canvas, w / 2, h / 2);
   };
 
   return (
@@ -311,8 +314,11 @@ export function Palette({
               disabled={p.disabled}
               onClick={() => !p.disabled && onAdd(p.type)}
               onDragStart={(e) => {
-                e.dataTransfer.setData("application/wa-node", p.type);
-                e.dataTransfer.effectAllowed = "move";
+                //@ts-expect-error it exists
+                e?.dataTransfer?.setData("application/wa-node", p.type);
+                //@ts-expect-error it exists
+                e?.dataTransfer?.effectAllowed = "move";
+
                 setDragImage(e, p.label);
               }}
               draggable

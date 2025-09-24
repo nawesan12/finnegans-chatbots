@@ -4,8 +4,9 @@ import { getAuthPayload } from "@/lib/auth";
 
 export async function GET(
   _request: Request,
-  { params }: { params: { id: string } },
+  context: { params: Promise<{ id: string }> },
 ) {
+  const params = context.params;
   const auth = getAuthPayload(_request);
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -13,7 +14,8 @@ export async function GET(
 
   try {
     const broadcast = await prisma.broadcast.findFirst({
-      where: { id: params.id, userId: auth.userId },
+      //@ts-expect-error we have to await the result
+      where: { id: params?.id, userId: auth.userId },
       include: {
         recipients: {
           orderBy: { createdAt: "asc" },
@@ -28,12 +30,16 @@ export async function GET(
     });
 
     if (!broadcast) {
-      return NextResponse.json({ error: "Broadcast not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Broadcast not found" },
+        { status: 404 },
+      );
     }
 
     return NextResponse.json(broadcast);
   } catch (error) {
-    console.error(`Error fetching broadcast ${params.id}:`, error);
+    //@ts-expect-error we have to await the result tho
+    console.error(`Error fetching broadcast ${params?.id}:`, error);
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 },

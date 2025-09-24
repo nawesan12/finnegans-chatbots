@@ -1,5 +1,11 @@
 "use client";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
@@ -81,18 +87,18 @@ export function Topbar({
     }
   };
 
-    const handleExport = useCallback(async () => {
-      try {
-        setBusy(true);
-        const maybe = onExport?.();
-        if (maybe instanceof Promise) await maybe;
-        toast.success(`Exportado (${exportName}.json)`);
-      } catch {
-        toast.error("Error al exportar");
-      } finally {
-        setBusy(false);
-      }
-    }, [exportName, onExport]);
+  const handleExport = useCallback(async () => {
+    try {
+      setBusy(true);
+      const maybe = onExport?.();
+      if (maybe instanceof Promise) await maybe;
+      toast.success(`Exportado (${exportName}.json)`);
+    } catch {
+      toast.error("Error al exportar");
+    } finally {
+      setBusy(false);
+    }
+  }, [exportName, onExport]);
 
   // --- Drag & drop para importar JSON ---
   const handleDragOver = (e: React.DragEvent) => {
@@ -179,17 +185,17 @@ export function Topbar({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    }, [
-      handleExport,
-      onNew,
-      onAutoLayout,
-      onValidate,
-      onUndo,
-      onRedo,
-      zoomIn,
-      zoomOut,
-      fitView,
-    ]);
+  }, [
+    handleExport,
+    onNew,
+    onAutoLayout,
+    onValidate,
+    onUndo,
+    onRedo,
+    zoomIn,
+    zoomOut,
+    fitView,
+  ]);
 
   const zoomLabel = useMemo(
     () =>
