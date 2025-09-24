@@ -19,15 +19,13 @@ export type MetaEnvironmentConfig = {
 export function getMetaEnvironmentConfig(): MetaEnvironmentConfig {
   return {
     verifyToken:
-      process.env.META_VERIFY_TOKEN ?? process.env.WHATSAPP_VERIFY_TOKEN ?? null,
+      process.env.META_VERIFY_TOKEN ??
+      process.env.WHATSAPP_VERIFY_TOKEN ??
+      null,
     appSecret:
-      process.env.META_APP_SECRET ??
-      process.env.WHATSAPP_APP_SECRET ??
-      null,
+      process.env.META_APP_SECRET ?? process.env.WHATSAPP_APP_SECRET ?? null,
     accessToken:
-      process.env.META_ACCESS_TOKEN ??
-      process.env.WHATSAPP_KEY ??
-      null,
+      process.env.META_ACCESS_TOKEN ?? process.env.WHATSAPP_KEY ?? null,
     phoneNumberId:
       process.env.META_PHONE_NUMBER_ID ??
       process.env.WHATSAPP_NUMBER_ID ??
@@ -283,11 +281,12 @@ function indexWhatsappContacts(
         : undefined;
     const fallbackName =
       typeof contact?.name === "string" ? contact.name.trim() : undefined;
-    const name = profileName && profileName.length > 0
-      ? profileName
-      : fallbackName && fallbackName.length > 0
-        ? fallbackName
-        : null;
+    const name =
+      profileName && profileName.length > 0
+        ? profileName
+        : fallbackName && fallbackName.length > 0
+          ? fallbackName
+          : null;
 
     map.set(waId, { name });
   }
@@ -316,7 +315,7 @@ async function resolveUserForPhoneNumber(phoneNumberId: string) {
 
     if (fallbackUser) {
       console.warn(
-        "Falling back to the first user for phone number ID", 
+        "Falling back to the first user for phone number ID",
         phoneNumberId,
         "based on environment configuration.",
       );
@@ -351,7 +350,9 @@ async function recordSessionSnapshot(sessionId: string) {
   }
 
   const logStatus =
-    LOG_STATUS_MAP[sessionSnapshot.status] ?? sessionSnapshot.status ?? "In Progress";
+    LOG_STATUS_MAP[sessionSnapshot.status] ??
+    sessionSnapshot.status ??
+    "In Progress";
 
   try {
     await prisma.log.create({
@@ -367,10 +368,7 @@ async function recordSessionSnapshot(sessionId: string) {
   }
 }
 
-async function processBroadcastStatuses(
-  userId: string,
-  statuses: WAStatus[],
-) {
+async function processBroadcastStatuses(userId: string, statuses: WAStatus[]) {
   for (const status of statuses) {
     if (!status) continue;
 
@@ -520,24 +518,19 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
                 data: { name: contactName },
               });
             } catch (error) {
-              console.error(
-                "Failed to update contact name for",
-                from,
-                error,
-              );
+              console.error("Failed to update contact name for", from, error);
             }
           }
         }
 
-        const existingSession =
-          (await prisma.session.findFirst({
-            where: {
-              contactId: contact.id,
-              status: { in: ["Active", "Paused"] },
-            },
-            include: { flow: true, contact: true },
-            orderBy: { updatedAt: "desc" },
-          })) as SessionWithRelations | null;
+        const existingSession = (await prisma.session.findFirst({
+          where: {
+            contactId: contact.id,
+            status: { in: ["Active", "Paused"] },
+          },
+          include: { flow: true, contact: true },
+          orderBy: { updatedAt: "desc" },
+        })) as SessionWithRelations | null;
 
         let flow = existingSession?.flow ?? null;
 
@@ -556,34 +549,33 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
         let session: SessionWithRelations | null = existingSession;
 
         if (!session || session.flowId !== flow.id) {
-          session =
-            (await prisma.session.findUnique({
-              where: {
-                contactId_flowId: { contactId: contact.id, flowId: flow.id },
-              },
-              include: { flow: true, contact: true },
-            })) as SessionWithRelations | null;
+          session = (await prisma.session.findUnique({
+            where: {
+              contactId_flowId: { contactId: contact.id, flowId: flow.id },
+            },
+            include: { flow: true, contact: true },
+          })) as SessionWithRelations | null;
         }
 
         if (!session) {
-          session = await prisma.session.create({
+          session = (await prisma.session.create({
             data: { contactId: contact.id, flowId: flow.id, status: "Active" },
             include: { flow: true, contact: true },
-          }) as SessionWithRelations;
+          })) as SessionWithRelations;
         } else if (
           session.status === "Completed" ||
           session.status === "Errored"
         ) {
-          session = await prisma.session.update({
+          session = (await prisma.session.update({
             where: { id: session.id },
             data: { status: "Active", currentNodeId: null, context: {} },
             include: { flow: true, contact: true },
-          }) as SessionWithRelations;
+          })) as SessionWithRelations;
         } else if (!session.flow || !session.contact) {
-          session = await prisma.session.findUnique({
+          session = (await prisma.session.findUnique({
             where: { id: session.id },
             include: { flow: true, contact: true },
-          }) as SessionWithRelations | null;
+          })) as SessionWithRelations | null;
         }
 
         try {
@@ -606,13 +598,16 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
           };
 
           if (!session) {
-            console.error("Session could not be resolved for contact", contact.id);
+            console.error(
+              "Session could not be resolved for contact",
+              contact.id,
+            );
             continue;
           }
 
           await executeFlow(
             session,
-            text,
+            text, //@ts-expect-error it exists
             (uid, to, payload) => sendMessage(uid, to, payload),
             incomingMeta,
           );
@@ -786,7 +781,10 @@ export async function sendMessage(
     }
 
     const response = json as
-      | { messages?: Array<{ id?: string }>; contacts?: Array<{ wa_id?: string }> }
+      | {
+          messages?: Array<{ id?: string }>;
+          contacts?: Array<{ wa_id?: string }>;
+        }
       | undefined;
     const messageId =
       response?.messages?.find((m) => typeof m?.id === "string")?.id ?? null;
@@ -801,7 +799,9 @@ export async function sendMessage(
     return {
       success: false,
       error:
-        error instanceof Error ? error.message : "Unknown error while sending message",
+        error instanceof Error
+          ? error.message
+          : "Unknown error while sending message",
     };
   } finally {
     clearTimeout(t);
