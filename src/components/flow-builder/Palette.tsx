@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Search, X } from "lucide-react";
@@ -224,12 +224,13 @@ export function Palette({
     el?.scrollIntoView({ block: "nearest" });
   };
 
-  const setDragImage = (
-    e: React.DragEvent | PointerEvent | MouseEvent | TouchEvent,
-    label: string,
-  ) => {
-    // Crea una drag image minimalista
-    const canvas = document.createElement("canvas");
+  const setDragImage = useCallback(
+    (
+      e: React.DragEvent | PointerEvent | MouseEvent | TouchEvent,
+      label: string,
+    ) => {
+      // Crea una drag image minimalista
+      const canvas = document.createElement("canvas");
     const paddingX = 14;
     const paddingY = 8;
     const font = "12px ui-sans-serif, system-ui, -apple-system";
@@ -252,9 +253,32 @@ export function Palette({
     ctx.fillStyle = "#0f172a"; // slate-900
     ctx.font = font;
     ctx.fillText(label, paddingX, h / 2 + 4);
-    //@ts-expect-error it exists
-    e?.dataTransfer?.setDragImage(canvas, w / 2, h / 2);
-  };
+    if ("dataTransfer" in e && e.dataTransfer) {
+      e.dataTransfer.setDragImage(canvas, w / 2, h / 2);
+    }
+  }, []);
+
+  const handleDragStart = useCallback(
+    (event: unknown, item: PaletteItem) => {
+      if (
+        !event ||
+        typeof event !== "object" ||
+        !("dataTransfer" in event)
+      ) {
+        return;
+      }
+
+      const dragEvent = event as React.DragEvent<HTMLButtonElement>;
+      const transfer = dragEvent.dataTransfer;
+      if (transfer) {
+        transfer.setData("application/wa-node", item.type);
+        transfer.effectAllowed = "move";
+      }
+
+      setDragImage(dragEvent, item.label);
+    },
+    [setDragImage],
+  );
 
   return (
     <div className={`space-y-3 ${className}`}>
@@ -313,14 +337,7 @@ export function Palette({
               aria-selected={isActive}
               disabled={p.disabled}
               onClick={() => !p.disabled && onAdd(p.type)}
-              onDragStart={(e) => {
-                //@ts-expect-error it exists
-                e?.dataTransfer?.setData("application/wa-node", p.type);
-                //@ts-expect-error it exists
-                e?.dataTransfer?.effectAllowed = "move";
-
-                setDragImage(e, p.label);
-              }}
+              onDragStart={(event) => handleDragStart(event, p)}
               draggable
               whileHover={{ scale: 1.02 }}
               className={[

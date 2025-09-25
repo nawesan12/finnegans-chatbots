@@ -80,6 +80,7 @@ export async function POST(request: Request) {
     }
 
     const sanitizedDefinition = sanitizeFlowDefinition(definition);
+    const definitionJson = sanitizedDefinition as unknown as Prisma.JsonObject;
     const normalizedTrigger = trigger?.trim() || "default";
     const normalizedStatus = status?.trim() || "Draft";
     const normalizedPhone =
@@ -90,7 +91,7 @@ export async function POST(request: Request) {
         name: trimmedName,
         trigger: normalizedTrigger,
         status: normalizedStatus,
-        definition: sanitizedDefinition,
+        definition: definitionJson,
         phoneNumber: normalizedPhone,
         user: { connect: { id: auth.userId } },
       },

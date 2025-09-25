@@ -16,12 +16,15 @@ import {
   useEdgesState,
   useNodesState,
   MarkerType,
+  SelectionMode,
 } from "reactflow";
 import type {
   Connection,
+  Node,
   NodeProps,
   NodeTypes,
   OnSelectionChangeParams,
+  NodeMouseHandler,
   ReactFlowInstance,
   Viewport,
 } from "reactflow";
@@ -51,12 +54,14 @@ import {
   EndDataSchema,
   waTextLimit,
   isFlowNodeType,
+  isNodeOfType,
 } from "./types";
 import type {
   FlowBuilderHandle,
   FlowData,
   FlowEdge,
   FlowNode,
+  FlowNodeDataMap,
   FlowNodeType,
 } from "./types";
 import { getLayoutedElements, makeId, getStarterData } from "./helpers";
@@ -67,6 +72,8 @@ import { Topbar } from "./Toolbar";
 import { Palette } from "./Palette";
 import { z } from "zod";
 import { sanitizeFlowDefinition } from "@/lib/flow-schema";
+import { BackgroundVariant } from "@reactflow/background";
+import type { GetMiniMapNodeAttribute } from "@reactflow/minimap";
 
 export type { FlowBuilderHandle, FlowData } from "./types";
 
@@ -173,8 +180,8 @@ const toFlowState = (
 
 const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
   ({ initialFlow }, ref) => {
-    const [nodes, setNodes, onNodesChange] = //@ts-expect-error it exists
-      useNodesState<FlowNode>(defaultNodes);
+    const [nodes, setNodes, onNodesChange] =
+      useNodesState<FlowNode["data"]>(defaultNodes);
     const [edges, setEdges, onEdgesChange] =
       useEdgesState<FlowEdge>(defaultEdges);
     const [selected, setSelected] = useState<FlowNode | null>(null);
@@ -188,14 +195,31 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
     const didRestoreRef = useRef(false);
 
     const cloneNode = useCallback(
-      (node: FlowNode): FlowNode => ({
-        ...node,
-        data: deepClone(node.data) as FlowNode["data"],
-        position: {
-          x: typeof node.position?.x === "number" ? node.position.x : 0,
-          y: typeof node.position?.y === "number" ? node.position.y : 0,
-        },
-      }),
+      (node: Node): FlowNode => {
+        if (!node.type || !isFlowNodeType(node.type)) {
+          throw new Error(`Invalid node type: ${String(node.type)}`);
+        }
+
+        return {
+          ...node,
+          type: node.type,
+          data: deepClone(node.data ?? {}) as FlowNode["data"],
+          position: {
+            x: typeof node.position?.x === "number" ? node.position.x : 0,
+            y: typeof node.position?.y === "number" ? node.position.y : 0,
+          },
+        };
+      },
+      [],
+    );
+
+    const toFlowNode = useCallback(
+      (node?: Node | FlowNode | null): FlowNode | null => {
+        if (!node) return null;
+        const nodeType = node.type;
+        if (!nodeType || !isFlowNodeType(nodeType)) return null;
+        return node as FlowNode;
+      },
       [],
     );
 
@@ -207,7 +231,6 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
 
         historyRef.current.past = [];
         historyRef.current.future = [];
-        //@ts-expect-error it exists
         setNodes(nextNodes);
         setEdges(nextEdges);
         setSelected(null);
@@ -264,12 +287,11 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
           x: last?.position?.x ?? 0,
           y: (last?.position?.y ?? 0) + 140,
         };
-        const data = {
+        const data: Partial<FlowNodeDataMap[typeof type]> = {
           name: `${type}-${id}`,
           ...getStarterData(type),
-        } as FlowNode["data"];
+        };
         const newNode: FlowNode = { id, type, data, position };
-        //@ts-expect-error it exists
         setNodes((nds) => nds.concat(newNode));
         setSelected(newNode);
         setSelectedIds([id]);
@@ -310,25 +332,25 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       [setEdges],
     );
 
-    const onNodeClick = (_: React.MouseEvent, node: FlowNode) =>
-      setSelected(node);
+    const onNodeClick: NodeMouseHandler = (_event, node) =>
+      setSelected(toFlowNode(node));
     const onPaneClick = () => setSelected(null);
 
     const handleEdit = useCallback(
       (nodeId: string) => {
-        const found = nodes.find((node) => node.id === nodeId) ?? null; //@ts-expect-error it exists
+        const found = toFlowNode(nodes.find((node) => node.id === nodeId));
         setSelected(found);
         if (found) {
           setSelectedIds([nodeId]);
         }
       },
-      [nodes, setSelected, setSelectedIds],
+      [nodes, setSelected, setSelectedIds, toFlowNode],
     );
     const handleDuplicate = useCallback(
       (nodeId: string) => {
         const source = nodes.find((node) => node.id === nodeId);
-        if (!source) return;
-        const id = makeId(); //@ts-expect-error it exists
+        if (!source || !source.type || !isFlowNodeType(source.type)) return;
+        const id = makeId();
         const base = cloneNode(source);
         const duplicate: FlowNode = {
           ...base,
@@ -338,7 +360,7 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
             y: (base.position?.y ?? 0) + 20,
           },
           selected: false,
-        }; //@ts-expect-error it exists
+        };
         setNodes((nds) => nds.concat(duplicate));
         setSelected(duplicate);
         setSelectedIds([id]);
@@ -408,15 +430,19 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
             ...patch.data,
           } as FlowNode["data"];
           const nextNode: FlowNode = { ...current, data: nextData };
-          //@ts-expect-error it exists
           setNodes((nodesState) =>
             nodesState.map((node) =>
               node.id === current.id ? nextNode : node,
             ),
           );
 
-          const optionsUpdate = (patch.data as { options?: unknown }).options;
-          if (current.type === "options" && Array.isArray(optionsUpdate)) {
+          if (current.type === "options") {
+            const optionsUpdate = (
+              patch.data as Partial<FlowNodeDataMap["options"]>
+            ).options;
+            if (!Array.isArray(optionsUpdate)) {
+              return nextNode;
+            }
             const handles = new Set(
               optionsUpdate.map((_, index) => `opt-${index}`),
             );
@@ -451,16 +477,17 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
         });
         const position = projected ?? { x: 0, y: 0 };
         const id = makeId();
+        const starter = getStarterData(type);
         const data = {
           name: `${type}-${id}`,
-          ...getStarterData(type),
-        } as FlowNode["data"];
+          ...starter,
+        } as FlowNodeDataMap[typeof type];
         const newNode: FlowNode = {
           id,
           type,
           position,
           data,
-        }; //@ts-expect-error it exists
+        };
         setNodes((nds) => nds.concat(newNode));
         setSelected(newNode);
         setSelectedIds([id]);
@@ -524,17 +551,25 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
     // validation
     const validate = () => {
       const problems: string[] = [];
-      const triggers = nodes.filter((n) => n.type === "trigger");
-      const triggerKeys = triggers //@ts-expect-error it exists
-        .map((t) => t.data?.keyword?.toLowerCase()?.trim())
-        .filter(Boolean);
+      const triggers = nodes
+        .map((node) => toFlowNode(node))
+        .filter((n): n is FlowNode<"trigger"> => n?.type === "trigger");
+      const triggerKeys = triggers
+        .map((t) =>
+          typeof t.data.keyword === "string" ? t.data.keyword : "",
+        )
+        .map((keyword) => keyword.toLowerCase().trim())
+        .filter((value): value is string => value.length > 0);
       const triggerSet = new Set(triggerKeys);
       if (triggerSet.size !== triggerKeys.length)
         problems.push("Palabras clave de disparador duplicadas");
       if (!triggers.length)
         problems.push("El flujo necesita al menos un nodo trigger");
 
-      nodes.forEach((n) => {
+      nodes.forEach((candidate) => {
+        const n = toFlowNode(candidate);
+        if (!n) return;
+
         try {
           switch (n.type) {
             case "trigger":
@@ -586,11 +621,10 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
           problems.push(`${n.id}: inaccesible (sin conexión entrante)`);
         }
 
-        if (n.type === "options") {
-          //@ts-expect-error it exists
+        if (isNodeOfType(n, "options")) {
           const opts = Array.isArray(n.data?.options) ? n.data.options : [];
-          const missing: string[] = []; //@ts-expect-error it exists
-          opts.forEach((_, idx) => {
+          const missing: string[] = [];
+          opts.forEach((_option: string, idx: number) => {
             if (
               !outgoingFromNode.some((e) => e.sourceHandle === `opt-${idx}`)
             ) {
@@ -625,8 +659,7 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
           }
         }
 
-        if (n.type === "goto") {
-          //@ts-expect-error it exists
+        if (isNodeOfType(n, "goto")) {
           const targetId = n.data?.targetNodeId ?? "";
           if (
             targetId &&
@@ -667,7 +700,7 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       const current = past.pop();
       if (current) historyRef.current.future.push(current);
       const prev = sanitizeFlowDefinition(JSON.parse(past[past.length - 1]));
-      const { nodes: prevNodes, edges: prevEdges } = toFlowState(prev); //@ts-expect-error it exists
+      const { nodes: prevNodes, edges: prevEdges } = toFlowState(prev);
       setNodes(prevNodes);
       setEdges(prevEdges);
       setSelected(null);
@@ -679,7 +712,7 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       if (!next) return;
       historyRef.current.past.push(next);
       const state = sanitizeFlowDefinition(JSON.parse(next));
-      const { nodes: nextNodes, edges: nextEdges } = toFlowState(state); //@ts-expect-error it exists
+      const { nodes: nextNodes, edges: nextEdges } = toFlowState(state);
       setNodes(nextNodes);
       setEdges(nextEdges);
       setSelected(null);
@@ -800,31 +833,47 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
         setSelectedIds(ids);
 
         if (ids.length) {
-          const first = nodes.find((node) => node.id === ids[0]) ?? null; //@ts-expect-error it exists
+          const first = toFlowNode(nodes.find((node) => node.id === ids[0]));
           setSelected(first);
         } else {
           setSelected(null);
         }
       },
-      [nodes],
+      [nodes, toFlowNode],
+    );
+
+    const simulatorNodes = useMemo(
+      () =>
+        nodes
+          .map((node) => toFlowNode(node))
+          .filter((node): node is FlowNode => node !== null),
+      [nodes, toFlowNode],
     );
 
     const handleMoveEnd = useCallback(
-      (_evt: React.MouseEvent, viewport: Viewport) => {
+      (_evt: MouseEvent | TouchEvent, viewport: Viewport) => {
         if (typeof viewport?.zoom !== "number") return;
         setZoomLevel((prev) => (prev === viewport.zoom ? prev : viewport.zoom));
       },
       [],
     );
 
-    const miniMapNodeColor = useCallback((node: Node) => {
-      //@ts-expect-error it exists
-      switch (node?.type) {
-        case "trigger":
-          return "#22c55e";
-        case "message":
-          return "#3b82f6";
-        case "options":
+    const handleInit = useCallback(
+      (instance: ReactFlowInstance<FlowNode, FlowEdge>) => {
+        rfRef.current = instance;
+      },
+      [],
+    );
+
+    const miniMapNodeColor = useCallback<GetMiniMapNodeAttribute>(
+      (node) => {
+        const type = (node?.type ?? "") as FlowNodeType;
+        switch (type) {
+          case "trigger":
+            return "#22c55e";
+          case "message":
+            return "#3b82f6";
+          case "options":
           return "#f59e0b";
         case "delay":
           return "#fb923c";
@@ -838,17 +887,18 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
           return "#14b8a6";
         case "handoff":
           return "#d946ef";
-        case "goto":
-          return "#64748b";
-        case "end":
-        default:
-          return "#94a3b8";
-      }
-    }, []);
+          case "goto":
+            return "#64748b";
+          case "end":
+          default:
+            return "#94a3b8";
+        }
+      },
+      [],
+    );
 
-    const miniMapNodeStroke = useCallback(
-      //@ts-expect-error it exists
-      (node: Node) => (node?.selected ? "#0ea5e9" : "#475569"),
+    const miniMapNodeStroke = useCallback<GetMiniMapNodeAttribute>(
+      (node) => (node?.selected ? "#0ea5e9" : "#475569"),
       [],
     );
 
@@ -907,19 +957,19 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
 
         {/* Center: Canvas */}
         <div className="col-span-7 h-[calc(100vh-48px)]">
-          <ReactFlow //@ts-expect-error it exists
-            ref={rfRef}
+          <ReactFlow
+            onInit={handleInit}
             nodes={nodes}
             edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
-            nodeTypes={memoizedNodeTypes} //@ts-expect-error it exists
+            nodeTypes={memoizedNodeTypes}
             onNodeClick={onNodeClick}
             onPaneClick={onPaneClick}
             onDrop={onDrop}
             onDragOver={onDragOver}
-            onSelectionChange={handleSelectionChange} //@ts-expect-error it exists
+            onSelectionChange={handleSelectionChange}
             onMoveEnd={handleMoveEnd} // veremos abajo
             defaultEdgeOptions={{
               type: "smoothstep",
@@ -933,17 +983,20 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
             zoomOnScroll
             zoomOnPinch
             panOnScrollSpeed={0.8}
-            elevateNodesOnSelect //@ts-expect-error it exists
-            selectionMode="partial"
+            elevateNodesOnSelect
+            selectionMode={SelectionMode.Partial}
             deleteKeyCode={null}
           >
-            {/*//@ts-expect-error it exists*/}
-            <Background color="#e2e8f0" variant="lines" gap={24} />
+            <Background
+              color="#e2e8f0"
+              variant={BackgroundVariant.Lines}
+              gap={24}
+            />
             <MiniMap
               className="!bg-white/80"
               pannable
-              zoomable //@ts-expect-error it exists
-              nodeColor={miniMapNodeColor} //@ts-expect-error it exists
+              zoomable
+              nodeColor={miniMapNodeColor}
               nodeStrokeColor={miniMapNodeStroke}
               nodeStrokeWidth={2}
             />
@@ -954,8 +1007,8 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
         {/* Right: Inspector + Simulator */}
         <div className="col-span-3 h-[auto] border-l p-3 flex flex-col gap-3">
           <Inspector selectedNode={selected} onChange={updateSelected} />
-          <Simulator //@ts-expect-error it exists
-            nodes={nodes}
+          <Simulator
+            nodes={simulatorNodes}
             edges={edges}
           />
           <Card>

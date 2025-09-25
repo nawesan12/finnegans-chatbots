@@ -51,14 +51,27 @@ export async function POST(request: Request) {
     }
 
     const normalizedTags = tags
-      .map((tag: unknown) =>
-        typeof tag === "object" && tag !== null && "name" in tag
-          ? String((tag as { name: unknown }).name).trim()
-          : "",
-      )
+      .map((tag: unknown) => {
+        if (typeof tag === "string") {
+          return tag.trim();
+        }
+        if (typeof tag === "object" && tag !== null && "name" in tag) {
+          return String((tag as { name: unknown }).name).trim();
+        }
+        return "";
+      })
       .filter((tagName: string): tagName is string => tagName.length > 0);
 
-    const uniqueTagNames = Array.from(new Set(normalizedTags));
+    const uniqueTagNames: string[] = Array.from(new Set(normalizedTags));
+
+    const tagRelations = uniqueTagNames.map((tagName) => ({
+      tag: {
+        connectOrCreate: {
+          where: { name: tagName } satisfies Prisma.TagWhereUniqueInput,
+          create: { name: tagName },
+        },
+      },
+    }));
 
     const newContact = await prisma.contact.create({
       data: {
@@ -66,16 +79,9 @@ export async function POST(request: Request) {
         phone,
         user: { connect: { id: auth.userId } },
         tags:
-          uniqueTagNames.length > 0
+          tagRelations.length > 0
             ? {
-                create: uniqueTagNames.map((tagName) => ({
-                  tag: {
-                    connectOrCreate: {
-                      where: { name: tagName },
-                      create: { name: tagName },
-                    },
-                  },
-                })),
+                create: tagRelations,
               }
             : undefined,
       },
