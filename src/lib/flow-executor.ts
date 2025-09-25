@@ -1,4 +1,5 @@
-import type { Prisma, Session } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import type { Session } from "@prisma/client";
 import { z } from "zod";
 import {
   //@ts-expect-error it exists
@@ -412,10 +413,12 @@ export async function executeFlow(
     },
   ) => {
     const { context: patchContext, ...rest } = patch;
-    const data = rest as Prisma.SessionUpdateInput;
+    const data = { ...rest } as Prisma.SessionUpdateInput;
     if (patchContext !== undefined) {
-      //@ts-expect-error it exists
-      data?.context = patchContext as unknown;
+      data.context =
+        patchContext === null
+          ? Prisma.JsonNull
+          : (patchContext as unknown as Prisma.InputJsonValue);
     }
 
     await prisma.session.update({
