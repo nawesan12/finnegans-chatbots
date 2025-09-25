@@ -40,35 +40,51 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#04102D]">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[#04102D] via-[#0b2a6d] to-[#4bC3FE]"
-      />
-      <div
-        aria-hidden
-        className="absolute -left-48 -top-48 h-72 w-72 rounded-full bg-white/10 blur-3xl"
-      />
-      <div
-        aria-hidden
-        className="absolute -bottom-32 -right-32 h-96 w-96 rounded-full bg-[#4bC3FE]/20 blur-3xl"
-      />
-      <div className="relative z-10 mx-4 flex w-full max-w-5xl flex-col gap-10 lg:flex-row lg:items-center">
-        <div className="space-y-6 text-white">
-          <p className="inline-flex items-center rounded-full border border-white/30 bg-white/10 px-4 py-1 text-xs uppercase tracking-[0.3em]">
-            Nuevo comienzo
-          </p>
-          <h1 className="text-4xl font-bold leading-tight sm:text-5xl">
-            Regístrate y descubre experiencias digitales memorables
-          </h1>
-          <p className="max-w-xl text-base text-white/80 sm:text-lg">
-            Diseñamos herramientas inteligentes para acercarte más a tus metas.
-            Crea una cuenta para personalizar tus proyectos y colaborar con tu
-            equipo en un espacio dinámico e inspirador.
-          </p>
+    <div className="grid min-h-screen bg-white text-[#04102D] lg:grid-cols-[1.1fr,0.9fr]">
+      <div className="flex flex-col justify-between bg-[#04102D]/5 px-8 py-10 sm:px-12 lg:px-16">
+        <div className="flex items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#04102D] text-sm font-semibold text-white">
+            F.
+          </span>
+          <div className="leading-tight">
+            <p className="text-xs uppercase tracking-[0.28em] text-[#04102D]/60">Finnegans</p>
+            <p className="text-lg font-semibold text-[#04102D]">Chatbots</p>
+          </div>
         </div>
-        <Card className="w-full max-w-md border-none bg-white/90 shadow-2xl backdrop-blur">
-          <CardHeader className="space-y-2 text-center">
+        <div className="space-y-10">
+          <span className="inline-flex items-center rounded-full border border-[#04102D]/20 px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-[#04102D]/60">
+            Nuevo comienzo
+          </span>
+          <div className="space-y-4">
+            <h1 className="text-4xl font-semibold leading-tight sm:text-5xl">
+              Creá tu instancia y alineá a tus equipos desde el primer día.
+            </h1>
+            <p className="text-lg text-[#04102D]/70">
+              Diseñamos herramientas inteligentes para acercarte más a tus metas. Configurá accesos, canalizá conversaciones y colaborá con tu organización sin perder control.
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {["Onboarding acompañado", "Roles y permisos", "Integraciones seguras", "Reportes ejecutivos"].map(
+              (item) => (
+                <div
+                  key={item}
+                  className="rounded-2xl border border-[#04102D]/10 bg-white px-4 py-3 text-sm text-[#04102D]/70"
+                >
+                  {item}
+                </div>
+              ),
+            )}
+          </div>
+        </div>
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-[0.28em] text-[#04102D]/60">Tiempo estimado</p>
+          <p className="text-2xl font-semibold text-[#04102D]">Menos de 4 semanas para salir a producción</p>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-center px-6 py-16 sm:px-10">
+        <Card className="w-full max-w-md border border-[#04102D]/10 shadow-xl">
+          <CardHeader className="space-y-2 pb-2 pt-10 text-center">
             <CardTitle className="text-3xl font-semibold text-[#04102D]">
               Crear cuenta
             </CardTitle>
@@ -89,7 +105,7 @@ export default function RegisterPage() {
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="border-[#4bC3FE]/40 focus-visible:ring-[#4bC3FE]"
+                  className="h-12 border-[#04102D]/20 bg-white focus:border-[#4BC3FE] focus:ring-[#4BC3FE]/40"
                 />
               </div>
               <div className="grid gap-2 text-left">
@@ -103,7 +119,7 @@ export default function RegisterPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="border-[#4bC3FE]/40 focus-visible:ring-[#4bC3FE]"
+                  className="h-12 border-[#04102D]/20 bg-white focus:border-[#4BC3FE] focus:ring-[#4BC3FE]/40"
                 />
               </div>
               <div className="grid gap-2 text-left">
@@ -116,23 +132,20 @@ export default function RegisterPage() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="border-[#4bC3FE]/40 focus-visible:ring-[#4bC3FE]"
+                  className="h-12 border-[#04102D]/20 bg-white focus:border-[#4BC3FE] focus:ring-[#4BC3FE]/40"
                 />
               </div>
             </CardContent>
             <CardFooter className="flex flex-col gap-4">
-              <Button
-                type="submit"
-                className="w-full bg-[#4bC3FE] text-[#04102D] hover:bg-[#66ccff]"
-              >
+              <Button type="submit" className="h-12 w-full rounded-full bg-[#4BC3FE] text-base font-semibold text-[#04102D] hover:bg-[#3EB6F1]">
                 Crear cuenta
               </Button>
               <p className="text-center text-sm text-[#04102D]/70">
-                ¿Ya tienes una cuenta?{' '}
+                ¿Ya tienes una cuenta?{" "}
                 <button
                   type="button"
                   onClick={() => router.push("/login")}
-                  className="font-semibold text-[#4bC3FE] underline-offset-2 hover:underline"
+                  className="font-semibold text-[#04102D] underline decoration-[#4BC3FE] decoration-2 underline-offset-4 hover:text-[#4BC3FE]"
                 >
                   Inicia sesión aquí
                 </button>
