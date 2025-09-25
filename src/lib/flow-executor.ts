@@ -415,7 +415,7 @@ export async function executeFlow(
     const data = rest as Prisma.SessionUpdateInput;
     if (patchContext !== undefined) {
       //@ts-expect-error it exists
-      data?.context = patchContext as unknown;
+      data.context = patchContext as unknown;
     }
 
     await prisma.session.update({
