@@ -65,8 +65,12 @@ export type FlowNodeDataMap = {
 };
 
 export type FlowNode<T extends FlowNodeType = FlowNodeType> = Node<
-  FlowNodeDataMap[T]
-> & { type: T };
+  Partial<FlowNodeDataMap[T]>,
+  T
+> & {
+  type: T;
+  data: Partial<FlowNodeDataMap[T]>;
+};
 
 export type FlowEdge = Edge;
 
@@ -76,3 +80,8 @@ export type FlowBuilderHandle = { getFlowData: () => FlowData };
 
 export const isFlowNodeType = (value: string): value is FlowNodeType =>
   (flowNodeTypes as readonly string[]).includes(value);
+
+export const isNodeOfType = <T extends FlowNodeType>(
+  node: FlowNode | null | undefined,
+  type: T,
+): node is FlowNode<T> => node?.type === type;

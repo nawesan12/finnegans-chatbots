@@ -149,8 +149,8 @@ export const makeId = () => {
 
 export const getStarterData = <T extends FlowNodeType>(
   type: T,
-): Partial<FlowNodeDataMap[T]> => {
-  const starters: { [K in FlowNodeType]: Partial<FlowNodeDataMap[K]> } = {
+): Omit<FlowNodeDataMap[T], "name"> => {
+  const starters: { [K in FlowNodeType]: Omit<FlowNodeDataMap[K], "name"> } = {
     trigger: { keyword: "/start" },
     message: { text: "Nuevo mensaje", useTemplate: false },
     options: { options: ["Opcion 1", "Opcion 2"] },

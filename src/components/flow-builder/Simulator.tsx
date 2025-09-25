@@ -16,12 +16,15 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import type { FlowEdge, FlowNode } from "./types";
+import { isNodeOfType } from "./types";
 
-type LogEntry =
-  | { type: "user"; text: string; ts: number }
-  | { type: "bot"; text: string; ts: number }
-  | { type: "options"; text?: string; options: string[]; ts: number }
-  | { type: "system"; text: string; ts: number };
+type LogEntryBase =
+  | { type: "user"; text: string }
+  | { type: "bot"; text: string }
+  | { type: "options"; text?: string; options: string[] }
+  | { type: "system"; text: string };
+
+type LogEntry = LogEntryBase & { ts: number };
 
 type SimContext = { vars: Record<string, unknown> };
 
@@ -126,8 +129,8 @@ export function Simulator({
     return map;
   }, [edges]);
 
-  const addLog = useCallback((entry: Omit<LogEntry, "ts">) => {
-    const withTimestamp: LogEntry = { ...entry, ts: now() };
+  const addLog = useCallback((entry: LogEntryBase) => {
+    const withTimestamp = { ...entry, ts: now() } as LogEntry;
     setLog((prev) => prev.concat(withTimestamp));
   }, []);
 
@@ -191,22 +194,25 @@ export function Simulator({
             break;
           }
           case "message": {
-            const text = tpl(current.data?.text, runtimeContext);
+            if (!isNodeOfType(current, "message")) break;
+            const text = tpl(current.data.text ?? "", runtimeContext);
             addLog({ type: "bot", text });
             break;
           }
           case "media": {
-            const mediaType = current.data?.mediaType ?? "";
-            const url = tpl(current.data?.url, runtimeContext);
-            const caption = tpl(current.data?.caption, runtimeContext);
+            if (!isNodeOfType(current, "media")) break;
+            const mediaType = current.data.mediaType ?? "";
+            const url = tpl(current.data.url, runtimeContext);
+            const caption = tpl(current.data.caption, runtimeContext);
             const display =
               `[${mediaType.toUpperCase() || "MEDIA"}] ${url} ${caption || ""}`.trim();
             addLog({ type: "bot", text: display });
             break;
           }
           case "assign": {
-            const key = current.data?.key;
-            const rawValue = current.data?.value ?? "";
+            if (!isNodeOfType(current, "assign")) break;
+            const key = current.data.key;
+            const rawValue = current.data.value ?? "";
             if (typeof key === "string" && key.trim()) {
               const value = tpl(rawValue, runtimeContext);
               setContext((prev) => {
@@ -220,7 +226,8 @@ export function Simulator({
             break;
           }
           case "delay": {
-            const seconds = Number(current.data?.seconds ?? 0);
+            if (!isNodeOfType(current, "delay")) break;
+            const seconds = Number(current.data.seconds ?? 0);
             addLog({ type: "system", text: `⏱ Wait ${seconds}s` });
             if (!ignoreDelays && seconds > 0) {
               await wait(seconds * 1000);
@@ -228,9 +235,14 @@ export function Simulator({
             break;
           }
           case "options": {
-            const options = current.data?.options ?? [];
-            const dataWithText = current.data as { text?: string };
-            const prompt = tpl(dataWithText?.text, runtimeContext);
+            if (!isNodeOfType(current, "options")) break;
+            const options = Array.isArray(current.data.options)
+              ? current.data.options
+              : [];
+            const prompt = tpl(
+              (current.data as { text?: string }).text,
+              runtimeContext,
+            );
             addLog({ type: "options", text: prompt, options });
             awaitingStepRef.current = false;
             setAwaitingStep(false);
@@ -239,11 +251,12 @@ export function Simulator({
             return;
           }
           case "api": {
-            const method = (current.data?.method ?? "GET").toString().toUpperCase();
-            const url = tpl(current.data?.url, runtimeContext);
-            const bodyRaw = current.data?.body ?? "";
-            const assignTo = current.data?.assignTo ?? "apiResult";
-            const rawHeaders = current.data?.headers ?? {};
+            if (!isNodeOfType(current, "api")) break;
+            const method = (current.data.method ?? "GET").toString().toUpperCase();
+            const url = tpl(current.data.url, runtimeContext);
+            const bodyRaw = current.data.body ?? "";
+            const assignTo = current.data.assignTo ?? "apiResult";
+            const rawHeaders = current.data.headers ?? {};
             const headers = Object.fromEntries(
               Object.entries(rawHeaders).filter(
                 (entry): entry is [string, string] => typeof entry[1] === "string",
@@ -292,9 +305,10 @@ export function Simulator({
             break;
           }
           case "condition": {
+            if (!isNodeOfType(current, "condition")) break;
             try {
               const result = evalCondition(
-                String(current.data?.expression ?? "false"),
+                String(current.data.expression ?? "false"),
                 runtimeContext,
               );
               const edgesFrom = outgoing.get(current.id) ?? [];
@@ -310,7 +324,8 @@ export function Simulator({
             break;
           }
           case "goto": {
-            const nextId = current.data?.targetNodeId ?? "";
+            if (!isNodeOfType(current, "goto")) break;
+            const nextId = current.data.targetNodeId ?? "";
             current = nextId ? idMap.get(nextId) ?? null : null;
             continue;
           }
@@ -364,14 +379,16 @@ export function Simulator({
 
       try {
         if (isPaused && pausedNode) {
-          if (pausedNode.type !== "options") {
+          if (!isNodeOfType(pausedNode, "options")) {
             setIsPaused(false);
             setPausedNode(null);
           } else {
             const userText = messageToSend.toLowerCase().trim();
-            const opts = pausedNode.data?.options ?? [];
-            const idx = opts.findIndex(
-              (option) => option.toLowerCase().trim() === userText,
+            const opts = Array.isArray(pausedNode.data.options)
+              ? pausedNode.data.options
+              : [];
+            const idx = opts.findIndex((option) =>
+              option.toLowerCase().trim() === userText,
             );
 
             let nextNodeId: string | undefined;
@@ -410,9 +427,9 @@ export function Simulator({
           setContext(initial);
           const msgLc = messageToSend.toLowerCase();
           const startNode = nodes.find(
-            (node) =>
-              node.type === "trigger" &&
-              (node.data?.keyword ?? "").toLowerCase() === msgLc,
+            (node): node is FlowNode<"trigger"> =>
+              isNodeOfType(node, "trigger") &&
+              (node.data.keyword ?? "").toLowerCase() === msgLc,
           );
           if (startNode) {
             await execute(startNode);
