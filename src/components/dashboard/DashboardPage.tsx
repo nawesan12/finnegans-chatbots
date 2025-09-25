@@ -15,6 +15,13 @@ import { MessageSquare, Users, ArrowRight, Bot } from "lucide-react";
 import { containerVariants, itemVariants } from "@/lib/animations";
 import MetricCard from "@/components/dashboard/MetricCard";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { useAuthStore } from "@/lib/store";
 
@@ -32,15 +39,36 @@ type RecentLog = {
   flow: { name: string | null } | null;
 };
 
-const chartData = [
-  { name: "Mon", sent: 400, received: 240 },
-  { name: "Tue", sent: 300, received: 139 },
-  { name: "Wed", sent: 200, received: 980 },
-  { name: "Thu", sent: 278, received: 390 },
-  { name: "Fri", sent: 189, received: 480 },
-  { name: "Sat", sent: 239, received: 380 },
-  { name: "Sun", sent: 349, received: 430 },
+type MessageVolumePoint = {
+  date: string;
+  sent: number;
+  received: number;
+};
+
+type FlowFilterOption = {
+  id: string;
+  name: string;
+  channel: string | null;
+};
+
+const dateRangeOptions = [
+  { value: "7", label: "Últimos 7 días" },
+  { value: "14", label: "Últimos 14 días" },
+  { value: "30", label: "Últimos 30 días" },
+  { value: "90", label: "Últimos 90 días" },
 ];
+
+const parseErrorMessage = async (response: Response, fallback: string) => {
+  try {
+    const data = await response.json();
+    if (typeof data?.error === "string") {
+      return data.error;
+    }
+  } catch (error) {
+    console.error("Failed to parse error response", error);
+  }
+  return fallback;
+};
 
 const DashboardPage = () => {
   const token = useAuthStore((state) => state.token);
@@ -48,6 +76,16 @@ const DashboardPage = () => {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [recentLogs, setRecentLogs] = useState<RecentLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [messageVolumeData, setMessageVolumeData] = useState<MessageVolumePoint[]>([]);
+  const [chartLoading, setChartLoading] = useState(true);
+  const [chartError, setChartError] = useState<string | null>(null);
+  const [selectedRange, setSelectedRange] = useState<string>(dateRangeOptions[0].value);
+  const [selectedChannel, setSelectedChannel] = useState<string>("all");
+  const [selectedFlow, setSelectedFlow] = useState<string>("all");
+  const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const [availableFlows, setAvailableFlows] = useState<FlowFilterOption[]>([]);
+  const [availableChannels, setAvailableChannels] = useState<string[]>([]);
+  const [availableStatuses, setAvailableStatuses] = useState<string[]>([]);
 
   const numberFormatter = useMemo(
     () =>
@@ -65,6 +103,30 @@ const DashboardPage = () => {
     [],
   );
 
+  const dateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat("es-AR", {
+        day: "2-digit",
+        month: "short",
+      }),
+    [],
+  );
+
+  const formattedChartData = useMemo(
+    () =>
+      messageVolumeData.map((point) => ({
+        name: dateFormatter.format(new Date(point.date)),
+        sent: point.sent,
+        received: point.received,
+      })),
+    [dateFormatter, messageVolumeData],
+  );
+
+  const chartHasData = useMemo(
+    () => formattedChartData.some((point) => point.sent > 0 || point.received > 0),
+    [formattedChartData],
+  );
+
   useEffect(() => {
     if (!hasHydrated) {
       return;
@@ -78,18 +140,6 @@ const DashboardPage = () => {
     }
 
     let isMounted = true;
-
-    const parseErrorMessage = async (response: Response, fallback: string) => {
-      try {
-        const data = await response.json();
-        if (typeof data?.error === "string") {
-          return data.error;
-        }
-      } catch (error) {
-        console.error("Failed to parse error response", error);
-      }
-      return fallback;
-    };
 
     const fetchData = async () => {
       try {
@@ -153,6 +203,126 @@ const DashboardPage = () => {
       isMounted = false;
     };
   }, [hasHydrated, token]);
+
+  useEffect(() => {
+    if (!hasHydrated) {
+      return;
+    }
+
+    if (!token) {
+      setMessageVolumeData([]);
+      setAvailableFlows([]);
+      setAvailableChannels([]);
+      setAvailableStatuses([]);
+      setChartError(null);
+      setChartLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchChartData = async () => {
+      try {
+        setChartLoading(true);
+        setChartError(null);
+
+        const params = new URLSearchParams({ range: selectedRange });
+        if (selectedChannel !== "all") {
+          params.set("channel", selectedChannel);
+        }
+        if (selectedFlow !== "all") {
+          params.set("flowId", selectedFlow);
+        }
+        if (selectedStatus !== "all") {
+          params.set("status", selectedStatus);
+        }
+
+        const response = await fetch(
+          `/api/metrics/messages-volume?${params.toString()}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            await parseErrorMessage(
+              response,
+              "No se pudo obtener el volumen de mensajes",
+            ),
+          );
+        }
+
+        const data: {
+          data: MessageVolumePoint[];
+          filters: {
+            flows: FlowFilterOption[];
+            channels: string[];
+            statuses: string[];
+          };
+        } = await response.json();
+
+        if (!isMounted) {
+          return;
+        }
+
+        setMessageVolumeData(data.data);
+        setAvailableFlows(data.filters.flows);
+        setAvailableChannels(data.filters.channels);
+        setAvailableStatuses(data.filters.statuses);
+
+        if (
+          selectedFlow !== "all" &&
+          !data.filters.flows.some((flow) => flow.id === selectedFlow)
+        ) {
+          setSelectedFlow("all");
+        }
+
+        if (
+          selectedChannel !== "all" &&
+          !data.filters.channels.includes(selectedChannel)
+        ) {
+          setSelectedChannel("all");
+        }
+
+        if (
+          selectedStatus !== "all" &&
+          !data.filters.statuses.includes(selectedStatus)
+        ) {
+          setSelectedStatus("all");
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Error al cargar el volumen de mensajes";
+        if (isMounted) {
+          setChartError(message);
+          setMessageVolumeData([]);
+        }
+        toast.error(message);
+      } finally {
+        if (isMounted) {
+          setChartLoading(false);
+        }
+      }
+    };
+
+    fetchChartData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    hasHydrated,
+    selectedChannel,
+    selectedFlow,
+    selectedRange,
+    selectedStatus,
+    token,
+  ]);
 
   const metricCards = useMemo(() => {
     const data: DashboardMetrics = metrics ?? {
@@ -255,41 +425,127 @@ const DashboardPage = () => {
         initial="hidden"
         animate="visible"
       >
-        <motion.div
-          variants={itemVariants}
-          className="bg-white p-6 rounded-lg shadow-md"
-        >
-          <h3 className="font-semibold text-gray-800 mb-4">
-            Volumen de Mensajes (Últimos 7 Días)
+      <motion.div
+        variants={itemVariants}
+        className="bg-white p-6 rounded-lg shadow-md"
+      >
+        <div className="flex flex-col gap-4 mb-4 lg:flex-row lg:items-center lg:justify-between">
+          <h3 className="font-semibold text-gray-800">
+            Volumen de Mensajes
           </h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="name" tick={{ fill: "#6b7280", fontSize: 12 }} />
-              <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "#fff",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: "0.5rem",
-                }}
-              />
-              <Legend wrapperStyle={{ fontSize: "14px" }} />
-              <Bar
-                dataKey="sent"
-                fill="#04102D"
-                name="Sent"
-                radius={[4, 4, 0, 0]}
-              />
-              <Bar
-                dataKey="received"
-                fill="#4bc3fe"
-                name="Received"
-                radius={[4, 4, 0, 0]}
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        </motion.div>
+          <div className="flex flex-wrap gap-3">
+            <Select value={selectedRange} onValueChange={setSelectedRange}>
+              <SelectTrigger className="w-[170px]">
+                <SelectValue placeholder="Rango de fechas" />
+              </SelectTrigger>
+              <SelectContent>
+                {dateRangeOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={selectedChannel}
+              onValueChange={setSelectedChannel}
+              disabled={!availableChannels.length}
+            >
+              <SelectTrigger className="w-[170px]">
+                <SelectValue placeholder="Canal" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los canales</SelectItem>
+                {availableChannels.map((channel) => (
+                  <SelectItem key={channel} value={channel}>
+                    {channel}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={selectedFlow}
+              onValueChange={setSelectedFlow}
+              disabled={!availableFlows.length}
+            >
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Flujo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los flujos</SelectItem>
+                {availableFlows.map((flow) => (
+                  <SelectItem key={flow.id} value={flow.id}>
+                    {flow.name}
+                    {flow.channel ? ` · ${flow.channel}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={selectedStatus}
+              onValueChange={setSelectedStatus}
+              disabled={!availableStatuses.length}
+            >
+              <SelectTrigger className="w-[190px]">
+                <SelectValue placeholder="Estado" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los estados</SelectItem>
+                {availableStatuses.map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {status}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="h-[300px]">
+          {chartLoading ? (
+            <Skeleton className="h-full w-full" />
+          ) : chartError ? (
+            <div className="flex h-full items-center justify-center">
+              <p className="text-sm text-red-500 text-center max-w-sm">
+                {chartError}
+              </p>
+            </div>
+          ) : chartHasData ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={formattedChartData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="name" tick={{ fill: "#6b7280", fontSize: 12 }} />
+                <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "#fff",
+                    border: "1px solid #e5e7eb",
+                    borderRadius: "0.5rem",
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: "14px" }} />
+                <Bar
+                  dataKey="sent"
+                  fill="#04102D"
+                  name="Enviados"
+                  radius={[4, 4, 0, 0]}
+                />
+                <Bar
+                  dataKey="received"
+                  fill="#4bc3fe"
+                  name="Recibidos"
+                  radius={[4, 4, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <p className="text-sm text-gray-500 text-center max-w-sm">
+                No hay datos disponibles para los filtros seleccionados.
+              </p>
+            </div>
+          )}
+        </div>
+      </motion.div>
         <motion.div
           variants={itemVariants}
           className="bg-white p-6 rounded-lg shadow-md"
