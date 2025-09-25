@@ -136,6 +136,36 @@ export interface MetaWebhookEvent {
   entry?: WAEntry[];
 }
 
+export type ManualFlowTriggerOptions = {
+  flowId: string;
+  from: string;
+  message: string;
+  name?: string | null;
+  variables?: Record<string, unknown> | null;
+  incomingMeta?: {
+    type?: string | null;
+    rawText?: string | null;
+    interactive?: {
+      type?: string | null;
+      id?: string | null;
+      title?: string | null;
+    } | null;
+  } | null;
+};
+
+export type ManualFlowTriggerResult =
+  | {
+      success: true;
+      flowId: string;
+      contactId: string;
+      sessionId: string;
+    }
+  | {
+      success: false;
+      error: string;
+      status?: number;
+    };
+
 /* ===== Utilidades ===== */
 const toLcTrim = (s?: string) => (s ?? "").trim().toLowerCase();
 
@@ -625,6 +655,152 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
           }
         }
       }
+    }
+  }
+}
+
+export async function processManualFlowTrigger(
+  options: ManualFlowTriggerOptions,
+): Promise<ManualFlowTriggerResult> {
+  const { flowId } = options;
+  const phone = options.from?.trim();
+
+  if (!phone) {
+    return {
+      success: false,
+      status: 400,
+      error: "Missing contact phone number",
+    };
+  }
+
+  const flow = await prisma.flow.findUnique({
+    where: { id: flowId },
+    include: { user: true },
+  });
+
+  if (!flow) {
+    return { success: false, status: 404, error: "Flow not found" };
+  }
+
+  if (flow.status !== "Active") {
+    return { success: false, status: 409, error: "Flow is not active" };
+  }
+
+  const trimmedMessage = options.message?.trim();
+  const candidateMessage =
+    trimmedMessage && trimmedMessage.length > 0
+      ? trimmedMessage
+      : options.incomingMeta?.interactive?.title?.trim() ?? null;
+
+  if (!candidateMessage) {
+    return { success: false, status: 400, error: "Message text is required" };
+  }
+
+  let contact = await prisma.contact.findFirst({
+    where: { phone, userId: flow.userId },
+  });
+
+  if (!contact) {
+    contact = await prisma.contact.create({
+      data: {
+        phone,
+        userId: flow.userId,
+        ...(options.name ? { name: options.name } : {}),
+      },
+    });
+  } else if (options.name) {
+    const currentName = contact.name?.trim();
+    if (currentName !== options.name) {
+      try {
+        contact = await prisma.contact.update({
+          where: { id: contact.id },
+          data: { name: options.name },
+        });
+      } catch (error) {
+        console.error("Failed to update contact name", contact.id, error);
+      }
+    }
+  }
+
+  let session = (await prisma.session.findUnique({
+    where: { contactId_flowId: { contactId: contact.id, flowId: flow.id } },
+    include: { flow: true, contact: true },
+  })) as SessionWithRelations | null;
+
+  if (!session) {
+    session = (await prisma.session.create({
+      data: { contactId: contact.id, flowId: flow.id, status: "Active" },
+      include: { flow: true, contact: true },
+    })) as SessionWithRelations;
+  } else if (session.status === "Completed" || session.status === "Errored") {
+    session = (await prisma.session.update({
+      where: { id: session.id },
+      data: { status: "Active", currentNodeId: null, context: {} },
+      include: { flow: true, contact: true },
+    })) as SessionWithRelations;
+  } else if (!session.flow || !session.contact) {
+    session = (await prisma.session.findUnique({
+      where: { id: session.id },
+      include: { flow: true, contact: true },
+    })) as SessionWithRelations | null;
+  }
+
+  if (!session) {
+    return {
+      success: false,
+      status: 500,
+      error: "Unable to initialise session",
+    };
+  }
+
+  const variables = options.variables;
+  if (variables && Object.keys(variables).length > 0) {
+    const currentContext =
+      (session.context as Record<string, unknown> | null) ?? {};
+    const nextContext = { ...currentContext, ...variables } as Prisma.JsonObject;
+    session = (await prisma.session.update({
+      where: { id: session.id },
+      data: { context: nextContext },
+      include: { flow: true, contact: true },
+    })) as SessionWithRelations;
+  }
+
+  const incomingMeta = options.incomingMeta ?? {
+    type: "text",
+    rawText: candidateMessage,
+    interactive: null,
+  };
+
+  try {
+    await executeFlow(
+      session,
+      candidateMessage,
+      (uid, to, payload) => sendMessage(uid, to, payload),
+      incomingMeta,
+    );
+
+    return {
+      success: true,
+      flowId: flow.id,
+      contactId: contact.id,
+      sessionId: session.id,
+    };
+  } catch (error) {
+    console.error("Manual flow trigger execution failed:", error);
+    try {
+      await prisma.session.update({
+        where: { id: session.id },
+        data: { status: "Errored" },
+      });
+    } catch (updateError) {
+      console.error("Failed to mark session as errored:", updateError);
+    }
+    return { success: false, status: 500, error: "Failed to execute flow" };
+  } finally {
+    try {
+      await recordSessionSnapshot(session.id);
+    } catch (snapshotError) {
+      console.error("Failed to record manual session snapshot:", snapshotError);
     }
   }
 }
