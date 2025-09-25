@@ -316,7 +316,7 @@ export default function Home() {
                 </div>
               </div>
             </div>
-            <div className="grid flex-1 gap-6 sm:grid-cols-3">
+            <div className="grid flex-1 gap-6 ">
               {teamHighlights.map((item) => (
                 <div
                   key={item.title}
@@ -352,7 +352,7 @@ export default function Home() {
                   cumplimiento y resultados visibles desde el primer mes.
                 </p>
               </div>
-              <div className="grid flex-1 gap-6 sm:grid-cols-3">
+              <div className="grid flex-1 gap-6">
                 {["Descubrimiento", "Despliegue", "Optimización"].map(
                   (phase, index) => (
                     <div
