@@ -185,7 +185,7 @@ export default function Home() {
                 <h2 className="text-lg font-semibold text-white">
                   Resultados sostenidos
                 </h2>
-                <div className="grid gap-4 sm:grid-cols-3">
+                <div className="grid gap-4 ">
                   {stats.map((item) => (
                     <div
                       key={item.label}
