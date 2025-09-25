@@ -36,15 +36,15 @@ function resolveJwtSecret(): string {
   return fallbackSecret;
 }
 
-const JWT_SECRET = resolveJwtSecret();
-
 export function signToken(payload: UserPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: "1h" });
+  const secret = resolveJwtSecret();
+  return jwt.sign(payload, secret, { expiresIn: "1h" });
 }
 
 export function verifyToken(token: string): UserPayload | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as UserPayload;
+    const secret = resolveJwtSecret();
+    return jwt.verify(token, secret) as UserPayload;
   } catch {
     return null;
   }

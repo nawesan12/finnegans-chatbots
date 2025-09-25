@@ -503,8 +503,7 @@ export async function executeFlow(
     ) as FlowNode | undefined;
 
     if (currentNode) {
-      //@ts-expect-error bla
-      context?.triggerMessage = messageText;
+      context.triggerMessage = messageText ?? undefined;
     } else {
       console.log(`No trigger for "${messageText}" in flow ${session.flowId}`);
       return;
