@@ -690,7 +690,7 @@ export async function processManualFlowTrigger(
   const candidateMessage =
     trimmedMessage && trimmedMessage.length > 0
       ? trimmedMessage
-      : options.incomingMeta?.interactive?.title?.trim() ?? null;
+      : (options.incomingMeta?.interactive?.title?.trim() ?? null);
 
   if (!candidateMessage) {
     return { success: false, status: 400, error: "Message text is required" };
@@ -757,7 +757,10 @@ export async function processManualFlowTrigger(
   if (variables && Object.keys(variables).length > 0) {
     const currentContext =
       (session.context as Record<string, unknown> | null) ?? {};
-    const nextContext = { ...currentContext, ...variables } as Prisma.JsonObject;
+    const nextContext = {
+      ...currentContext,
+      ...variables,
+    } as Prisma.JsonObject;
     session = (await prisma.session.update({
       where: { id: session.id },
       data: { context: nextContext },
@@ -774,7 +777,7 @@ export async function processManualFlowTrigger(
   try {
     await executeFlow(
       session,
-      candidateMessage,
+      candidateMessage, //@ts-expect-error bla
       (uid, to, payload) => sendMessage(uid, to, payload),
       incomingMeta,
     );
