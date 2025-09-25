@@ -81,9 +81,9 @@ export default function Home() {
                 Impulsa tus conversaciones con chatbots que hablan tu idioma.
               </h1>
               <p className="max-w-xl text-lg text-white/80">
-                Diseña experiencias conversacionales memorables, automatiza tareas
-                repetitivas y sorprende a tus clientes con respuestas precisas y
-                humanas en cada canal.
+                Diseña experiencias conversacionales memorables, automatiza
+                tareas repetitivas y sorprende a tus clientes con respuestas
+                precisas y humanas en cada canal.
               </p>
             </div>
             <div className="flex flex-col gap-4 sm:flex-row">
@@ -110,7 +110,7 @@ export default function Home() {
                   number: "+3M",
                   label: "mensajes gestionados al mes",
                 },
-                { number: "98%", label: "clientes felices" },
+                { number: "100%", label: "clientes felices" },
                 { number: "24/7", label: "soporte inteligente" },
               ].map((stat) => (
                 <div
@@ -133,7 +133,9 @@ export default function Home() {
                   <p className="text-sm uppercase tracking-[0.3em] text-white/60">
                     Panel activo
                   </p>
-                  <p className="mt-2 text-2xl font-semibold">Asistente virtual</p>
+                  <p className="mt-2 text-2xl font-semibold">
+                    Asistente virtual
+                  </p>
                 </div>
                 <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#4BC3FE]/20 text-[#4BC3FE]">
                   <Bot className="h-6 w-6" />
@@ -145,11 +147,14 @@ export default function Home() {
                     Canal WhatsApp
                   </p>
                   <p className="mt-2 text-lg font-medium text-white">
-                    &ldquo;Hola Sofía, confirmamos tu reserva para mañana a las 10:00. ¿Deseas agregar recordatorios automáticos?&rdquo;
+                    &ldquo;Hola Sofía, confirmamos tu reserva para mañana a las
+                    10:00. ¿Deseas agregar recordatorios automáticos?&rdquo;
                   </p>
                 </div>
                 <div className="grid gap-4 rounded-2xl border border-white/10 bg-[#04102D]/60 p-5">
-                  <p className="text-sm font-semibold text-white">Rendimiento semanal</p>
+                  <p className="text-sm font-semibold text-white">
+                    Rendimiento semanal
+                  </p>
                   <div className="flex items-center justify-between text-sm text-white/60">
                     <span>Chats resueltos</span>
                     <span className="text-white">1,248</span>
@@ -185,7 +190,10 @@ export default function Home() {
       </main>
 
       <footer className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-6 px-6 pb-12 text-sm text-white/60 sm:flex-row">
-        <p>© {new Date().getFullYear()} Finnegans Chatbots. Todos los derechos reservados.</p>
+        <p>
+          © {new Date().getFullYear()} Finnegans Chatbots. Todos los derechos
+          reservados.
+        </p>
         <div className="flex gap-6">
           <span>Privacidad</span>
           <span>Términos</span>
