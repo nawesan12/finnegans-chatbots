@@ -31,23 +31,20 @@ const features = [
 
 export default function Home() {
   return (
-    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-[#04102D] via-[#04102D] to-[#4BC3FE] text-white">
-      <div className="pointer-events-none absolute -top-24 -left-24 h-72 w-72 rounded-full bg-[#4BC3FE] opacity-30 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-32 -right-16 h-80 w-80 rounded-full bg-white/40 opacity-20 blur-3xl" />
-
-      <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-8">
+    <div className="min-h-screen bg-[#f4f6fb] text-slate-900">
+      <header className="mx-auto mt-8 flex w-full max-w-6xl items-center justify-between rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
         <Link href="/" className="flex items-center gap-3">
-          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 backdrop-blur-lg">
-            <Sparkles className="h-6 w-6 text-[#4BC3FE]" />
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#0f172a]/5 text-[#0f172a]">
+            <Sparkles className="h-6 w-6" />
           </span>
           <div>
-            <p className="text-sm uppercase tracking-[0.3em] text-white/70">
+            <p className="text-xs font-semibold uppercase tracking-[0.4em] text-slate-500">
               Finnegans
             </p>
-            <p className="text-xl font-semibold">Chatbots</p>
+            <p className="text-xl font-semibold text-[#0f172a]">Chatbots</p>
           </div>
         </Link>
-        <nav className="hidden items-center gap-8 text-sm font-medium text-white/80 md:flex">
+        <nav className="hidden items-center gap-8 text-sm font-medium text-slate-600 md:flex">
           <span>Soluciones</span>
           <span>Precios</span>
           <span>Historias de éxito</span>
@@ -57,39 +54,37 @@ export default function Home() {
           <Button
             asChild
             variant="ghost"
-            className="border-0 bg-transparent text-white hover:bg-white/10"
+            className="border-0 bg-transparent text-slate-600 hover:bg-slate-100"
           >
             <Link href="/login">Ingresar</Link>
           </Button>
           <Button
             asChild
-            className="bg-white text-[#04102D] shadow-lg shadow-[#04102D]/20 hover:bg-white/90"
+            className="bg-[#0f172a] text-white shadow-sm transition hover:bg-[#132547]"
           >
             <Link href="/register">Comenzar gratis</Link>
           </Button>
         </div>
       </header>
 
-      <main className="relative z-10 mx-auto flex w-full max-w-6xl flex-col gap-20 px-6 pb-24 pt-10">
-        <section className="grid gap-16 md:grid-cols-[1.1fr,0.9fr] md:items-center">
-          <div className="space-y-8">
-            <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-5 py-2 text-sm font-medium uppercase tracking-[0.3em] text-white/70">
+      <main className="mx-auto mt-16 flex w-full max-w-6xl flex-col gap-20 px-6 pb-24">
+        <section className="grid gap-16 rounded-[28px] border border-slate-200 bg-white p-10 shadow-lg shadow-slate-200/40 md:grid-cols-[1.05fr,0.95fr] md:items-center">
+          <div className="space-y-10">
+            <span className="inline-flex items-center gap-2 rounded-full bg-[#0f172a] px-5 py-2 text-xs font-semibold uppercase tracking-[0.35em] text-white">
               <Sparkles className="h-4 w-4" /> Innovación latina
             </span>
             <div className="space-y-6">
-              <h1 className="text-4xl font-semibold leading-tight sm:text-5xl lg:text-6xl">
-                Impulsa tus conversaciones con chatbots que hablan tu idioma.
+              <h1 className="text-4xl font-semibold leading-tight text-[#0f172a] sm:text-5xl lg:text-6xl">
+                Chatbots corporativos que elevan cada conversación.
               </h1>
-              <p className="max-w-xl text-lg text-white/80">
-                Diseña experiencias conversacionales memorables, automatiza
-                tareas repetitivas y sorprende a tus clientes con respuestas
-                precisas y humanas en cada canal.
+              <p className="max-w-xl text-lg text-slate-600">
+                Diseña experiencias conversacionales consistentes con la identidad de tu marca, automatiza tareas críticas y brinda respuestas fiables en cualquier canal.
               </p>
             </div>
             <div className="flex flex-col gap-4 sm:flex-row">
               <Button
                 asChild
-                className="flex items-center gap-2 rounded-full bg-[#4BC3FE] px-8 py-6 text-base font-semibold text-[#04102D] shadow-lg shadow-[#04102D]/20 transition hover:bg-[#35aaf2]"
+                className="flex items-center gap-2 rounded-full bg-[#0f172a] px-8 py-6 text-base font-semibold text-white transition hover:bg-[#132547]"
               >
                 <Link href="/register">
                   Empieza ahora
@@ -99,7 +94,7 @@ export default function Home() {
               <Button
                 asChild
                 variant="outline"
-                className="rounded-full border-white/40 bg-white/5 px-8 py-6 text-base font-semibold text-white transition hover:bg-white/10"
+                className="rounded-full border-slate-200 bg-transparent px-8 py-6 text-base font-semibold text-[#0f172a] transition hover:bg-slate-100"
               >
                 <Link href="/login">Ver demo en vivo</Link>
               </Button>
@@ -115,89 +110,125 @@ export default function Home() {
               ].map((stat) => (
                 <div
                   key={stat.label}
-                  className="rounded-2xl border border-white/10 bg-white/5 p-6 text-center backdrop-blur-xl"
+                  className="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-center"
                 >
-                  <p className="text-3xl font-bold text-white">{stat.number}</p>
-                  <p className="mt-2 text-sm uppercase tracking-wide text-white/70">
+                  <p className="text-3xl font-bold text-[#0f172a]">{stat.number}</p>
+                  <p className="mt-2 text-xs font-semibold uppercase tracking-[0.35em] text-slate-500">
                     {stat.label}
                   </p>
                 </div>
               ))}
             </div>
           </div>
-          <div className="relative">
-            <div className="absolute inset-0 rounded-3xl bg-white/10 blur-3xl" />
-            <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/10 p-8 backdrop-blur-xl">
-              <div className="flex items-center justify-between">
+          <div className="space-y-6">
+            <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/50">
+              <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-sm uppercase tracking-[0.3em] text-white/60">
+                  <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-400">
                     Panel activo
                   </p>
-                  <p className="mt-2 text-2xl font-semibold">
+                  <p className="mt-3 text-2xl font-semibold text-[#0f172a]">
                     Asistente virtual
                   </p>
                 </div>
-                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#4BC3FE]/20 text-[#4BC3FE]">
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#0f172a]/10 text-[#0f172a]">
                   <Bot className="h-6 w-6" />
                 </span>
               </div>
-              <div className="mt-8 space-y-6 text-white/80">
-                <div className="rounded-2xl bg-white/10 p-5">
-                  <p className="text-sm uppercase tracking-wide text-white/60">
+              <div className="mt-8 space-y-5 text-slate-600">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
                     Canal WhatsApp
                   </p>
-                  <p className="mt-2 text-lg font-medium text-white">
-                    &ldquo;Hola Sofía, confirmamos tu reserva para mañana a las
-                    10:00. ¿Deseas agregar recordatorios automáticos?&rdquo;
+                  <p className="mt-2 text-base font-medium text-[#0f172a]">
+                    “Hola Sofía, confirmamos tu reserva para mañana a las 10:00. ¿Deseas agregar recordatorios automáticos?”
                   </p>
                 </div>
-                <div className="grid gap-4 rounded-2xl border border-white/10 bg-[#04102D]/60 p-5">
-                  <p className="text-sm font-semibold text-white">
+                <div className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-5">
+                  <p className="text-sm font-semibold text-[#0f172a]">
                     Rendimiento semanal
                   </p>
-                  <div className="flex items-center justify-between text-sm text-white/60">
+                  <div className="flex items-center justify-between text-sm text-slate-500">
                     <span>Chats resueltos</span>
-                    <span className="text-white">1,248</span>
+                    <span className="text-[#0f172a]">1,248</span>
                   </div>
-                  <div className="flex items-center justify-between text-sm text-white/60">
+                  <div className="flex items-center justify-between text-sm text-slate-500">
                     <span>Automatizaciones activas</span>
-                    <span className="text-white">36</span>
+                    <span className="text-[#0f172a]">36</span>
                   </div>
-                  <div className="flex items-center justify-between text-sm text-white/60">
+                  <div className="flex items-center justify-between text-sm text-slate-500">
                     <span>Satisfacción</span>
-                    <span className="text-white">4.9/5</span>
+                    <span className="text-[#0f172a]">4.9/5</span>
                   </div>
                 </div>
+              </div>
+            </div>
+            <div className="grid gap-4 rounded-3xl border border-dashed border-slate-300 bg-white p-6 text-slate-500">
+              <p className="text-sm font-semibold uppercase tracking-[0.35em] text-slate-400">
+                Indicadores clave
+              </p>
+              <div className="flex items-center justify-between text-sm">
+                <span>Tiempo promedio de respuesta</span>
+                <span className="font-semibold text-[#0f172a]">28 seg</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span>Integraciones activas</span>
+                <span className="font-semibold text-[#0f172a]">12</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span>Escenarios automatizados</span>
+                <span className="font-semibold text-[#0f172a]">+85</span>
               </div>
             </div>
           </div>
         </section>
 
-        <section className="grid gap-6 rounded-3xl border border-white/10 bg-white/10 p-10 backdrop-blur-xl md:grid-cols-3">
-          {features.map(({ title, description, icon: Icon }) => (
-            <div
-              key={title}
-              className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-[#04102D]/40 p-6"
-            >
-              <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#4BC3FE]/20 text-[#4BC3FE]">
-                <Icon className="h-6 w-6" />
-              </span>
-              <h3 className="text-xl font-semibold text-white">{title}</h3>
-              <p className="text-sm text-white/70">{description}</p>
+        <section className="space-y-10">
+          <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-500">
+                Capacidades
+              </p>
+              <h2 className="mt-3 text-3xl font-semibold text-[#0f172a]">
+                Todo lo que tu equipo necesita para conversar con seguridad.
+              </h2>
             </div>
-          ))}
+            <Button
+              asChild
+              variant="outline"
+              className="rounded-full border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-[#0f172a] transition hover:bg-slate-100"
+            >
+              <Link href="/register">Solicitar asesoría</Link>
+            </Button>
+          </div>
+          <div className="grid gap-6 md:grid-cols-3">
+            {features.map(({ title, description, icon: Icon }) => (
+              <div
+                key={title}
+                className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
+              >
+                <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-[#0f172a]/10 text-[#0f172a]">
+                  <Icon className="h-6 w-6" />
+                </span>
+                <h3 className="text-lg font-semibold text-[#0f172a]">{title}</h3>
+                <p className="text-sm leading-6 text-slate-600">{description}</p>
+              </div>
+            ))}
+          </div>
         </section>
       </main>
 
-      <footer className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-6 px-6 pb-12 text-sm text-white/60 sm:flex-row">
-        <p>
-          © {new Date().getFullYear()} Finnegans Chatbots. Todos los derechos
-          reservados.
-        </p>
-        <div className="flex gap-6">
-          <span>Privacidad</span>
-          <span>Términos</span>
-          <span>Soporte</span>
+      <footer className="border-t border-slate-200 bg-white/80">
+        <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-6 px-6 py-10 text-sm text-slate-500 sm:flex-row">
+          <p>
+            © {new Date().getFullYear()} Finnegans Chatbots. Todos los derechos
+            reservados.
+          </p>
+          <div className="flex gap-6">
+            <span>Privacidad</span>
+            <span>Términos</span>
+            <span>Soporte</span>
+          </div>
         </div>
       </footer>
     </div>
