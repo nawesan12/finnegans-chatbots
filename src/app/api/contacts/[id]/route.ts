@@ -1,11 +1,12 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getAuthPayload } from "@/lib/auth";
 
 export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await context.params;
   const auth = getAuthPayload(request);
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -13,7 +14,7 @@ export async function GET(
 
   try {
     const contact = await prisma.contact.findFirst({
-      where: { id: params.id, userId: auth.userId },
+      where: { id, userId: auth.userId },
       include: {
         tags: {
           include: {
@@ -29,7 +30,7 @@ export async function GET(
 
     return NextResponse.json(contact);
   } catch (error) {
-    console.error(`Error fetching contact ${params.id}:`, error);
+    console.error(`Error fetching contact ${id}:`, error);
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 }
@@ -38,9 +39,10 @@ export async function GET(
 }
 
 export async function PUT(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await context.params;
   const auth = getAuthPayload(request);
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -51,7 +53,7 @@ export async function PUT(
     const { name, phone, tags: newTagNames = [] } = body;
 
     const contact = await prisma.contact.findFirst({
-      where: { id: params.id, userId: auth.userId },
+      where: { id, userId: auth.userId },
       include: { tags: { include: { tag: true } } },
     });
 
@@ -69,7 +71,7 @@ export async function PUT(
     }));
 
     const updatedContact = await prisma.contact.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         name,
         phone,
@@ -85,7 +87,7 @@ export async function PUT(
 
     return NextResponse.json(updatedContact);
   } catch (error) {
-    console.error(`Error updating contact ${params.id}:`, error);
+    console.error(`Error updating contact ${id}:`, error);
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 }
@@ -94,9 +96,10 @@ export async function PUT(
 }
 
 export async function DELETE(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await context.params;
   const auth = getAuthPayload(request);
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -104,7 +107,7 @@ export async function DELETE(
 
   try {
     const contact = await prisma.contact.findFirst({
-      where: { id: params.id, userId: auth.userId },
+      where: { id, userId: auth.userId },
       select: { id: true },
     });
 
@@ -126,7 +129,7 @@ export async function DELETE(
 
     return new NextResponse(null, { status: 204 });
   } catch (error) {
-    console.error(`Error deleting contact ${params.id}:`, error);
+    console.error(`Error deleting contact ${id}:`, error);
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 }

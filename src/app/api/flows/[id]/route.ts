@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { getAuthPayload } from "@/lib/auth";
@@ -13,9 +13,10 @@ const FlowUpdateSchema = z.object({
 });
 
 export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await context.params;
   const auth = getAuthPayload(request);
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -23,7 +24,7 @@ export async function GET(
 
   try {
     const flow = await prisma.flow.findFirst({
-      where: { id: params.id, userId: auth.userId },
+      where: { id, userId: auth.userId },
     });
 
     if (!flow) {
@@ -32,7 +33,7 @@ export async function GET(
 
     return NextResponse.json(flow);
   } catch (error) {
-    console.error(`Error fetching flow ${params.id}:`, error);
+    console.error(`Error fetching flow ${id}:`, error);
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 }
@@ -41,9 +42,10 @@ export async function GET(
 }
 
 export async function PUT(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await context.params;
   const auth = getAuthPayload(request);
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -77,7 +79,7 @@ export async function PUT(
       phoneNumber && phoneNumber.trim().length ? phoneNumber.trim() : null;
 
     const existingFlow = await prisma.flow.findFirst({
-      where: { id: params.id, userId: auth.userId },
+      where: { id, userId: auth.userId },
       select: { id: true },
     });
 
@@ -104,7 +106,7 @@ export async function PUT(
 
     return NextResponse.json(updatedFlow);
   } catch (error) {
-    console.error(`Error updating flow ${params.id}:`, error);
+    console.error(`Error updating flow ${id}:`, error);
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 }
@@ -113,9 +115,10 @@ export async function PUT(
 }
 
 export async function DELETE(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await context.params;
   const auth = getAuthPayload(request);
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -123,7 +126,7 @@ export async function DELETE(
 
   try {
     const flow = await prisma.flow.findFirst({
-      where: { id: params.id, userId: auth.userId },
+      where: { id, userId: auth.userId },
       select: { id: true },
     });
 
@@ -143,7 +146,7 @@ export async function DELETE(
 
     return new NextResponse(null, { status: 204 });
   } catch (error) {
-    console.error(`Error deleting flow ${params.id}:`, error);
+    console.error(`Error deleting flow ${id}:`, error);
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 }
