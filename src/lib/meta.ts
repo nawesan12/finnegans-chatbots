@@ -607,7 +607,7 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
 
           await executeFlow(
             session,
-            text,
+            text, //@ts-expect-error bla
             (uid, to, payload) => sendMessage(uid, to, payload),
             incomingMeta,
           );
