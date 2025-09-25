@@ -611,16 +611,17 @@ const FlowsPage = () => {
   }
 
   return (
-    <AnimatePresence>
-      {editingFlow ? (
-        <motion.div
-          key="flow-builder"
-          initial={{ opacity: 0, x: 300 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: 300 }}
-          transition={{ duration: 0.4 }}
-          className="absolute left-0 top-0 flex h-full w-full flex-col bg-white"
-        >
+    <div className="relative h-full min-h-[calc(100vh-8rem)]">
+      <AnimatePresence>
+        {editingFlow ? (
+          <motion.div
+            key="flow-builder"
+            initial={{ opacity: 0, x: 300 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 300 }}
+            transition={{ duration: 0.4 }}
+            className="absolute left-0 top-0 flex h-full w-full flex-col bg-white"
+          >
           <div className="border-b bg-white p-4">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <button
@@ -705,8 +706,8 @@ const FlowsPage = () => {
             <FlowBuilder ref={flowBuilderRef} initialFlow={initialFlow} />
           </div>
         </motion.div>
-      ) : (
-        <motion.div key="flow-list" className="space-y-6 p-6">
+        ) : (
+          <motion.div key="flow-list" className="space-y-6 p-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-800">Flujos</h1>
@@ -793,8 +794,9 @@ const FlowsPage = () => {
             </div>
           </motion.div>
         </motion.div>
-      )}
-    </AnimatePresence>
+        )}
+      </AnimatePresence>
+    </div>
   );
 };
 

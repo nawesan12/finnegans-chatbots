@@ -19,6 +19,7 @@ import {
 } from "reactflow";
 import type {
   Connection,
+  Node,
   NodeProps,
   NodeTypes,
   OnSelectionChangeParams,
@@ -173,7 +174,7 @@ const toFlowState = (
 
 const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
   ({ initialFlow }, ref) => {
-    const [nodes, setNodes, onNodesChange] = //@ts-expect-error it exists
+    const [nodes, setNodes, onNodesChange] =
       useNodesState<FlowNode>(defaultNodes);
     const [edges, setEdges, onEdgesChange] =
       useEdgesState<FlowEdge>(defaultEdges);
@@ -207,7 +208,6 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
 
         historyRef.current.past = [];
         historyRef.current.future = [];
-        //@ts-expect-error it exists
         setNodes(nextNodes);
         setEdges(nextEdges);
         setSelected(null);
@@ -269,7 +269,6 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
           ...getStarterData(type),
         } as FlowNode["data"];
         const newNode: FlowNode = { id, type, data, position };
-        //@ts-expect-error it exists
         setNodes((nds) => nds.concat(newNode));
         setSelected(newNode);
         setSelectedIds([id]);
@@ -316,7 +315,7 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
 
     const handleEdit = useCallback(
       (nodeId: string) => {
-        const found = nodes.find((node) => node.id === nodeId) ?? null; //@ts-expect-error it exists
+        const found = nodes.find((node) => node.id === nodeId) ?? null;
         setSelected(found);
         if (found) {
           setSelectedIds([nodeId]);
@@ -328,7 +327,7 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       (nodeId: string) => {
         const source = nodes.find((node) => node.id === nodeId);
         if (!source) return;
-        const id = makeId(); //@ts-expect-error it exists
+        const id = makeId();
         const base = cloneNode(source);
         const duplicate: FlowNode = {
           ...base,
@@ -338,7 +337,7 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
             y: (base.position?.y ?? 0) + 20,
           },
           selected: false,
-        }; //@ts-expect-error it exists
+        };
         setNodes((nds) => nds.concat(duplicate));
         setSelected(duplicate);
         setSelectedIds([id]);
@@ -408,7 +407,6 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
             ...patch.data,
           } as FlowNode["data"];
           const nextNode: FlowNode = { ...current, data: nextData };
-          //@ts-expect-error it exists
           setNodes((nodesState) =>
             nodesState.map((node) =>
               node.id === current.id ? nextNode : node,
@@ -460,7 +458,7 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
           type,
           position,
           data,
-        }; //@ts-expect-error it exists
+        };
         setNodes((nds) => nds.concat(newNode));
         setSelected(newNode);
         setSelectedIds([id]);
@@ -525,7 +523,7 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
     const validate = () => {
       const problems: string[] = [];
       const triggers = nodes.filter((n) => n.type === "trigger");
-      const triggerKeys = triggers //@ts-expect-error it exists
+      const triggerKeys = triggers
         .map((t) => t.data?.keyword?.toLowerCase()?.trim())
         .filter(Boolean);
       const triggerSet = new Set(triggerKeys);
@@ -587,9 +585,8 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
         }
 
         if (n.type === "options") {
-          //@ts-expect-error it exists
           const opts = Array.isArray(n.data?.options) ? n.data.options : [];
-          const missing: string[] = []; //@ts-expect-error it exists
+          const missing: string[] = [];
           opts.forEach((_, idx) => {
             if (
               !outgoingFromNode.some((e) => e.sourceHandle === `opt-${idx}`)
@@ -626,7 +623,6 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
         }
 
         if (n.type === "goto") {
-          //@ts-expect-error it exists
           const targetId = n.data?.targetNodeId ?? "";
           if (
             targetId &&
@@ -667,7 +663,7 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       const current = past.pop();
       if (current) historyRef.current.future.push(current);
       const prev = sanitizeFlowDefinition(JSON.parse(past[past.length - 1]));
-      const { nodes: prevNodes, edges: prevEdges } = toFlowState(prev); //@ts-expect-error it exists
+      const { nodes: prevNodes, edges: prevEdges } = toFlowState(prev);
       setNodes(prevNodes);
       setEdges(prevEdges);
       setSelected(null);
@@ -679,7 +675,7 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       if (!next) return;
       historyRef.current.past.push(next);
       const state = sanitizeFlowDefinition(JSON.parse(next));
-      const { nodes: nextNodes, edges: nextEdges } = toFlowState(state); //@ts-expect-error it exists
+      const { nodes: nextNodes, edges: nextEdges } = toFlowState(state);
       setNodes(nextNodes);
       setEdges(nextEdges);
       setSelected(null);
@@ -800,7 +796,7 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
         setSelectedIds(ids);
 
         if (ids.length) {
-          const first = nodes.find((node) => node.id === ids[0]) ?? null; //@ts-expect-error it exists
+          const first = nodes.find((node) => node.id === ids[0]) ?? null;
           setSelected(first);
         } else {
           setSelected(null);
@@ -818,7 +814,6 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
     );
 
     const miniMapNodeColor = useCallback((node: Node) => {
-      //@ts-expect-error it exists
       switch (node?.type) {
         case "trigger":
           return "#22c55e";
@@ -847,14 +842,13 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
     }, []);
 
     const miniMapNodeStroke = useCallback(
-      //@ts-expect-error it exists
       (node: Node) => (node?.selected ? "#0ea5e9" : "#475569"),
       [],
     );
 
     return (
-      <div className="h-screen w-full grid grid-cols-12 gap-0">
-        <div className="col-span-12">
+      <div className="flex h-full w-full flex-col">
+        <div className="flex-none">
           <Topbar
             onNew={() => {
               applyFlow({ nodes: defaultNodes, edges: defaultEdges });
@@ -875,108 +869,106 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
           />
         </div>
 
-        {/* Left: Palette */}
-        <div className="col-span-2 h-[calc(100vh-48px)] border-r p-3 overflow-auto">
-          <div className="flex items-center justify-between mb-2">
-            <div className="font-semibold">Nodos</div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" variant="outline">
-                  <Download className="h-4 w-4 mr-2" />
-                  Exportar
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuItem onClick={handleExport}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Editor JSON
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={exportForWhatsApp}>
-                  <Rocket className="h-4 w-4 mr-2" />
-                  WhatsApp Spec
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+        <div className="grid flex-1 grid-cols-12 gap-0 overflow-hidden">
+          {/* Left: Palette */}
+          <div className="col-span-2 h-full overflow-auto border-r p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="font-semibold">Nodos</div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="outline">
+                    <Download className="mr-2 h-4 w-4" />
+                    Exportar
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem onClick={handleExport}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Editor JSON
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={exportForWhatsApp}>
+                    <Rocket className="mr-2 h-4 w-4" />
+                    WhatsApp Spec
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+            <Palette onAdd={addNode} />
+            <Separator className="my-4" />
+            <div className="text-xs text-muted-foreground">
+              Consejo: clickeá o arrastrá nodos al lienzo.
+            </div>
           </div>
-          <Palette onAdd={addNode} />
-          <Separator className="my-4" />
-          <div className="text-xs text-muted-foreground">
-            Consejo: clickeá o arrastrá nodos al lienzo.
+
+          {/* Center: Canvas */}
+          <div className="col-span-7 h-full min-h-0">
+            <ReactFlow
+              ref={rfRef}
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              nodeTypes={memoizedNodeTypes}
+              onNodeClick={onNodeClick}
+              onPaneClick={onPaneClick}
+              onDrop={onDrop}
+              onDragOver={onDragOver}
+              onSelectionChange={handleSelectionChange}
+              onMoveEnd={handleMoveEnd} // veremos abajo
+              defaultEdgeOptions={{
+                type: "smoothstep",
+                markerEnd: { type: MarkerType.ArrowClosed },
+              }}
+              snapToGrid
+              snapGrid={[8, 8]}
+              selectionOnDrag
+              panOnDrag={[1, 2]}
+              panOnScroll
+              zoomOnScroll
+              zoomOnPinch
+              panOnScrollSpeed={0.8}
+              elevateNodesOnSelect
+              selectionMode="partial"
+              deleteKeyCode={null}
+            >
+              <Background color="#e2e8f0" variant="lines" gap={24} />
+              <MiniMap
+                className="!bg-white/80"
+                pannable
+                zoomable
+                nodeColor={miniMapNodeColor}
+                nodeStrokeColor={miniMapNodeStroke}
+                nodeStrokeWidth={2}
+              />
+              <Controls position="bottom-left" showInteractive={false} />
+            </ReactFlow>
           </div>
-        </div>
 
-        {/* Center: Canvas */}
-        <div className="col-span-7 h-[calc(100vh-48px)]">
-          <ReactFlow //@ts-expect-error it exists
-            ref={rfRef}
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            nodeTypes={memoizedNodeTypes} //@ts-expect-error it exists
-            onNodeClick={onNodeClick}
-            onPaneClick={onPaneClick}
-            onDrop={onDrop}
-            onDragOver={onDragOver}
-            onSelectionChange={handleSelectionChange} //@ts-expect-error it exists
-            onMoveEnd={handleMoveEnd} // veremos abajo
-            defaultEdgeOptions={{
-              type: "smoothstep",
-              markerEnd: { type: MarkerType.ArrowClosed },
-            }}
-            snapToGrid
-            snapGrid={[8, 8]}
-            selectionOnDrag
-            panOnDrag={[1, 2]}
-            panOnScroll
-            zoomOnScroll
-            zoomOnPinch
-            panOnScrollSpeed={0.8}
-            elevateNodesOnSelect //@ts-expect-error it exists
-            selectionMode="partial"
-            deleteKeyCode={null}
-          >
-            {/*//@ts-expect-error it exists*/}
-            <Background color="#e2e8f0" variant="lines" gap={24} />
-            <MiniMap
-              className="!bg-white/80"
-              pannable
-              zoomable //@ts-expect-error it exists
-              nodeColor={miniMapNodeColor} //@ts-expect-error it exists
-              nodeStrokeColor={miniMapNodeStroke}
-              nodeStrokeWidth={2}
-            />
-            <Controls position="bottom-left" showInteractive={false} />
-          </ReactFlow>
-        </div>
-
-        {/* Right: Inspector + Simulator */}
-        <div className="col-span-3 h-[auto] border-l p-3 flex flex-col gap-3">
-          <Inspector selectedNode={selected} onChange={updateSelected} />
-          <Simulator //@ts-expect-error it exists
-            nodes={nodes}
-            edges={edges}
-          />
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Bug className="h-4 w-4" /> Consejos de construcción
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-xs text-muted-foreground space-y-1">
-              <div>
-                • Mantené los mensajes por debajo de los {waTextLimit}{" "}
-                caracteres.
-              </div>
-              <div>• Usá Opciones (quick replies) para hacer menús.</div>
-              <div>• Usá Delay para evitar atosigar a los usuarios.</div>
-              <div>
-                • Condition puede ramificar según <code>context</code> y
-                resultados de API.
-              </div>
-            </CardContent>
-          </Card>
+          {/* Right: Inspector + Simulator */}
+          <div className="col-span-3 flex h-full min-h-0 flex-col gap-3 overflow-auto border-l p-3">
+            <Inspector selectedNode={selected} onChange={updateSelected} />
+            <Simulator nodes={nodes} edges={edges} />
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Bug className="h-4 w-4" /> Consejos de construcción
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-1 text-xs text-muted-foreground">
+                <div>
+                  • Mantené los mensajes por debajo de los {waTextLimit}{" "}
+                  caracteres.
+                </div>
+                <div>• Usá Opciones (quick replies) para hacer menús.</div>
+                <div>• Usá Delay para evitar atosigar a los usuarios.</div>
+                <div>
+                  • Condition puede ramificar según <code>context</code> y
+                  resultados de API.
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     );

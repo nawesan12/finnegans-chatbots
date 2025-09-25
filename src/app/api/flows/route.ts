@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { getAuthPayload } from "@/lib/auth";
@@ -80,6 +80,7 @@ export async function POST(request: Request) {
     }
 
     const sanitizedDefinition = sanitizeFlowDefinition(definition);
+    const definitionPayload = sanitizedDefinition as Prisma.InputJsonValue;
     const normalizedTrigger = trigger?.trim() || "default";
     const normalizedStatus = status?.trim() || "Draft";
     const normalizedPhone =
@@ -90,7 +91,7 @@ export async function POST(request: Request) {
         name: trimmedName,
         trigger: normalizedTrigger,
         status: normalizedStatus,
-        definition: sanitizedDefinition,
+        definition: definitionPayload,
         phoneNumber: normalizedPhone,
         user: { connect: { id: auth.userId } },
       },

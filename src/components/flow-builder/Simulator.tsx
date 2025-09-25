@@ -15,13 +15,32 @@ import {
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import type { FlowEdge, FlowNode } from "./types";
+import type {
+  ApiNodeData,
+  AssignNodeData,
+  DelayNodeData,
+  FlowEdge,
+  FlowNode,
+  OptionsNodeData,
+  MessageNodeData,
+  MediaNodeData,
+  ConditionNodeData,
+  GoToNodeData,
+  HandoffNodeData,
+  TriggerNodeData,
+} from "./types";
 
 type LogEntry =
   | { type: "user"; text: string; ts: number }
   | { type: "bot"; text: string; ts: number }
   | { type: "options"; text?: string; options: string[]; ts: number }
   | { type: "system"; text: string; ts: number };
+
+type LogEntryInput =
+  | { type: "user"; text: string }
+  | { type: "bot"; text: string }
+  | { type: "options"; text?: string; options: string[] }
+  | { type: "system"; text: string };
 
 type SimContext = { vars: Record<string, unknown> };
 
@@ -126,7 +145,7 @@ export function Simulator({
     return map;
   }, [edges]);
 
-  const addLog = useCallback((entry: Omit<LogEntry, "ts">) => {
+  const addLog = useCallback((entry: LogEntryInput) => {
     const withTimestamp: LogEntry = { ...entry, ts: now() };
     setLog((prev) => prev.concat(withTimestamp));
   }, []);
@@ -191,22 +210,25 @@ export function Simulator({
             break;
           }
           case "message": {
-            const text = tpl(current.data?.text, runtimeContext);
+            const data = current.data as MessageNodeData | undefined;
+            const text = tpl(data?.text, runtimeContext);
             addLog({ type: "bot", text });
             break;
           }
           case "media": {
-            const mediaType = current.data?.mediaType ?? "";
-            const url = tpl(current.data?.url, runtimeContext);
-            const caption = tpl(current.data?.caption, runtimeContext);
+            const data = current.data as MediaNodeData | undefined;
+            const mediaType = data?.mediaType ?? "";
+            const url = tpl(data?.url, runtimeContext);
+            const caption = tpl(data?.caption, runtimeContext);
             const display =
               `[${mediaType.toUpperCase() || "MEDIA"}] ${url} ${caption || ""}`.trim();
             addLog({ type: "bot", text: display });
             break;
           }
           case "assign": {
-            const key = current.data?.key;
-            const rawValue = current.data?.value ?? "";
+            const data = current.data as AssignNodeData | undefined;
+            const key = data?.key;
+            const rawValue = data?.value ?? "";
             if (typeof key === "string" && key.trim()) {
               const value = tpl(rawValue, runtimeContext);
               setContext((prev) => {
@@ -220,7 +242,8 @@ export function Simulator({
             break;
           }
           case "delay": {
-            const seconds = Number(current.data?.seconds ?? 0);
+            const data = current.data as DelayNodeData | undefined;
+            const seconds = Number(data?.seconds ?? 0);
             addLog({ type: "system", text: `⏱ Wait ${seconds}s` });
             if (!ignoreDelays && seconds > 0) {
               await wait(seconds * 1000);
@@ -228,7 +251,8 @@ export function Simulator({
             break;
           }
           case "options": {
-            const options = current.data?.options ?? [];
+            const data = current.data as OptionsNodeData | undefined;
+            const options = data?.options ?? [];
             const dataWithText = current.data as { text?: string };
             const prompt = tpl(dataWithText?.text, runtimeContext);
             addLog({ type: "options", text: prompt, options });
@@ -239,11 +263,12 @@ export function Simulator({
             return;
           }
           case "api": {
-            const method = (current.data?.method ?? "GET").toString().toUpperCase();
-            const url = tpl(current.data?.url, runtimeContext);
-            const bodyRaw = current.data?.body ?? "";
-            const assignTo = current.data?.assignTo ?? "apiResult";
-            const rawHeaders = current.data?.headers ?? {};
+            const data = current.data as ApiNodeData | undefined;
+            const method = (data?.method ?? "GET").toString().toUpperCase();
+            const url = tpl(data?.url, runtimeContext);
+            const bodyRaw = data?.body ?? "";
+            const assignTo = data?.assignTo ?? "apiResult";
+            const rawHeaders = (data?.headers ?? {}) as Record<string, unknown>;
             const headers = Object.fromEntries(
               Object.entries(rawHeaders).filter(
                 (entry): entry is [string, string] => typeof entry[1] === "string",
@@ -291,10 +316,18 @@ export function Simulator({
             }
             break;
           }
+          case "handoff": {
+            const data = current.data as HandoffNodeData | undefined;
+            const queue = data?.queue ?? "Default";
+            const note = data?.note ? ` (${tpl(data.note, runtimeContext)})` : "";
+            addLog({ type: "system", text: `Derivar a agente: ${queue}${note}` });
+            break;
+          }
           case "condition": {
             try {
+              const data = current.data as ConditionNodeData | undefined;
               const result = evalCondition(
-                String(current.data?.expression ?? "false"),
+                String(data?.expression ?? "false"),
                 runtimeContext,
               );
               const edgesFrom = outgoing.get(current.id) ?? [];
@@ -310,7 +343,8 @@ export function Simulator({
             break;
           }
           case "goto": {
-            const nextId = current.data?.targetNodeId ?? "";
+            const data = current.data as GoToNodeData | undefined;
+            const nextId = data?.targetNodeId ?? "";
             current = nextId ? idMap.get(nextId) ?? null : null;
             continue;
           }
@@ -369,8 +403,8 @@ export function Simulator({
             setPausedNode(null);
           } else {
             const userText = messageToSend.toLowerCase().trim();
-            const opts = pausedNode.data?.options ?? [];
-            const idx = opts.findIndex(
+            const options = (pausedNode.data as OptionsNodeData | undefined)?.options ?? [];
+            const idx = options.findIndex(
               (option) => option.toLowerCase().trim() === userText,
             );
 
@@ -409,11 +443,11 @@ export function Simulator({
           contextRef.current = initial;
           setContext(initial);
           const msgLc = messageToSend.toLowerCase();
-          const startNode = nodes.find(
-            (node) =>
-              node.type === "trigger" &&
-              (node.data?.keyword ?? "").toLowerCase() === msgLc,
-          );
+          const startNode = nodes.find((node) => {
+            if (node.type !== "trigger") return false;
+            const data = node.data as TriggerNodeData | undefined;
+            return (data?.keyword ?? "").toLowerCase() === msgLc;
+          });
           if (startNode) {
             await execute(startNode);
           } else {
@@ -605,8 +639,8 @@ export function Simulator({
                   {("text" in line && line.text) ||
                     (line.type === "options" && (line.text || "Opciones"))}
                   {line.type === "options" && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {line.options?.map((opt, j) => (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {line.options.map((opt, j) => (
                         <Button
                           key={j}
                           variant="outline"
