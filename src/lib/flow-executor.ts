@@ -136,7 +136,7 @@ export async function executeFlow(
     flow: { definition: unknown; userId: string };
     contact: { phone: string };
   },
-  messageText: string,
+  messageText: string | null,
   sendMessage: SendMessage,
   incomingMeta: IncomingMessageMeta | null = null,
 ) {
