@@ -38,17 +38,17 @@ const capabilityItems = [
 ];
 
 const stats = [
-  { label: "SLA cumplido", value: "98%" },
+  { label: "SLA cumplido", value: "100%" },
   { label: "Tickets resueltos", value: "1.240" },
   { label: "CSAT global", value: "4.9" },
 ];
 
 const integrationList = [
   "WhatsApp Business Platform",
-  "Zendesk",
-  "Salesforce",
+  "Finni",
+  "Quippos",
   "HubSpot",
-  "Microsoft Teams",
+  "Finnegans GO",
   "Meta Ads",
 ];
 
@@ -57,19 +57,22 @@ const trustLogos = ["NovaBank", "Grupo Sideral", "Lumen Retail", "SegurPlus"];
 const teamHighlights = [
   {
     title: "Consultores senior",
-    description: "Especialistas en experiencia del cliente que acompañan tus proyectos regionales.",
+    description:
+      "Especialistas en experiencia del cliente que acompañan tus proyectos regionales.",
     stat: "15",
     statLabel: "expertos regionales",
   },
   {
     title: "Implementaciones ágiles",
-    description: "Metodología propia para lanzar casos de uso en ciclos de menos de 4 semanas.",
+    description:
+      "Metodología propia para lanzar casos de uso en ciclos de menos de 4 semanas.",
     stat: "4.2",
     statLabel: "semanas promedio",
   },
   {
     title: "Soporte dedicado",
-    description: "Equipo disponible 24/7 para incidentes críticos y monitoreo proactivo.",
+    description:
+      "Equipo disponible 24/7 para incidentes críticos y monitoreo proactivo.",
     stat: "99%",
     statLabel: "satisfacción NPS",
   },
@@ -85,7 +88,9 @@ export default function Home() {
               F.
             </span>
             <div className="leading-tight">
-              <p className="text-xs uppercase tracking-[0.28em] text-[#04102D]/60">Finnegans</p>
+              <p className="text-xs uppercase tracking-[0.28em] text-[#04102D]/60">
+                Finnegans
+              </p>
               <p className="text-xl font-semibold text-[#04102D]">Chatbots</p>
             </div>
           </Link>
@@ -135,10 +140,13 @@ export default function Home() {
               </span>
               <div className="space-y-6">
                 <h1 className="text-4xl font-semibold leading-tight sm:text-5xl">
-                  Experiencias conversacionales controladas, seguras y listas para crecer.
+                  Experiencias conversacionales controladas, seguras y listas
+                  para crecer.
                 </h1>
                 <p className="max-w-xl text-lg text-white/75">
-                  Centraliza procesos críticos, automatiza la atención y alinea a todos tus equipos con una misma voz. Escala sin perder la calidad del servicio.
+                  Centraliza procesos críticos, automatiza la atención y alinea
+                  a todos tus equipos con una misma voz. Escala sin perder la
+                  calidad del servicio.
                 </p>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -174,12 +182,21 @@ export default function Home() {
 
             <div className="lg:w-1/2">
               <div className="grid gap-6 rounded-3xl border border-white/10 bg-white/5 p-8 backdrop-blur">
-                <h2 className="text-lg font-semibold text-white">Resultados sostenidos</h2>
+                <h2 className="text-lg font-semibold text-white">
+                  Resultados sostenidos
+                </h2>
                 <div className="grid gap-4 sm:grid-cols-3">
                   {stats.map((item) => (
-                    <div key={item.label} className="rounded-2xl border border-white/10 bg-white/5 p-4 text-center">
-                      <p className="text-3xl font-semibold text-white">{item.value}</p>
-                      <p className="text-xs uppercase tracking-[0.28em] text-white/60">{item.label}</p>
+                    <div
+                      key={item.label}
+                      className="rounded-2xl border border-white/10 bg-white/5 p-4 text-center"
+                    >
+                      <p className="text-3xl font-semibold text-white">
+                        {item.value}
+                      </p>
+                      <p className="text-xs uppercase tracking-[0.28em] text-white/60">
+                        {item.label}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -190,8 +207,12 @@ export default function Home() {
                         <item.icon className="h-6 w-6" />
                       </div>
                       <div className="space-y-1">
-                        <p className="text-base font-semibold text-white">{item.title}</p>
-                        <p className="text-sm text-white/70">{item.description}</p>
+                        <p className="text-base font-semibold text-white">
+                          {item.title}
+                        </p>
+                        <p className="text-sm text-white/70">
+                          {item.description}
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -208,10 +229,13 @@ export default function Home() {
                 Operaciones conectadas
               </p>
               <h2 className="text-3xl font-semibold leading-tight">
-                Conecta canales, personas y procesos con un mismo estándar de servicio.
+                Conecta canales, personas y procesos con un mismo estándar de
+                servicio.
               </h2>
               <p className="text-lg text-[#04102D]/70">
-                Unifica la experiencia del cliente en WhatsApp, redes sociales y sitios web. Diseña flujos con supervisión humana y mantén trazabilidad completa en cada interacción.
+                Unifica la experiencia del cliente en WhatsApp, redes sociales y
+                sitios web. Diseña flujos con supervisión humana y mantén
+                trazabilidad completa en cada interacción.
               </p>
               <div className="grid gap-4 sm:grid-cols-2">
                 {featureHighlights.map((item) => (
@@ -223,8 +247,12 @@ export default function Home() {
                       <item.icon className="h-5 w-5" />
                     </div>
                     <div className="space-y-1">
-                      <p className="text-lg font-semibold text-[#04102D]">{item.title}</p>
-                      <p className="text-sm text-[#04102D]/70">{item.description}</p>
+                      <p className="text-lg font-semibold text-[#04102D]">
+                        {item.title}
+                      </p>
+                      <p className="text-sm text-[#04102D]/70">
+                        {item.description}
+                      </p>
                     </div>
                   </div>
                 ))}
@@ -232,9 +260,12 @@ export default function Home() {
             </div>
             <div className="flex flex-col justify-between gap-8 rounded-3xl border border-[#04102D]/10 bg-white p-8 shadow-sm">
               <div className="space-y-4">
-                <h3 className="text-xl font-semibold">Integraciones preferidas</h3>
+                <h3 className="text-xl font-semibold">
+                  Integraciones preferidas
+                </h3>
                 <p className="text-sm text-[#04102D]/70">
-                  Conecta Finnegans Chatbots con las herramientas que ya utiliza tu organización para garantizar continuidad operativa.
+                  Conecta Finnegans Chatbots con las herramientas que ya utiliza
+                  tu organización para garantizar continuidad operativa.
                 </p>
               </div>
               <div className="grid gap-3 text-sm font-medium text-[#04102D]">
@@ -255,12 +286,16 @@ export default function Home() {
         <section id="equipo" className="bg-[#04102D]/5 py-16">
           <div className="mx-auto flex w-full max-w-6xl flex-col gap-12 px-6 lg:flex-row lg:items-start">
             <div className="max-w-xl space-y-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#04102D]/60">Equipo experto</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#04102D]/60">
+                Equipo experto
+              </p>
               <h2 className="text-3xl font-semibold leading-tight text-[#04102D]">
                 Acompañamiento estratégico para cada etapa de tu operación.
               </h2>
               <p className="text-lg text-[#04102D]/70">
-                Desde la consultoría inicial hasta el soporte continuo, contamos con especialistas que entienden la complejidad de los servicios corporativos.
+                Desde la consultoría inicial hasta el soporte continuo, contamos
+                con especialistas que entienden la complejidad de los servicios
+                corporativos.
               </p>
               <div className="flex items-center gap-6">
                 <div className="flex -space-x-3">
@@ -272,17 +307,30 @@ export default function Home() {
                   ))}
                 </div>
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold text-[#04102D]">+120 organizaciones regionales</p>
-                  <p className="text-xs uppercase tracking-[0.28em] text-[#04102D]/60">confían en nuestro equipo</p>
+                  <p className="text-sm font-semibold text-[#04102D]">
+                    +120 organizaciones regionales
+                  </p>
+                  <p className="text-xs uppercase tracking-[0.28em] text-[#04102D]/60">
+                    confían en nuestro equipo
+                  </p>
                 </div>
               </div>
             </div>
             <div className="grid flex-1 gap-6 sm:grid-cols-3">
               {teamHighlights.map((item) => (
-                <div key={item.title} className="flex flex-col gap-4 rounded-3xl border border-[#04102D]/10 bg-white p-6 shadow-sm">
-                  <p className="text-4xl font-semibold text-[#04102D]">{item.stat}</p>
-                  <p className="text-xs uppercase tracking-[0.28em] text-[#04102D]/60">{item.statLabel}</p>
-                  <p className="text-sm text-[#04102D]/70">{item.description}</p>
+                <div
+                  key={item.title}
+                  className="flex flex-col gap-4 rounded-3xl border border-[#04102D]/10 bg-white p-6 shadow-sm"
+                >
+                  <p className="text-4xl font-semibold text-[#04102D]">
+                    {item.stat}
+                  </p>
+                  <p className="text-xs uppercase tracking-[0.28em] text-[#04102D]/60">
+                    {item.statLabel}
+                  </p>
+                  <p className="text-sm text-[#04102D]/70">
+                    {item.description}
+                  </p>
                 </div>
               ))}
             </div>
@@ -293,29 +341,41 @@ export default function Home() {
           <div className="rounded-3xl border border-[#04102D]/10 bg-white p-10 shadow-sm">
             <div className="flex flex-col gap-12 lg:flex-row lg:items-start">
               <div className="max-w-sm space-y-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#04102D]/60">Metodología Finnegans</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#04102D]/60">
+                  Metodología Finnegans
+                </p>
                 <h2 className="text-3xl font-semibold leading-tight">
                   Implementación sin fricciones para tus equipos.
                 </h2>
                 <p className="text-lg text-[#04102D]/70">
-                  Diseñamos un proceso claro que garantiza adopción, cumplimiento y resultados visibles desde el primer mes.
+                  Diseñamos un proceso claro que garantiza adopción,
+                  cumplimiento y resultados visibles desde el primer mes.
                 </p>
               </div>
               <div className="grid flex-1 gap-6 sm:grid-cols-3">
-                {["Descubrimiento", "Despliegue", "Optimización"].map((phase, index) => (
-                  <div key={phase} className="flex flex-col gap-4 rounded-2xl border border-[#04102D]/10 bg-[#04102D]/5 p-6">
-                    <span className="text-sm font-semibold text-[#4BC3FE]">Paso {index + 1}</span>
-                    <p className="text-lg font-semibold text-[#04102D]">{phase}</p>
-                    <p className="text-sm text-[#04102D]/70">
-                      {index === 0 &&
-                        "Relevamos objetivos, volumen de interacción y sistemas para integrar la solución adecuada."}
-                      {index === 1 &&
-                        "Configuramos automatizaciones, conectores y tableros con sesiones de acompañamiento ejecutivo."}
-                      {index === 2 &&
-                        "Medimos impacto, generamos recomendaciones y evolucionamos tus casos de uso de forma continua."}
-                    </p>
-                  </div>
-                ))}
+                {["Descubrimiento", "Despliegue", "Optimización"].map(
+                  (phase, index) => (
+                    <div
+                      key={phase}
+                      className="flex flex-col gap-4 rounded-2xl border border-[#04102D]/10 bg-[#04102D]/5 p-6"
+                    >
+                      <span className="text-sm font-semibold text-[#4BC3FE]">
+                        Paso {index + 1}
+                      </span>
+                      <p className="text-lg font-semibold text-[#04102D]">
+                        {phase}
+                      </p>
+                      <p className="text-sm text-[#04102D]/70">
+                        {index === 0 &&
+                          "Relevamos objetivos, volumen de interacción y sistemas para integrar la solución adecuada."}
+                        {index === 1 &&
+                          "Configuramos automatizaciones, conectores y tableros con sesiones de acompañamiento ejecutivo."}
+                        {index === 2 &&
+                          "Medimos impacto, generamos recomendaciones y evolucionamos tus casos de uso de forma continua."}
+                      </p>
+                    </div>
+                  ),
+                )}
               </div>
             </div>
           </div>
@@ -324,17 +384,23 @@ export default function Home() {
         <section id="contacto" className="mx-auto w-full max-w-6xl px-6">
           <div className="flex flex-col items-center gap-10 rounded-3xl bg-[#04102D] px-10 py-16 text-center text-white">
             <div className="space-y-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/70">Confianza corporativa</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/70">
+                Confianza corporativa
+              </p>
               <h2 className="text-3xl font-semibold leading-tight sm:text-4xl">
                 Organizaciones líderes gestionan su voz digital con Finnegans.
               </h2>
               <p className="text-lg text-white/75">
-                Sumate a la red de empresas que priorizan la seguridad, el compliance y la calidad en cada interacción con clientes.
+                Sumate a la red de empresas que priorizan la seguridad, el
+                compliance y la calidad en cada interacción con clientes.
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-6 text-sm font-semibold text-white/80">
               {trustLogos.map((logo) => (
-                <span key={logo} className="rounded-full border border-white/20 px-5 py-2">
+                <span
+                  key={logo}
+                  className="rounded-full border border-white/20 px-5 py-2"
+                >
                   {logo}
                 </span>
               ))}
