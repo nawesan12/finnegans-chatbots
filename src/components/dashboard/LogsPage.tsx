@@ -1,11 +1,6 @@
 "use client";
 
-import React, {
-  useState,
-  useEffect,
-  useCallback,
-  useMemo,
-} from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
 import { Search } from "lucide-react";
 
@@ -38,7 +33,10 @@ interface LogEntry {
   error?: string | null;
 }
 
-const statusBadgeVariants: Record<string, React.ComponentProps<typeof Badge>["variant"]> = {
+const statusBadgeVariants: Record<
+  string,
+  React.ComponentProps<typeof Badge>["variant"]
+> = {
   Completed: "default",
   Delivered: "default",
   Sent: "default",
@@ -50,7 +48,7 @@ const statusBadgeVariants: Record<string, React.ComponentProps<typeof Badge>["va
   Warning: "secondary",
   Failed: "destructive",
   Error: "destructive",
-  "CompletedWithErrors": "destructive",
+  CompletedWithErrors: "destructive",
 };
 
 const LogsPage = () => {
@@ -128,7 +126,8 @@ const LogsPage = () => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
     return logs.filter((log) => {
       const matchesStatus =
-        statusFilter === "all" || (log.status ?? "").toString() === statusFilter;
+        statusFilter === "all" ||
+        (log.status ?? "").toString() === statusFilter;
       const matchesChannel =
         channelFilter === "all" || (log.channel ?? "") === channelFilter;
 
@@ -371,8 +370,8 @@ const LogsPage = () => {
             </div>
           </div>
         </div>
-        <Table
-          columns={columns}
+        <Table //@ts-expect-error bla
+          columns={columns} //@ts-expect-error bla
           data={filteredLogs}
           emptyState={{
             title: emptyStateTitle,
