@@ -14,6 +14,7 @@ import { motion } from "framer-motion";
 import { MessageSquare, Users, ArrowRight, Bot } from "lucide-react";
 import { containerVariants, itemVariants } from "@/lib/animations";
 import MetricCard from "@/components/dashboard/MetricCard";
+import FilterMultiSelect from "@/components/dashboard/FilterMultiSelect";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -51,6 +52,37 @@ type FlowFilterOption = {
   channel: string | null;
 };
 
+type ChannelDistributionPoint = {
+  channel: string;
+  sent: number;
+  received: number;
+  total: number;
+};
+
+type FlowPerformancePoint = {
+  flowId: string;
+  flowName: string;
+  total: number;
+  completed: number;
+  errored: number;
+  successRate: number;
+};
+
+type StatusBreakdownPoint = {
+  status: string;
+  count: number;
+};
+
+type DashboardInsights = {
+  channelDistribution: ChannelDistributionPoint[];
+  flowPerformance: FlowPerformancePoint[];
+  statusBreakdown: StatusBreakdownPoint[];
+};
+
+type StatusBreakdownWithPercentage = StatusBreakdownPoint & {
+  percentage: number;
+};
+
 const dateRangeOptions = [
   { value: "7", label: "Últimos 7 días" },
   { value: "14", label: "Últimos 14 días" },
@@ -80,12 +112,15 @@ const DashboardPage = () => {
   const [chartLoading, setChartLoading] = useState(true);
   const [chartError, setChartError] = useState<string | null>(null);
   const [selectedRange, setSelectedRange] = useState<string>(dateRangeOptions[0].value);
-  const [selectedChannel, setSelectedChannel] = useState<string>("all");
-  const [selectedFlow, setSelectedFlow] = useState<string>("all");
-  const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
+  const [selectedFlows, setSelectedFlows] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [availableFlows, setAvailableFlows] = useState<FlowFilterOption[]>([]);
   const [availableChannels, setAvailableChannels] = useState<string[]>([]);
   const [availableStatuses, setAvailableStatuses] = useState<string[]>([]);
+  const [insights, setInsights] = useState<DashboardInsights | null>(null);
+  const [insightsLoading, setInsightsLoading] = useState(true);
+  const [insightsError, setInsightsError] = useState<string | null>(null);
 
   const numberFormatter = useMemo(
     () =>
@@ -125,6 +160,71 @@ const DashboardPage = () => {
   const chartHasData = useMemo(
     () => formattedChartData.some((point) => point.sent > 0 || point.received > 0),
     [formattedChartData],
+  );
+
+  const channelOptions = useMemo(
+    () =>
+      availableChannels.map((channel) => ({
+        value: channel,
+        label: channel,
+      })),
+    [availableChannels],
+  );
+
+  const flowOptions = useMemo(
+    () =>
+      availableFlows.map((flow) => ({
+        value: flow.id,
+        label: flow.name,
+        description: flow.channel ? `Canal: ${flow.channel}` : undefined,
+      })),
+    [availableFlows],
+  );
+
+  const statusOptions = useMemo(
+    () =>
+      availableStatuses.map((status) => ({
+        value: status,
+        label: status,
+      })),
+    [availableStatuses],
+  );
+
+  const statusBreakdownWithPercentage: StatusBreakdownWithPercentage[] = useMemo(() => {
+    if (!insights?.statusBreakdown?.length) {
+      return [];
+    }
+
+    const total = insights.statusBreakdown.reduce(
+      (sum, entry) => sum + entry.count,
+      0,
+    );
+
+    if (total === 0) {
+      return insights.statusBreakdown.map((entry) => ({
+        ...entry,
+        percentage: 0,
+      }));
+    }
+
+    return insights.statusBreakdown
+      .map((entry) => ({
+        ...entry,
+        percentage: Number(((entry.count / total) * 100).toFixed(1)),
+      }))
+      .sort((a, b) => b.count - a.count);
+  }, [insights]);
+
+  const channelDistributionData = insights?.channelDistribution ?? [];
+  const flowPerformanceData = insights?.flowPerformance ?? [];
+  const hasChannelDistributionData = channelDistributionData.some(
+    (entry) => entry.total > 0,
+  );
+  const hasFlowPerformanceData = flowPerformanceData.some(
+    (entry) => entry.total > 0,
+  );
+  const hasStatusBreakdownData = statusBreakdownWithPercentage.some(
+    (entry) => entry.count > 0,
   );
 
   useEffect(() => {
@@ -216,6 +316,8 @@ const DashboardPage = () => {
       setAvailableStatuses([]);
       setChartError(null);
       setChartLoading(false);
+      setInsights(null);
+      setInsightsError(null);
       return;
     }
 
@@ -227,14 +329,14 @@ const DashboardPage = () => {
         setChartError(null);
 
         const params = new URLSearchParams({ range: selectedRange });
-        if (selectedChannel !== "all") {
-          params.set("channel", selectedChannel);
+        if (selectedChannels.length) {
+          params.set("channel", selectedChannels.join(","));
         }
-        if (selectedFlow !== "all") {
-          params.set("flowId", selectedFlow);
+        if (selectedFlows.length) {
+          params.set("flowId", selectedFlows.join(","));
         }
-        if (selectedStatus !== "all") {
-          params.set("status", selectedStatus);
+        if (selectedStatuses.length) {
+          params.set("status", selectedStatuses.join(","));
         }
 
         const response = await fetch(
@@ -273,26 +375,32 @@ const DashboardPage = () => {
         setAvailableChannels(data.filters.channels);
         setAvailableStatuses(data.filters.statuses);
 
-        if (
-          selectedFlow !== "all" &&
-          !data.filters.flows.some((flow) => flow.id === selectedFlow)
-        ) {
-          setSelectedFlow("all");
-        }
+        setSelectedFlows((previous) => {
+          if (!previous.length) {
+            return previous;
+          }
+          const validIds = new Set(data.filters.flows.map((flow) => flow.id));
+          const filtered = previous.filter((flowId) => validIds.has(flowId));
+          return filtered.length === previous.length ? previous : filtered;
+        });
 
-        if (
-          selectedChannel !== "all" &&
-          !data.filters.channels.includes(selectedChannel)
-        ) {
-          setSelectedChannel("all");
-        }
+        setSelectedChannels((previous) => {
+          if (!previous.length) {
+            return previous;
+          }
+          const validChannels = new Set(data.filters.channels);
+          const filtered = previous.filter((channel) => validChannels.has(channel));
+          return filtered.length === previous.length ? previous : filtered;
+        });
 
-        if (
-          selectedStatus !== "all" &&
-          !data.filters.statuses.includes(selectedStatus)
-        ) {
-          setSelectedStatus("all");
-        }
+        setSelectedStatuses((previous) => {
+          if (!previous.length) {
+            return previous;
+          }
+          const validStatuses = new Set(data.filters.statuses);
+          const filtered = previous.filter((status) => validStatuses.has(status));
+          return filtered.length === previous.length ? previous : filtered;
+        });
       } catch (error) {
         const message =
           error instanceof Error
@@ -317,10 +425,96 @@ const DashboardPage = () => {
     };
   }, [
     hasHydrated,
-    selectedChannel,
-    selectedFlow,
+    selectedChannels,
+    selectedFlows,
     selectedRange,
-    selectedStatus,
+    selectedStatuses,
+    token,
+  ]);
+
+  useEffect(() => {
+    if (!hasHydrated) {
+      return;
+    }
+
+    if (!token) {
+      setInsights(null);
+      setInsightsError(null);
+      setInsightsLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchInsights = async () => {
+      try {
+        setInsightsLoading(true);
+        setInsightsError(null);
+
+        const params = new URLSearchParams({ range: selectedRange });
+        if (selectedChannels.length) {
+          params.set("channel", selectedChannels.join(","));
+        }
+        if (selectedFlows.length) {
+          params.set("flowId", selectedFlows.join(","));
+        }
+        if (selectedStatuses.length) {
+          params.set("status", selectedStatuses.join(","));
+        }
+
+        const response = await fetch(
+          `/api/metrics/dashboard-insights?${params.toString()}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            await parseErrorMessage(
+              response,
+              "No se pudieron obtener los insights del panel",
+            ),
+          );
+        }
+
+        const payload: DashboardInsights = await response.json();
+
+        if (!isMounted) {
+          return;
+        }
+
+        setInsights(payload);
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Error al cargar los insights del panel";
+        if (isMounted) {
+          setInsightsError(message);
+          setInsights(null);
+        }
+        toast.error(message);
+      } finally {
+        if (isMounted) {
+          setInsightsLoading(false);
+        }
+      }
+    };
+
+    fetchInsights();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    hasHydrated,
+    selectedChannels,
+    selectedFlows,
+    selectedRange,
+    selectedStatuses,
     token,
   ]);
 
@@ -410,7 +604,7 @@ const DashboardPage = () => {
   return (
     <div className="p-6 space-y-6">
       <motion.div
-        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
+        className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4"
         variants={containerVariants}
         initial="hidden"
         animate="visible"
@@ -420,170 +614,358 @@ const DashboardPage = () => {
         ))}
       </motion.div>
       <motion.div
-        className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+        className="space-y-6"
         variants={containerVariants}
         initial="hidden"
         animate="visible"
       >
-      <motion.div
-        variants={itemVariants}
-        className="bg-white p-6 rounded-lg shadow-md"
-      >
-        <div className="flex flex-col gap-4 mb-4 lg:flex-row lg:items-center lg:justify-between">
-          <h3 className="font-semibold text-gray-800">
-            Volumen de Mensajes
-          </h3>
-          <div className="flex flex-wrap gap-3">
-            <Select value={selectedRange} onValueChange={setSelectedRange}>
-              <SelectTrigger className="w-[170px]">
-                <SelectValue placeholder="Rango de fechas" />
-              </SelectTrigger>
-              <SelectContent>
-                {dateRangeOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={selectedChannel}
-              onValueChange={setSelectedChannel}
-              disabled={!availableChannels.length}
-            >
-              <SelectTrigger className="w-[170px]">
-                <SelectValue placeholder="Canal" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los canales</SelectItem>
-                {availableChannels.map((channel) => (
-                  <SelectItem key={channel} value={channel}>
-                    {channel}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={selectedFlow}
-              onValueChange={setSelectedFlow}
-              disabled={!availableFlows.length}
-            >
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Flujo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los flujos</SelectItem>
-                {availableFlows.map((flow) => (
-                  <SelectItem key={flow.id} value={flow.id}>
-                    {flow.name}
-                    {flow.channel ? ` · ${flow.channel}` : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={selectedStatus}
-              onValueChange={setSelectedStatus}
-              disabled={!availableStatuses.length}
-            >
-              <SelectTrigger className="w-[190px]">
-                <SelectValue placeholder="Estado" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los estados</SelectItem>
-                {availableStatuses.map((status) => (
-                  <SelectItem key={status} value={status}>
-                    {status}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <div className="h-[300px]">
-          {chartLoading ? (
-            <Skeleton className="h-full w-full" />
-          ) : chartError ? (
-            <div className="flex h-full items-center justify-center">
-              <p className="text-sm text-red-500 text-center max-w-sm">
-                {chartError}
-              </p>
-            </div>
-          ) : chartHasData ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={formattedChartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" tick={{ fill: "#6b7280", fontSize: 12 }} />
-                <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#fff",
-                    border: "1px solid #e5e7eb",
-                    borderRadius: "0.5rem",
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: "14px" }} />
-                <Bar
-                  dataKey="sent"
-                  fill="#04102D"
-                  name="Enviados"
-                  radius={[4, 4, 0, 0]}
-                />
-                <Bar
-                  dataKey="received"
-                  fill="#4bc3fe"
-                  name="Recibidos"
-                  radius={[4, 4, 0, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="flex h-full items-center justify-center">
-              <p className="text-sm text-gray-500 text-center max-w-sm">
-                No hay datos disponibles para los filtros seleccionados.
-              </p>
-            </div>
-          )}
-        </div>
-      </motion.div>
         <motion.div
           variants={itemVariants}
-          className="bg-white p-6 rounded-lg shadow-md"
+          className="rounded-lg bg-white p-5 shadow-md"
         >
-          <h3 className="font-semibold text-gray-800 mb-4">
-            Actividad Reciente
-          </h3>
-          <ul className="space-y-4">
-            {recentLogs.map((log) => {
-              const contactNameValue = log.contact?.name?.trim();
-              const contactDisplayName =
-                contactNameValue && contactNameValue.length > 0
-                  ? contactNameValue
-                  : (log.contact?.phone ?? "Contacto sin nombre");
-
-              const flowNameValue = log.flow?.name?.trim();
-              const flowDisplayName =
-                flowNameValue && flowNameValue.length > 0
-                  ? flowNameValue
-                  : "Flujo sin nombre";
-
-              const timestamp = log.createdAt
-                ? new Date(log.createdAt).toLocaleTimeString()
-                : "--";
-
-              return (
-                <li key={log.id} className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-gray-700">
-                      {contactDisplayName}
-                    </p>
-                    <p className="text-sm text-gray-500">{flowDisplayName}</p>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h3 className="font-semibold text-gray-800">Filtros del panel</h3>
+              <p className="text-sm text-gray-500">
+                Ajusta los filtros para actualizar todos los gráficos en tiempo real.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Select value={selectedRange} onValueChange={setSelectedRange}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Rango de fechas" />
+                </SelectTrigger>
+                <SelectContent>
+                  {dateRangeOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FilterMultiSelect
+                label="Canales"
+                options={channelOptions}
+                selectedValues={selectedChannels}
+                onSelectionChange={setSelectedChannels}
+                disabled={!channelOptions.length}
+                className="min-w-[160px]"
+              />
+              <FilterMultiSelect
+                label="Flujos"
+                options={flowOptions}
+                selectedValues={selectedFlows}
+                onSelectionChange={setSelectedFlows}
+                disabled={!flowOptions.length}
+                className="min-w-[220px]"
+              />
+              <FilterMultiSelect
+                label="Estados"
+                options={statusOptions}
+                selectedValues={selectedStatuses}
+                onSelectionChange={setSelectedStatuses}
+                disabled={!statusOptions.length}
+                className="min-w-[180px]"
+              />
+            </div>
+          </div>
+        </motion.div>
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+          <motion.div
+            variants={itemVariants}
+            className="rounded-lg bg-white p-6 shadow-md xl:col-span-2"
+          >
+            <div className="mb-4 space-y-2">
+              <h3 className="font-semibold text-gray-800">
+                Volumen de Mensajes
+              </h3>
+              <p className="text-sm text-gray-500">
+                Analiza la evolución de mensajes enviados y recibidos en el periodo seleccionado.
+              </p>
+            </div>
+            <div className="h-[300px]">
+              {chartLoading ? (
+                <Skeleton className="h-full w-full" />
+              ) : chartError ? (
+                <div className="flex h-full items-center justify-center">
+                  <p className="max-w-sm text-center text-sm text-red-500">
+                    {chartError}
+                  </p>
+                </div>
+              ) : chartHasData ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={formattedChartData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fill: "#6b7280", fontSize: 12 }}
+                    />
+                    <YAxis tick={{ fill: "#6b7280", fontSize: 12 }} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#fff",
+                        border: "1px solid #e5e7eb",
+                        borderRadius: "0.5rem",
+                      }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: "14px" }} />
+                    <Bar
+                      dataKey="sent"
+                      fill="#04102D"
+                      name="Enviados"
+                      radius={[4, 4, 0, 0]}
+                    />
+                    <Bar
+                      dataKey="received"
+                      fill="#4bc3fe"
+                      name="Recibidos"
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center">
+                  <p className="max-w-sm text-center text-sm text-gray-500">
+                    No hay datos disponibles para los filtros seleccionados.
+                  </p>
+                </div>
+              )}
+            </div>
+          </motion.div>
+          <motion.div
+            variants={itemVariants}
+            className="rounded-lg bg-white p-6 shadow-md"
+          >
+            <div className="mb-4 space-y-2">
+              <h3 className="font-semibold text-gray-800">
+                Distribución por Canal
+              </h3>
+              <p className="text-sm text-gray-500">
+                Observa la proporción de mensajes enviados y recibidos por canal.
+              </p>
+            </div>
+            <div className="h-[300px]">
+              {insightsLoading ? (
+                <Skeleton className="h-full w-full" />
+              ) : insightsError ? (
+                <div className="flex h-full items-center justify-center">
+                  <p className="max-w-xs text-center text-sm text-red-500">
+                    {insightsError}
+                  </p>
+                </div>
+              ) : hasChannelDistributionData ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={channelDistributionData}
+                    layout="vertical"
+                    margin={{ top: 0, right: 16, left: 0, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis
+                      type="number"
+                      tick={{ fill: "#6b7280", fontSize: 12 }}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="channel"
+                      tick={{ fill: "#6b7280", fontSize: 12 }}
+                      width={120}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#fff",
+                        border: "1px solid #e5e7eb",
+                        borderRadius: "0.5rem",
+                      }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: "14px" }} />
+                    <Bar
+                      dataKey="sent"
+                      stackId="messages"
+                      fill="#04102D"
+                      name="Enviados"
+                      radius={[0, 4, 4, 0]}
+                    />
+                    <Bar
+                      dataKey="received"
+                      stackId="messages"
+                      fill="#4bc3fe"
+                      name="Recibidos"
+                      radius={[0, 4, 4, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center">
+                  <p className="max-w-xs text-center text-sm text-gray-500">
+                    No hay actividad registrada para los filtros seleccionados.
+                  </p>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </div>
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+          <motion.div
+            variants={itemVariants}
+            className="rounded-lg bg-white p-6 shadow-md xl:col-span-2"
+          >
+            <div className="mb-4 space-y-2">
+              <h3 className="font-semibold text-gray-800">
+                Rendimiento de flujos
+              </h3>
+              <p className="text-sm text-gray-500">
+                Revisa la tasa de éxito de los flujos con más sesiones en el periodo activo.
+              </p>
+            </div>
+            <div className="h-[300px]">
+              {insightsLoading ? (
+                <Skeleton className="h-full w-full" />
+              ) : insightsError ? (
+                <div className="flex h-full items-center justify-center">
+                  <p className="max-w-xs text-center text-sm text-red-500">
+                    {insightsError}
+                  </p>
+                </div>
+              ) : hasFlowPerformanceData ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={flowPerformanceData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis
+                      dataKey="flowName"
+                      tick={{ fill: "#6b7280", fontSize: 12 }}
+                      interval={0}
+                    />
+                    <YAxis
+                      tick={{ fill: "#6b7280", fontSize: 12 }}
+                      domain={[0, 100]}
+                      tickFormatter={(value) => `${value}%`}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#fff",
+                        border: "1px solid #e5e7eb",
+                        borderRadius: "0.5rem",
+                      }}
+                      formatter={(value: number | string) => [
+                        typeof value === "number" ? `${value}%` : value,
+                        "Tasa de éxito",
+                      ]}
+                      labelFormatter={(label) => `Flujo: ${label}`}
+                    />
+                    <Legend wrapperStyle={{ fontSize: "14px" }} />
+                    <Bar
+                      dataKey="successRate"
+                      fill="#10b981"
+                      name="Tasa de éxito"
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center">
+                  <p className="max-w-sm text-center text-sm text-gray-500">
+                    No se registraron sesiones de flujo con los filtros aplicados.
+                  </p>
+                </div>
+              )}
+            </div>
+          </motion.div>
+          <motion.div
+            variants={itemVariants}
+            className="rounded-lg bg-white p-6 shadow-md"
+          >
+            <div className="mb-4 space-y-2">
+              <h3 className="font-semibold text-gray-800">
+                Estados de mensajes
+              </h3>
+              <p className="text-sm text-gray-500">
+                Distribución de estados para los filtros activos.
+              </p>
+            </div>
+            {insightsLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <div key={`status-skeleton-${index}`} className="space-y-2">
+                    <Skeleton className="h-4 w-2/3" />
+                    <Skeleton className="h-2 w-full" />
                   </div>
-                  <span className="text-sm text-gray-400">{timestamp}</span>
-                </li>
-              );
-            })}
-          </ul>
+                ))}
+              </div>
+            ) : insightsError ? (
+              <div className="flex h-full items-center justify-center">
+                <p className="max-w-xs text-center text-sm text-red-500">
+                  {insightsError}
+                </p>
+              </div>
+            ) : hasStatusBreakdownData ? (
+              <div className="space-y-4">
+                {statusBreakdownWithPercentage.map((status) => (
+                  <div key={status.status} className="space-y-2">
+                    <div className="flex items-center justify-between text-sm font-medium text-gray-700">
+                      <span>{status.status}</span>
+                      <span className="text-sm text-gray-500">
+                        {numberFormatter.format(status.count)} · {percentageFormatter.format(status.percentage)}%
+                      </span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-gray-100">
+                      <div
+                        className="h-2 rounded-full bg-indigo-500"
+                        style={{ width: `${Math.min(status.percentage, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">
+                Aún no hay mensajes registrados para mostrar un desglose.
+              </p>
+            )}
+          </motion.div>
+        </div>
+        <motion.div
+          variants={itemVariants}
+          className="rounded-lg bg-white p-6 shadow-md"
+        >
+          <h3 className="mb-4 font-semibold text-gray-800">Actividad Reciente</h3>
+          {recentLogs.length ? (
+            <ul className="space-y-4">
+              {recentLogs.map((log) => {
+                const contactNameValue = log.contact?.name?.trim();
+                const contactDisplayName =
+                  contactNameValue && contactNameValue.length > 0
+                    ? contactNameValue
+                    : log.contact?.phone ?? "Contacto sin nombre";
+
+                const flowNameValue = log.flow?.name?.trim();
+                const flowDisplayName =
+                  flowNameValue && flowNameValue.length > 0
+                    ? flowNameValue
+                    : "Flujo sin nombre";
+
+                const timestamp = log.createdAt
+                  ? new Date(log.createdAt).toLocaleTimeString()
+                  : "--";
+
+                return (
+                  <li key={log.id} className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-gray-700">
+                        {contactDisplayName}
+                      </p>
+                      <p className="text-sm text-gray-500">{flowDisplayName}</p>
+                    </div>
+                    <span className="text-sm text-gray-400">{timestamp}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="text-sm text-gray-500">
+              No se registraron eventos en el rango seleccionado.
+            </p>
+          )}
         </motion.div>
       </motion.div>
     </div>

@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getAuthPayload } from "@/lib/auth";
+import {
+  buildLogWhereInput,
+  getRange,
+  normalizeMultiValue,
+  resolveDateRange,
+} from "@/lib/dashboard/filters";
 
 type ChartPoint = {
   date: string;
@@ -14,32 +20,7 @@ type FiltersResponse = {
   statuses: string[];
 };
 
-const DEFAULT_RANGE_DAYS = 7;
-const ALLOWED_RANGES = new Set([7, 14, 30, 90]);
 const SENT_STATUSES = new Set(["Completed", "Sent", "Delivered", "Success"]);
-
-function getRange(searchParams: URLSearchParams): number {
-  const rangeParam = searchParams.get("range");
-  if (!rangeParam) return DEFAULT_RANGE_DAYS;
-
-  const parsed = Number(rangeParam);
-  if (Number.isFinite(parsed) && ALLOWED_RANGES.has(parsed)) {
-    return parsed;
-  }
-
-  return DEFAULT_RANGE_DAYS;
-}
-
-function normalizeStatuses(statusParam: string | null): string[] | undefined {
-  if (!statusParam) return undefined;
-
-  const statuses = statusParam
-    .split(",")
-    .map((status) => status.trim())
-    .filter((status) => status.length > 0);
-
-  return statuses.length ? statuses : undefined;
-}
 
 function createDateKey(date: Date): string {
   const normalized = new Date(date);
@@ -122,29 +103,24 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const rangeDays = getRange(searchParams);
-    const flowId = searchParams.get("flowId") || undefined;
-    const channel = searchParams.get("channel") || undefined;
-    const statuses = normalizeStatuses(searchParams.get("status"));
+    const flowIds = normalizeMultiValue(searchParams.get("flowId"));
+    const channels = normalizeMultiValue(searchParams.get("channel"));
+    const statuses = normalizeMultiValue(searchParams.get("status"));
 
-    const now = new Date();
-    const startDate = new Date(now);
-    startDate.setHours(0, 0, 0, 0);
-    startDate.setDate(startDate.getDate() - (rangeDays - 1));
+    const { startDate, endDate } = resolveDateRange(rangeDays);
+
+    const logWhere = buildLogWhereInput({
+      userId: auth.userId,
+      startDate,
+      endDate,
+      flowIds,
+      channels,
+      statuses,
+    });
 
     const [logs, flows, distinctStatuses] = await Promise.all([
       prisma.log.findMany({
-        where: {
-          flow: {
-            userId: auth.userId,
-            ...(channel ? { channel } : {}),
-            ...(flowId ? { id: flowId } : {}),
-          },
-          createdAt: {
-            gte: startDate,
-            lte: now,
-          },
-          ...(statuses ? { status: { in: statuses } } : {}),
-        },
+        where: logWhere,
         select: {
           createdAt: true,
           status: true,
