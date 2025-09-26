@@ -707,7 +707,12 @@ const FlowsPage = () => {
             </div>
           </div>
           <div className="min-h-0 flex-1">
-            <FlowBuilder ref={flowBuilderRef} initialFlow={initialFlow} />
+            <FlowBuilder
+              ref={flowBuilderRef}
+              initialFlow={initialFlow}
+              flowId={editingFlow?.id ?? null}
+              flowName={editingFlow?.name ?? null}
+            />
           </div>
         </motion.div>
       ) : (

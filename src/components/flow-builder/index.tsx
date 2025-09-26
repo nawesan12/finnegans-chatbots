@@ -81,6 +81,8 @@ export type { FlowBuilderHandle, FlowData } from "./types";
 
 type FlowBuilderProps = {
   initialFlow?: Partial<FlowData> | null;
+  flowId?: string | null;
+  flowName?: string | null;
 };
 type ImportEvent =
   | React.ChangeEvent<HTMLInputElement>
@@ -216,7 +218,7 @@ const toFlowState = (
 };
 
 const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
-  ({ initialFlow }, ref) => {
+  ({ initialFlow, flowId, flowName }, ref) => {
     const [nodes, setNodes, onNodesChange] =
       useNodesState<FlowNode["data"]>(defaultNodes);
     const [edges, setEdges, onEdgesChange] =
@@ -492,16 +494,25 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       }
     }, []);
 
-    const handleCopyWebhook = useCallback(
-      (nodeId: string) => {
-        const webhookUrl = `${window.location.origin}/api/webhook?flowId=${nodeId}`;
-        safeWriteClipboard(
-          webhookUrl,
-          "URL del webhook copiada al portapapeles!",
+    const handleCopyWebhook = useCallback(() => {
+      const trimmedFlowId = flowId?.trim();
+      if (!trimmedFlowId) {
+        toast.error(
+          "Guardá el flujo para generar su URL de webhook",
         );
-      },
-      [safeWriteClipboard],
-    );
+        return;
+      }
+
+      const origin = window.location.origin;
+      const webhookUrl = `${origin}/api/webhook?flowId=${trimmedFlowId}`;
+      const label = flowName?.trim();
+      safeWriteClipboard(
+        webhookUrl,
+        label
+          ? `Webhook de “${label}” copiado al portapapeles`
+          : "URL del webhook copiada al portapapeles!",
+      );
+    }, [flowId, flowName, safeWriteClipboard]);
 
     const handleCopyId = useCallback(
       (nodeId: string) => {
@@ -1068,7 +1079,7 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
             onEdit={() => handleEdit(props.id)}
             onDuplicate={() => handleDuplicate(props.id)}
             onDelete={() => handleDelete(props.id)}
-            onCopyWebhook={() => handleCopyWebhook(props.id)}
+            onCopyWebhook={handleCopyWebhook}
             onCopyId={() => handleCopyId(props.id)}
           />
         );
