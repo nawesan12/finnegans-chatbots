@@ -74,6 +74,8 @@ import { z } from "zod";
 import { sanitizeFlowDefinition } from "@/lib/flow-schema";
 import { BackgroundVariant } from "@reactflow/background";
 import type { GetMiniMapNodeAttribute } from "@reactflow/minimap";
+import { DraftsDialog } from "./DraftsDialog";
+import type { DraftSummary } from "./DraftsDialog";
 
 export type { FlowBuilderHandle, FlowData } from "./types";
 
@@ -145,6 +147,41 @@ const defaultEdges: FlowEdge[] = [
 ];
 
 const DRAFT_KEY = "flowbuilder_draft_v1";
+const SAVED_DRAFTS_KEY = "flowbuilder_saved_drafts_v1";
+
+const DraftSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  updatedAt: z.string().min(1),
+  flow: z.unknown(),
+});
+
+type StoredDraft = {
+  id: string;
+  name: string;
+  updatedAt: string;
+  flow: FlowData;
+};
+
+const parseDrafts = (value: unknown): StoredDraft[] => {
+  if (!Array.isArray(value)) return [];
+  const drafts: StoredDraft[] = [];
+  value.forEach((entry) => {
+    try {
+      const parsed = DraftSchema.parse(entry);
+      const sanitizedFlow = sanitizeFlowDefinition(parsed.flow);
+      drafts.push({
+        id: parsed.id,
+        name: parsed.name,
+        updatedAt: new Date(parsed.updatedAt).toISOString(),
+        flow: sanitizedFlow,
+      });
+    } catch {
+      // ignoramos entradas inválidas
+    }
+  });
+  return drafts;
+};
 
 const deepClone = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map((item) => deepClone(item));
@@ -187,12 +224,20 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
     const [selected, setSelected] = useState<FlowNode | null>(null);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [zoomLevel, setZoomLevel] = useState<number | undefined>(undefined);
+    const [dirty, setDirty] = useState(false);
+    const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+    const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
+    const [currentDraftName, setCurrentDraftName] = useState<string | null>(null);
+    const [drafts, setDrafts] = useState<StoredDraft[]>([]);
+    const [draftDialogOpen, setDraftDialogOpen] = useState(false);
+    const [savingDraft, setSavingDraft] = useState(false);
     const rfRef = useRef<ReactFlowInstance<FlowNode, FlowEdge> | null>(null);
     const historyRef = useRef<{ past: string[]; future: string[] }>({
       past: [],
       future: [],
     });
     const didRestoreRef = useRef(false);
+    const lastSavedSnapshotRef = useRef<string | null>(null);
 
     const cloneNode = useCallback(
       (node: Node): FlowNode => {
@@ -241,10 +286,41 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       [setEdges, setNodes, setSelected, setSelectedIds],
     );
 
+    useEffect(() => {
+      if (typeof window === "undefined") return;
+      try {
+        const raw = localStorage.getItem(SAVED_DRAFTS_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        const stored = parseDrafts(parsed);
+        if (stored.length) {
+          setDrafts(stored);
+        }
+      } catch {
+        // ignore drafts corruptos
+      }
+    }, []);
+
+    useEffect(() => {
+      try {
+        const payload = JSON.stringify(drafts);
+        localStorage.setItem(SAVED_DRAFTS_KEY, payload);
+      } catch {
+        // ignore
+      }
+    }, [drafts]);
+
     // Load initial flow or draft once
     useEffect(() => {
       if (initialFlow?.nodes && initialFlow?.edges) {
-        applyFlow(initialFlow);
+        const sanitized = sanitizeFlowDefinition(initialFlow);
+        applyFlow(sanitized);
+        const snapshot = JSON.stringify(sanitized);
+        lastSavedSnapshotRef.current = snapshot;
+        setDirty(false);
+        setLastSavedAt(null);
+        setCurrentDraftId(null);
+        setCurrentDraftName(null);
         didRestoreRef.current = true;
         return;
       }
@@ -256,6 +332,12 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
         if (!raw) return;
         const parsed = sanitizeFlowDefinition(JSON.parse(raw));
         applyFlow(parsed);
+        const snapshot = JSON.stringify(parsed);
+        lastSavedSnapshotRef.current = snapshot;
+        setDirty(false);
+        setLastSavedAt(null);
+        setCurrentDraftId(null);
+        setCurrentDraftName(null);
       } catch {
         // ignore drafts con errores
       } finally {
@@ -268,13 +350,21 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       getFlowData: () => sanitizeFlowDefinition({ nodes, edges }),
     }));
 
-    // Autosave draft
+    // Autosave draft + track cambios
     useEffect(() => {
-      const payload = JSON.stringify(sanitizeFlowDefinition({ nodes, edges }));
+      const sanitized = sanitizeFlowDefinition({ nodes, edges });
+      const snapshot = JSON.stringify(sanitized);
+
       try {
-        localStorage.setItem(DRAFT_KEY, payload);
+        localStorage.setItem(DRAFT_KEY, snapshot);
       } catch {
         // ignore
+      }
+
+      if (lastSavedSnapshotRef.current === null) {
+        setDirty(true);
+      } else {
+        setDirty(lastSavedSnapshotRef.current !== snapshot);
       }
     }, [nodes, edges]);
 
@@ -420,6 +510,112 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       [safeWriteClipboard],
     );
 
+    const handleCreateNew = useCallback(() => {
+      applyFlow({ nodes: defaultNodes, edges: defaultEdges });
+      lastSavedSnapshotRef.current = null;
+      setDirty(true);
+      setLastSavedAt(null);
+      setCurrentDraftId(null);
+      setCurrentDraftName(null);
+      toast.message("Nuevo flujo creado");
+    }, [applyFlow]);
+
+    const handleSaveDraft = useCallback(
+      async ({ id, name }: { id?: string | null; name: string }) => {
+        const trimmed = name.trim();
+        const safeName = trimmed.length ? trimmed : "Flujo sin título";
+        setSavingDraft(true);
+        try {
+          const sanitized = sanitizeFlowDefinition({ nodes, edges });
+          const snapshot = JSON.stringify(sanitized);
+          const draftId = id ?? currentDraftId ?? makeId();
+          const now = new Date().toISOString();
+          const nextDraft: StoredDraft = {
+            id: draftId,
+            name: safeName,
+            updatedAt: now,
+            flow: sanitized,
+          };
+
+          setDrafts((prev) => {
+            const exists = prev.findIndex((draft) => draft.id === draftId);
+            if (exists === -1) return [...prev, nextDraft];
+            const copy = prev.slice();
+            copy[exists] = nextDraft;
+            return copy;
+          });
+
+          lastSavedSnapshotRef.current = snapshot;
+          setDirty(false);
+          setLastSavedAt(now);
+          setCurrentDraftId(draftId);
+          setCurrentDraftName(safeName);
+          toast.success(`Borrador “${safeName}” guardado`);
+          return true;
+        } catch (error) {
+          console.error(error);
+          toast.error("No se pudo guardar el borrador");
+          return false;
+        } finally {
+          setSavingDraft(false);
+        }
+      },
+      [currentDraftId, edges, nodes],
+    );
+
+    const handleQuickSave = useCallback(async () => {
+      if (!currentDraftId || !currentDraftName) {
+        toast.message("Elegí un nombre para guardar tu primer borrador");
+        setDraftDialogOpen(true);
+        return;
+      }
+      await handleSaveDraft({ id: currentDraftId, name: currentDraftName });
+    }, [currentDraftId, currentDraftName, handleSaveDraft]);
+
+    const handleLoadDraft = useCallback(
+      (draftId: string) => {
+        const found = drafts.find((draft) => draft.id === draftId);
+        if (!found) {
+          toast.error("No se encontró el borrador seleccionado");
+          return;
+        }
+        const sanitized = sanitizeFlowDefinition(found.flow);
+        applyFlow(sanitized);
+        const snapshot = JSON.stringify(sanitized);
+        lastSavedSnapshotRef.current = snapshot;
+        setDirty(false);
+        setLastSavedAt(found.updatedAt);
+        setCurrentDraftId(found.id);
+        setCurrentDraftName(found.name);
+        setDraftDialogOpen(false);
+        toast.success(`Borrador “${found.name}” cargado`);
+      },
+      [applyFlow, drafts],
+    );
+
+    const handleDeleteDraft = useCallback(
+      (draftId: string) => {
+        const target = drafts.find((draft) => draft.id === draftId);
+        if (!target) return;
+        if (typeof window !== "undefined") {
+          const confirmed = window.confirm(
+            `¿Eliminar el borrador “${target.name}”?`,
+          );
+          if (!confirmed) return;
+        }
+        setDrafts((prev) => prev.filter((draft) => draft.id !== draftId));
+        if (currentDraftId === draftId) {
+          lastSavedSnapshotRef.current = null;
+          setLastSavedAt(null);
+          setCurrentDraftId(null);
+          setCurrentDraftName(null);
+          setDirty(true);
+        }
+        toast.success(`Borrador “${target.name}” eliminado`);
+      },
+      [currentDraftId, drafts],
+    );
+
     const updateSelected = useCallback(
       (patch: { data: FlowNode["data"] }) => {
         setSelected((current) => {
@@ -520,6 +716,11 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
           const text = await file.text();
           const parsed = sanitizeFlowDefinition(JSON.parse(text));
           applyFlow(parsed);
+          lastSavedSnapshotRef.current = null;
+          setDirty(true);
+          setLastSavedAt(null);
+          setCurrentDraftId(null);
+          setCurrentDraftName(null);
           toast.success(`Flujo importado${file.name ? ` (${file.name})` : ""}`);
         } catch {
           toast.error("Error al importar: archivo inválido");
@@ -550,7 +751,7 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
 
     // validation
     const validate = () => {
-      const problems: string[] = [];
+      const issues: { message: string; nodeId?: string }[] = [];
       const triggers = nodes
         .map((node) => toFlowNode(node))
         .filter((n): n is FlowNode<"trigger"> => n?.type === "trigger");
@@ -560,11 +761,27 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
         )
         .map((keyword) => keyword.toLowerCase().trim())
         .filter((value): value is string => value.length > 0);
-      const triggerSet = new Set(triggerKeys);
-      if (triggerSet.size !== triggerKeys.length)
-        problems.push("Palabras clave de disparador duplicadas");
+      const seenKeywords = new Set<string>();
+      triggerKeys.forEach((keyword) => {
+        if (seenKeywords.has(keyword)) {
+          const culprit = triggers.find((t) => {
+            const value =
+              typeof t.data.keyword === "string"
+                ? t.data.keyword.toLowerCase().trim()
+                : "";
+            return value === keyword;
+          });
+          issues.push({
+            message: `Palabra clave de disparador duplicada: “${keyword}”`,
+            nodeId: culprit?.id,
+          });
+        }
+        seenKeywords.add(keyword);
+      });
       if (!triggers.length)
-        problems.push("El flujo necesita al menos un nodo trigger");
+        issues.push({
+          message: "El flujo necesita al menos un nodo trigger",
+        });
 
       nodes.forEach((candidate) => {
         const n = toFlowNode(candidate);
@@ -609,16 +826,25 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
               break;
           }
         } catch (e) {
-          problems.push(`${n.id} (${n.type}): ${String(e)}`);
+          issues.push({
+            message: `${n.id} (${n.type}): ${String(e)}`,
+            nodeId: n.id,
+          });
         }
         const outgoingFromNode = edges.filter((e) => e.source === n.id);
         if (n.type !== "end" && outgoingFromNode.length === 0) {
           if (n.type !== "options" && n.type !== "condition") {
-            problems.push(`${n.id}: sin conexión de salida`);
+            issues.push({
+              message: `${n.id}: sin conexión de salida`,
+              nodeId: n.id,
+            });
           }
         }
         if (n.type !== "trigger" && !edges.some((e) => e.target === n.id)) {
-          problems.push(`${n.id}: inaccesible (sin conexión entrante)`);
+          issues.push({
+            message: `${n.id}: inaccesible (sin conexión entrante)`,
+            nodeId: n.id,
+          });
         }
 
         if (isNodeOfType(n, "options")) {
@@ -635,9 +861,10 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
             missing.push("No Match");
           }
           if (missing.length) {
-            problems.push(
-              `${n.id}: opciones sin salida (${missing.join(", ")})`,
-            );
+            issues.push({
+              message: `${n.id}: opciones sin salida (${missing.join(", ")})`,
+              nodeId: n.id,
+            });
           }
         }
 
@@ -655,7 +882,10 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
             ]
               .filter(Boolean)
               .join(", ");
-            problems.push(`${n.id}: condición sin rama ${missing}`);
+            issues.push({
+              message: `${n.id}: condición sin rama ${missing}`,
+              nodeId: n.id,
+            });
           }
         }
 
@@ -665,13 +895,34 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
             targetId &&
             !nodes.some((candidate) => candidate.id === targetId)
           ) {
-            problems.push(`${n.id}: destino ${targetId} inexistente`);
+            issues.push({
+              message: `${n.id}: destino ${targetId} inexistente`,
+              nodeId: n.id,
+            });
           }
         }
       });
 
-      if (problems.length) problems.forEach((p) => toast.error(p));
-      else toast.success("Todo bien! El flujo parece válido.");
+      if (issues.length) {
+        const [first, ...rest] = issues;
+        if (first.nodeId) {
+          const target = nodes.find((candidate) => candidate.id === first.nodeId);
+          const flowNode = toFlowNode(target);
+          if (flowNode) {
+            setSelected(flowNode);
+            setSelectedIds([flowNode.id]);
+          }
+        }
+        const suffix = first.nodeId ? ` (Nodo: ${first.nodeId})` : "";
+        toast.error(`${first.message}${suffix}`);
+        rest.forEach((issue) => {
+          const restSuffix = issue.nodeId ? ` (Nodo: ${issue.nodeId})` : "";
+          toast.error(`${issue.message}${restSuffix}`);
+        });
+        return false;
+      }
+      toast.success("Todo bien! El flujo parece válido.");
+      return true;
     };
 
     // auto layout
@@ -731,7 +982,8 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
 
         if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
           e.preventDefault();
-          handleExport();
+          if (e.shiftKey) handleExport();
+          else void handleQuickSave();
         }
         if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
           e.preventDefault();
@@ -767,7 +1019,16 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       };
       window.addEventListener("keydown", onKey);
       return () => window.removeEventListener("keydown", onKey);
-    }, [selected, selectedIds, setNodes, setEdges, handleExport, undo, redo]);
+    }, [
+      selected,
+      selectedIds,
+      setNodes,
+      setEdges,
+      handleExport,
+      undo,
+      redo,
+      handleQuickSave,
+    ]);
 
     // zoom controls
     const zoomIn = () => rfRef.current?.zoomIn?.();
@@ -850,6 +1111,16 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       [nodes, toFlowNode],
     );
 
+    const draftSummaries = useMemo<DraftSummary[]>(
+      () =>
+        drafts.map((draft) => ({
+          id: draft.id,
+          name: draft.name,
+          updatedAt: draft.updatedAt,
+        })),
+      [drafts],
+    );
+
     const handleMoveEnd = useCallback(
       (_evt: MouseEvent | TouchEvent, viewport: Viewport) => {
         if (typeof viewport?.zoom !== "number") return;
@@ -903,135 +1174,164 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
     );
 
     return (
-      <div className="h-screen w-full grid grid-cols-12 gap-0">
-        <div className="col-span-12">
-          <Topbar
-            onNew={() => {
-              applyFlow({ nodes: defaultNodes, edges: defaultEdges });
-              toast.message("Nuevo flujo creado");
-            }}
-            onImport={handleImport}
-            onExport={handleExport}
-            onValidate={validate}
-            onAutoLayout={doAutoLayout}
-            onUndo={undo}
-            onRedo={redo}
-            zoomIn={zoomIn}
-            zoomOut={zoomOut}
-            fitView={fitView}
-            selectedId={selected?.id}
-            zoomLevel={zoomLevel}
-            exportName="whatsapp-flow"
-          />
-        </div>
-
-        {/* Left: Palette */}
-        <div className="col-span-2 h-[calc(100vh-48px)] border-r p-3 overflow-auto">
-          <div className="flex items-center justify-between mb-2">
-            <div className="font-semibold">Nodos</div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" variant="outline">
-                  <Download className="h-4 w-4 mr-2" />
-                  Exportar
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuItem onClick={handleExport}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Editor JSON
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={exportForWhatsApp}>
-                  <Rocket className="h-4 w-4 mr-2" />
-                  WhatsApp Spec
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-          <Palette onAdd={addNode} />
-          <Separator className="my-4" />
-          <div className="text-xs text-muted-foreground">
-            Consejo: clickeá o arrastrá nodos al lienzo.
-          </div>
-        </div>
-
-        {/* Center: Canvas */}
-        <div className="col-span-7 h-[calc(100vh-48px)]">
-          <ReactFlow
-            onInit={handleInit}
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            nodeTypes={memoizedNodeTypes}
-            onNodeClick={onNodeClick}
-            onPaneClick={onPaneClick}
-            onDrop={onDrop}
-            onDragOver={onDragOver}
-            onSelectionChange={handleSelectionChange}
-            onMoveEnd={handleMoveEnd} // veremos abajo
-            defaultEdgeOptions={{
-              type: "smoothstep",
-              markerEnd: { type: MarkerType.ArrowClosed },
-            }}
-            snapToGrid
-            snapGrid={[8, 8]}
-            selectionOnDrag
-            panOnDrag={[1, 2]}
-            panOnScroll
-            zoomOnScroll
-            zoomOnPinch
-            panOnScrollSpeed={0.8}
-            elevateNodesOnSelect
-            selectionMode={SelectionMode.Partial}
-            deleteKeyCode={null}
-          >
-            <Background
-              color="#e2e8f0"
-              variant={BackgroundVariant.Lines}
-              gap={24}
+      <>
+        <div className="flex h-screen w-full flex-col bg-slate-50 text-slate-900">
+          <div className="border-b bg-white/90 shadow-sm">
+            <Topbar
+              onNew={handleCreateNew}
+              onImport={handleImport}
+              onExport={handleExport}
+              onValidate={validate}
+              onAutoLayout={doAutoLayout}
+              onUndo={undo}
+              onRedo={redo}
+              zoomIn={zoomIn}
+              zoomOut={zoomOut}
+              fitView={fitView}
+              selectedId={selected?.id}
+              zoomLevel={zoomLevel}
+              exportName="whatsapp-flow"
+              onSaveDraft={handleQuickSave}
+              savingDraft={savingDraft}
+              onOpenDrafts={() => setDraftDialogOpen(true)}
+              dirty={dirty}
+              currentDraftName={currentDraftName}
+              lastSavedAt={lastSavedAt}
             />
-            <MiniMap
-              className="!bg-white/80"
-              pannable
-              zoomable
-              nodeColor={miniMapNodeColor}
-              nodeStrokeColor={miniMapNodeStroke}
-              nodeStrokeWidth={2}
-            />
-            <Controls position="bottom-left" showInteractive={false} />
-          </ReactFlow>
+          </div>
+
+          <div className="grid flex-1 grid-cols-12 gap-0 overflow-hidden">
+            {/* Left: Palette */}
+            <div className="col-span-2 min-h-0 overflow-y-auto border-r bg-white/80 p-4 backdrop-blur-sm shadow-inner">
+              <div className="mb-4 flex items-center justify-between">
+                <div className="text-sm font-semibold uppercase tracking-wide text-slate-600">
+                  Nodos
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="outline">
+                      <Download className="mr-2 h-4 w-4" />
+                      Exportar
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    <DropdownMenuItem onClick={handleExport}>
+                      <Download className="mr-2 h-4 w-4" />
+                      Editor JSON
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={exportForWhatsApp}>
+                      <Rocket className="mr-2 h-4 w-4" />
+                      WhatsApp Spec
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+              <Palette onAdd={addNode} />
+              <Separator className="my-4" />
+              <div className="rounded-md bg-slate-100/80 p-3 text-xs text-muted-foreground shadow-sm">
+                Consejo: clickeá o arrastrá nodos al lienzo.
+              </div>
+            </div>
+
+            {/* Center: Canvas */}
+            <div className="col-span-7 min-h-0 bg-slate-100/60">
+              <ReactFlow
+                style={{ width: "100%", height: "100%" }}
+                className="!bg-transparent"
+                onInit={handleInit}
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                nodeTypes={memoizedNodeTypes}
+                onNodeClick={onNodeClick}
+                onPaneClick={onPaneClick}
+                onDrop={onDrop}
+                onDragOver={onDragOver}
+                onSelectionChange={handleSelectionChange}
+                onMoveEnd={handleMoveEnd}
+                defaultEdgeOptions={{
+                  type: "smoothstep",
+                  markerEnd: { type: MarkerType.ArrowClosed },
+                }}
+                snapToGrid
+                snapGrid={[8, 8]}
+                selectionOnDrag
+                panOnDrag={[1, 2]}
+                panOnScroll
+                zoomOnScroll
+                zoomOnPinch
+                panOnScrollSpeed={0.8}
+                elevateNodesOnSelect
+                selectionMode={SelectionMode.Partial}
+                deleteKeyCode={null}
+              >
+                <Background
+                  color="#e2e8f0"
+                  variant={BackgroundVariant.Lines}
+                  gap={24}
+                />
+                <MiniMap
+                  className="!bg-white/80"
+                  pannable
+                  zoomable
+                  nodeColor={miniMapNodeColor}
+                  nodeStrokeColor={miniMapNodeStroke}
+                  nodeStrokeWidth={2}
+                />
+                <Controls position="bottom-left" showInteractive={false} />
+              </ReactFlow>
+            </div>
+
+            {/* Right: Inspector + Simulator */}
+            <div className="col-span-3 min-h-0 overflow-y-auto border-l bg-white/80 p-4 backdrop-blur-sm">
+              <div className="flex flex-col gap-4">
+                <Inspector selectedNode={selected} onChange={updateSelected} />
+                <Simulator nodes={simulatorNodes} edges={edges} />
+                <Card className="shadow-sm">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-sm">
+                      <Bug className="h-4 w-4" /> Consejos de construcción
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-1 text-xs text-muted-foreground">
+                    <div>
+                      • Mantené los mensajes por debajo de los {waTextLimit}{" "}
+                      caracteres.
+                    </div>
+                    <div>• Usá Opciones (quick replies) para hacer menús.</div>
+                    <div>• Usá Delay para evitar atosigar a los usuarios.</div>
+                    <div>
+                      • Condition puede ramificar según <code>context</code> y
+                      resultados de API.
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Right: Inspector + Simulator */}
-        <div className="col-span-3 h-[auto] border-l p-3 flex flex-col gap-3">
-          <Inspector selectedNode={selected} onChange={updateSelected} />
-          <Simulator
-            nodes={simulatorNodes}
-            edges={edges}
-          />
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Bug className="h-4 w-4" /> Consejos de construcción
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-xs text-muted-foreground space-y-1">
-              <div>
-                • Mantené los mensajes por debajo de los {waTextLimit}{" "}
-                caracteres.
-              </div>
-              <div>• Usá Opciones (quick replies) para hacer menús.</div>
-              <div>• Usá Delay para evitar atosigar a los usuarios.</div>
-              <div>
-                • Condition puede ramificar según <code>context</code> y
-                resultados de API.
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+        <DraftsDialog
+          open={draftDialogOpen}
+          onOpenChange={setDraftDialogOpen}
+          drafts={draftSummaries}
+          onSave={async (payload) => {
+            const ok = await handleSaveDraft(payload);
+            if (ok) {
+              setDraftDialogOpen(false);
+            }
+          }}
+          onLoad={handleLoadDraft}
+          onDelete={handleDeleteDraft}
+          saving={savingDraft}
+          dirty={dirty}
+          currentDraftId={currentDraftId}
+          currentDraftName={currentDraftName}
+          lastSavedAt={lastSavedAt}
+        />
+      </>
     );
   },
 );
