@@ -169,6 +169,133 @@ export type ManualFlowTriggerResult =
 /* ===== Utilidades ===== */
 const toLcTrim = (s?: string) => (s ?? "").trim().toLowerCase();
 
+const DEFAULT_TRIGGER = "default";
+
+const stripDiacritics = (value: string) =>
+  value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+const normalizeTrigger = (value?: string | null): string | null => {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    return stripDiacritics(trimmed).toLowerCase();
+  } catch {
+    return trimmed.toLowerCase();
+  }
+};
+
+const normalizePhone = (value?: string | null): string | null => {
+  if (!value) return null;
+  const digits = value.replace(/[^0-9]/g, "");
+  return digits.length ? digits : null;
+};
+
+type FlowMatchContext = {
+  fullText: string | null;
+  interactiveTitle: string | null;
+  interactiveId: string | null;
+  phoneCandidates: Set<string>;
+};
+
+const collectKeywordCandidates = (
+  text: string | null,
+  interactiveTitle: string | null,
+  interactiveId: string | null,
+) => {
+  const candidates = new Set<string>();
+  const push = (value: string | null) => {
+    const normalized = normalizeTrigger(value);
+    if (!normalized) return;
+    candidates.add(normalized);
+    for (const part of normalized.split(/\s+/u)) {
+      if (part) candidates.add(part);
+    }
+  };
+
+  push(text);
+  push(interactiveTitle);
+  push(interactiveId);
+
+  return candidates;
+};
+
+const findBestMatchingFlow = (flows: Flow[], context: FlowMatchContext) => {
+  if (!flows.length) {
+    return null;
+  }
+
+  const keywordCandidates = collectKeywordCandidates(
+    context.fullText,
+    context.interactiveTitle,
+    context.interactiveId,
+  );
+  const normalizedText = normalizeTrigger(context.fullText);
+  const normalizedInteractiveTitle = normalizeTrigger(context.interactiveTitle);
+  const normalizedInteractiveId = normalizeTrigger(context.interactiveId);
+
+  let bestFlow: Flow | null = null;
+  let bestScore = -1;
+  let bestUpdatedAt = 0;
+
+  for (const flow of flows) {
+    const normalizedTrigger = normalizeTrigger(flow.trigger);
+    const isDefaultTrigger = normalizedTrigger === DEFAULT_TRIGGER;
+    const normalizedFlowPhone = normalizePhone(flow.phoneNumber);
+    const matchesPhone =
+      normalizedFlowPhone && context.phoneCandidates.has(normalizedFlowPhone);
+
+    let matchesTrigger = false;
+    if (normalizedTrigger && !isDefaultTrigger) {
+      if (keywordCandidates.has(normalizedTrigger)) {
+        matchesTrigger = true;
+      } else if (
+        normalizedText &&
+        normalizedText.includes(normalizedTrigger)
+      ) {
+        matchesTrigger = true;
+      } else if (
+        normalizedInteractiveTitle &&
+        normalizedInteractiveTitle.includes(normalizedTrigger)
+      ) {
+        matchesTrigger = true;
+      } else if (
+        normalizedInteractiveId &&
+        normalizedInteractiveId === normalizedTrigger
+      ) {
+        matchesTrigger = true;
+      }
+    }
+
+    let score = 0;
+    if (matchesTrigger) score += 6;
+    if (matchesPhone) score += 3;
+    if (!matchesTrigger && isDefaultTrigger) score += 1;
+    if (matchesTrigger && matchesPhone) score += 2;
+
+    if (score <= 0) {
+      continue;
+    }
+
+    const updatedAt =
+      flow.updatedAt instanceof Date
+        ? flow.updatedAt.getTime()
+        : new Date(flow.updatedAt).getTime();
+
+    if (score > bestScore || (score === bestScore && updatedAt > bestUpdatedAt)) {
+      bestScore = score;
+      bestFlow = flow;
+      bestUpdatedAt = updatedAt;
+    }
+  }
+
+  if (bestFlow) {
+    return bestFlow;
+  }
+
+  return flows[0] ?? null;
+};
+
 const BROADCAST_SUCCESS_STATUSES = new Set(["Sent", "Delivered", "Read"]);
 const BROADCAST_FAILURE_STATUSES = new Set(["Failed"]);
 
@@ -527,6 +654,20 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
         const contactProfile = contactIndex.get(from);
         const contactName = contactProfile?.name ?? null;
 
+        const phoneCandidates = new Set<string>();
+        const addPhoneCandidate = (value: unknown) => {
+          if (typeof value !== "string") return;
+          const normalized = normalizePhone(value);
+          if (normalized) {
+            phoneCandidates.add(normalized);
+          }
+        };
+
+        addPhoneCandidate(val?.metadata?.display_phone_number);
+        addPhoneCandidate(val?.metadata?.wa_id);
+        addPhoneCandidate(phoneNumberId);
+        addPhoneCandidate(user.metaPhoneNumberId);
+
         // Contacto: upsert seguro para ese usuario
         let contact = await prisma.contact.findFirst({
           where: { phone: from, userId: user.id },
@@ -565,9 +706,25 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
         let flow = existingSession?.flow ?? null;
 
         if (!flow) {
-          flow = await prisma.flow.findFirst({
+          const availableFlows = await prisma.flow.findMany({
             where: { userId: user.id, status: "Active" },
             orderBy: { updatedAt: "desc" },
+          });
+
+          const interactiveTitle =
+            msg.interactive?.button_reply?.title ??
+            msg.interactive?.list_reply?.title ??
+            null;
+          const interactiveId =
+            msg.interactive?.button_reply?.id ??
+            msg.interactive?.list_reply?.id ??
+            null;
+
+          flow = findBestMatchingFlow(availableFlows, {
+            fullText: text,
+            interactiveTitle,
+            interactiveId,
+            phoneCandidates,
           });
         }
 
