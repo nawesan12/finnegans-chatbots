@@ -108,10 +108,14 @@ const DashboardPage = () => {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [recentLogs, setRecentLogs] = useState<RecentLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [messageVolumeData, setMessageVolumeData] = useState<MessageVolumePoint[]>([]);
+  const [messageVolumeData, setMessageVolumeData] = useState<
+    MessageVolumePoint[]
+  >([]);
   const [chartLoading, setChartLoading] = useState(true);
   const [chartError, setChartError] = useState<string | null>(null);
-  const [selectedRange, setSelectedRange] = useState<string>(dateRangeOptions[0].value);
+  const [selectedRange, setSelectedRange] = useState<string>(
+    dateRangeOptions[0].value,
+  );
   const [selectedChannels, setSelectedChannels] = useState<string[]>([]);
   const [selectedFlows, setSelectedFlows] = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
@@ -158,7 +162,8 @@ const DashboardPage = () => {
   );
 
   const chartHasData = useMemo(
-    () => formattedChartData.some((point) => point.sent > 0 || point.received > 0),
+    () =>
+      formattedChartData.some((point) => point.sent > 0 || point.received > 0),
     [formattedChartData],
   );
 
@@ -190,30 +195,31 @@ const DashboardPage = () => {
     [availableStatuses],
   );
 
-  const statusBreakdownWithPercentage: StatusBreakdownWithPercentage[] = useMemo(() => {
-    if (!insights?.statusBreakdown?.length) {
-      return [];
-    }
+  const statusBreakdownWithPercentage: StatusBreakdownWithPercentage[] =
+    useMemo(() => {
+      if (!insights?.statusBreakdown?.length) {
+        return [];
+      }
 
-    const total = insights.statusBreakdown.reduce(
-      (sum, entry) => sum + entry.count,
-      0,
-    );
+      const total = insights.statusBreakdown.reduce(
+        (sum, entry) => sum + entry.count,
+        0,
+      );
 
-    if (total === 0) {
-      return insights.statusBreakdown.map((entry) => ({
-        ...entry,
-        percentage: 0,
-      }));
-    }
+      if (total === 0) {
+        return insights.statusBreakdown.map((entry) => ({
+          ...entry,
+          percentage: 0,
+        }));
+      }
 
-    return insights.statusBreakdown
-      .map((entry) => ({
-        ...entry,
-        percentage: Number(((entry.count / total) * 100).toFixed(1)),
-      }))
-      .sort((a, b) => b.count - a.count);
-  }, [insights]);
+      return insights.statusBreakdown
+        .map((entry) => ({
+          ...entry,
+          percentage: Number(((entry.count / total) * 100).toFixed(1)),
+        }))
+        .sort((a, b) => b.count - a.count);
+    }, [insights]);
 
   const channelDistributionData = insights?.channelDistribution ?? [];
   const flowPerformanceData = insights?.flowPerformance ?? [];
@@ -389,7 +395,9 @@ const DashboardPage = () => {
             return previous;
           }
           const validChannels = new Set(data.filters.channels);
-          const filtered = previous.filter((channel) => validChannels.has(channel));
+          const filtered = previous.filter((channel) =>
+            validChannels.has(channel),
+          );
           return filtered.length === previous.length ? previous : filtered;
         });
 
@@ -398,7 +406,9 @@ const DashboardPage = () => {
             return previous;
           }
           const validStatuses = new Set(data.filters.statuses);
-          const filtered = previous.filter((status) => validStatuses.has(status));
+          const filtered = previous.filter((status) =>
+            validStatuses.has(status),
+          );
           return filtered.length === previous.length ? previous : filtered;
         });
       } catch (error) {
@@ -627,7 +637,8 @@ const DashboardPage = () => {
             <div>
               <h3 className="font-semibold text-gray-800">Filtros del panel</h3>
               <p className="text-sm text-gray-500">
-                Ajusta los filtros para actualizar todos los gráficos en tiempo real.
+                Ajusta los filtros para actualizar todos los gráficos en tiempo
+                real.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -680,7 +691,8 @@ const DashboardPage = () => {
                 Volumen de Mensajes
               </h3>
               <p className="text-sm text-gray-500">
-                Analiza la evolución de mensajes enviados y recibidos en el periodo seleccionado.
+                Analiza la evolución de mensajes enviados y recibidos en el
+                periodo seleccionado.
               </p>
             </div>
             <div className="h-[300px]">
@@ -741,7 +753,8 @@ const DashboardPage = () => {
                 Distribución por Canal
               </h3>
               <p className="text-sm text-gray-500">
-                Observa la proporción de mensajes enviados y recibidos por canal.
+                Observa la proporción de mensajes enviados y recibidos por
+                canal.
               </p>
             </div>
             <div className="h-[300px]">
@@ -815,7 +828,8 @@ const DashboardPage = () => {
                 Rendimiento de flujos
               </h3>
               <p className="text-sm text-gray-500">
-                Revisa la tasa de éxito de los flujos con más sesiones en el periodo activo.
+                Revisa la tasa de éxito de los flujos con más sesiones en el
+                periodo activo.
               </p>
             </div>
             <div className="h-[300px]">
@@ -865,7 +879,8 @@ const DashboardPage = () => {
               ) : (
                 <div className="flex h-full items-center justify-center">
                   <p className="max-w-sm text-center text-sm text-gray-500">
-                    No se registraron sesiones de flujo con los filtros aplicados.
+                    No se registraron sesiones de flujo con los filtros
+                    aplicados.
                   </p>
                 </div>
               )}
@@ -905,13 +920,16 @@ const DashboardPage = () => {
                     <div className="flex items-center justify-between text-sm font-medium text-gray-700">
                       <span>{status.status}</span>
                       <span className="text-sm text-gray-500">
-                        {numberFormatter.format(status.count)} · {percentageFormatter.format(status.percentage)}%
+                        {numberFormatter.format(status.count)} ·{" "}
+                        {percentageFormatter.format(status.percentage)}%
                       </span>
                     </div>
                     <div className="h-2 w-full rounded-full bg-gray-100">
                       <div
                         className="h-2 rounded-full bg-indigo-500"
-                        style={{ width: `${Math.min(status.percentage, 100)}%` }}
+                        style={{
+                          width: `${Math.min(status.percentage, 100)}%`,
+                        }}
                       />
                     </div>
                   </div>
@@ -928,7 +946,9 @@ const DashboardPage = () => {
           variants={itemVariants}
           className="rounded-lg bg-white p-6 shadow-md"
         >
-          <h3 className="mb-4 font-semibold text-gray-800">Actividad Reciente</h3>
+          <h3 className="mb-4 font-semibold text-gray-800">
+            Actividad Reciente
+          </h3>
           {recentLogs.length ? (
             <ul className="space-y-4">
               {recentLogs.map((log) => {
@@ -936,7 +956,7 @@ const DashboardPage = () => {
                 const contactDisplayName =
                   contactNameValue && contactNameValue.length > 0
                     ? contactNameValue
-                    : log.contact?.phone ?? "Contacto sin nombre";
+                    : (log.contact?.phone ?? "Contacto sin nombre");
 
                 const flowNameValue = log.flow?.name?.trim();
                 const flowDisplayName =
@@ -949,7 +969,10 @@ const DashboardPage = () => {
                   : "--";
 
                 return (
-                  <li key={log.id} className="flex items-center justify-between">
+                  <li
+                    key={log.id}
+                    className="flex items-center justify-between"
+                  >
                     <div>
                       <p className="font-medium text-gray-700">
                         {contactDisplayName}

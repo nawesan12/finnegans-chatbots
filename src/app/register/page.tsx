@@ -41,13 +41,15 @@ export default function RegisterPage() {
 
   return (
     <div className="grid min-h-screen bg-white text-[#04102D] lg:grid-cols-[1.1fr,0.9fr]">
-      <div className="flex flex-col justify-between bg-[#04102D]/5 px-8 py-10 sm:px-12 lg:px-16">
+      <div className="flex flex-col justify-between bg-[#04102D]/5 px-8 py-10 sm:px-12 lg:px-16 mx-auto lg:max-w-7xl">
         <div className="flex items-center gap-3">
           <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#04102D] text-sm font-semibold text-white">
             F.
           </span>
           <div className="leading-tight">
-            <p className="text-xs uppercase tracking-[0.28em] text-[#04102D]/60">Finnegans</p>
+            <p className="text-xs uppercase tracking-[0.28em] text-[#04102D]/60">
+              Finnegans
+            </p>
             <p className="text-lg font-semibold text-[#04102D]">Chatbots</p>
           </div>
         </div>
@@ -60,25 +62,34 @@ export default function RegisterPage() {
               Creá tu instancia y alineá a tus equipos desde el primer día.
             </h1>
             <p className="text-lg text-[#04102D]/70">
-              Diseñamos herramientas inteligentes para acercarte más a tus metas. Configurá accesos, canalizá conversaciones y colaborá con tu organización sin perder control.
+              Diseñamos herramientas inteligentes para acercarte más a tus
+              metas. Configurá accesos, canalizá conversaciones y colaborá con
+              tu organización sin perder control.
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            {["Onboarding acompañado", "Roles y permisos", "Integraciones seguras", "Reportes ejecutivos"].map(
-              (item) => (
-                <div
-                  key={item}
-                  className="rounded-2xl border border-[#04102D]/10 bg-white px-4 py-3 text-sm text-[#04102D]/70"
-                >
-                  {item}
-                </div>
-              ),
-            )}
+            {[
+              "Onboarding acompañado",
+              "Roles y permisos",
+              "Integraciones seguras",
+              "Reportes ejecutivos",
+            ].map((item) => (
+              <div
+                key={item}
+                className="rounded-2xl border border-[#04102D]/10 bg-white px-4 py-3 text-sm text-[#04102D]/70"
+              >
+                {item}
+              </div>
+            ))}
           </div>
         </div>
         <div className="space-y-2">
-          <p className="text-xs uppercase tracking-[0.28em] text-[#04102D]/60">Tiempo estimado</p>
-          <p className="text-2xl font-semibold text-[#04102D]">Menos de 4 semanas para salir a producción</p>
+          <p className="text-xs uppercase tracking-[0.28em] text-[#04102D]/60">
+            Tiempo estimado
+          </p>
+          <p className="text-2xl font-semibold text-[#04102D]">
+            Menos de 4 semanas para salir a producción
+          </p>
         </div>
       </div>
 
@@ -95,7 +106,10 @@ export default function RegisterPage() {
           <form onSubmit={handleRegister}>
             <CardContent className="grid gap-5">
               <div className="grid gap-2 text-left">
-                <Label htmlFor="name" className="text-sm font-medium text-[#04102D]">
+                <Label
+                  htmlFor="name"
+                  className="text-sm font-medium text-[#04102D]"
+                >
                   Nombre completo
                 </Label>
                 <Input
@@ -109,7 +123,10 @@ export default function RegisterPage() {
                 />
               </div>
               <div className="grid gap-2 text-left">
-                <Label htmlFor="email" className="text-sm font-medium text-[#04102D]">
+                <Label
+                  htmlFor="email"
+                  className="text-sm font-medium text-[#04102D]"
+                >
                   Correo electrónico
                 </Label>
                 <Input
@@ -123,7 +140,10 @@ export default function RegisterPage() {
                 />
               </div>
               <div className="grid gap-2 text-left">
-                <Label htmlFor="password" className="text-sm font-medium text-[#04102D]">
+                <Label
+                  htmlFor="password"
+                  className="text-sm font-medium text-[#04102D]"
+                >
                   Contraseña
                 </Label>
                 <Input
@@ -137,7 +157,10 @@ export default function RegisterPage() {
               </div>
             </CardContent>
             <CardFooter className="flex flex-col gap-4">
-              <Button type="submit" className="h-12 w-full rounded-full bg-[#4BC3FE] text-base font-semibold text-[#04102D] hover:bg-[#3EB6F1]">
+              <Button
+                type="submit"
+                className="h-12 w-full rounded-full bg-[#4BC3FE] text-base font-semibold text-[#04102D] hover:bg-[#3EB6F1]"
+              >
                 Crear cuenta
               </Button>
               <p className="text-center text-sm text-[#04102D]/70">

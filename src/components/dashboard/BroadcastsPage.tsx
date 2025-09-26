@@ -5,6 +5,7 @@ import React, {
   useMemo,
   useState,
   useCallback,
+  useRef,
 } from "react";
 import { motion } from "framer-motion";
 import {
@@ -110,7 +111,10 @@ const statusLabels: Record<string, string> = {
   Queued: "En cola",
 };
 
-const statusVariants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+const statusVariants: Record<
+  string,
+  "default" | "secondary" | "destructive" | "outline"
+> = {
   Processing: "secondary",
   Completed: "default",
   CompletedWithErrors: "secondary",
@@ -261,7 +265,7 @@ const BroadcastsPage = () => {
       setSelectedFlowId((current) =>
         current && sorted.some((flow) => flow.id === current)
           ? current
-          : sorted[0]?.id ?? "",
+          : (sorted[0]?.id ?? ""),
       );
     } catch (error) {
       console.error(error);
@@ -356,7 +360,9 @@ const BroadcastsPage = () => {
       selectedTag === "all"
         ? contacts
         : contacts.filter((contact) =>
-            contact.tags?.some((tagRelation) => tagRelation.tag.name === selectedTag),
+            contact.tags?.some(
+              (tagRelation) => tagRelation.tag.name === selectedTag,
+            ),
           );
 
     if (!searchTerm.trim()) {
@@ -638,13 +644,7 @@ const BroadcastsPage = () => {
     if (!message.trim() || !user?.id || !selectedFlowId) return false;
     if (messageTooLong) return false;
     return recipientsCount > 0;
-  }, [
-    message,
-    messageTooLong,
-    recipientsCount,
-    selectedFlowId,
-    user?.id,
-  ]);
+  }, [message, messageTooLong, recipientsCount, selectedFlowId, user?.id]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -706,7 +706,10 @@ const BroadcastsPage = () => {
 
       const broadcast = await response.json();
       toast.success("Campaña enviada correctamente");
-      setBroadcasts((prev) => [broadcast, ...prev.filter((b) => b.id !== broadcast.id)]);
+      setBroadcasts((prev) => [
+        broadcast,
+        ...prev.filter((b) => b.id !== broadcast.id),
+      ]);
       setSelectedBroadcastId(broadcast.id);
       setMessage("");
       setTitle("");
@@ -839,13 +842,20 @@ const BroadcastsPage = () => {
                     <SelectContent>
                       {flows.map((flow) => {
                         const updatedLabel = flow.updatedAt
-                          ? new Date(flow.updatedAt).toLocaleDateString("es-AR", {
-                              day: "2-digit",
-                              month: "short",
-                            })
+                          ? new Date(flow.updatedAt).toLocaleDateString(
+                              "es-AR",
+                              {
+                                day: "2-digit",
+                                month: "short",
+                              },
+                            )
                           : null;
                         return (
-                          <SelectItem key={flow.id} value={flow.id} className="py-2">
+                          <SelectItem
+                            key={flow.id}
+                            value={flow.id}
+                            className="py-2"
+                          >
                             <div className="flex flex-col text-left">
                               <span className="text-sm font-medium text-gray-800">
                                 {flow.name}
@@ -853,7 +863,8 @@ const BroadcastsPage = () => {
                               <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
                                 <Badge
                                   variant={
-                                    flowStatusVariants[flow.status ?? ""] ?? "secondary"
+                                    flowStatusVariants[flow.status ?? ""] ??
+                                    "secondary"
                                   }
                                   className="px-2 py-0.5 text-[10px] uppercase tracking-wide"
                                 >
@@ -869,7 +880,8 @@ const BroadcastsPage = () => {
                                 )}
                                 {updatedLabel && (
                                   <span className="flex items-center gap-1">
-                                    <Clock className="h-3 w-3" /> Actualizado {updatedLabel}
+                                    <Clock className="h-3 w-3" /> Actualizado{" "}
+                                    {updatedLabel}
                                   </span>
                                 )}
                               </div>
@@ -893,18 +905,21 @@ const BroadcastsPage = () => {
                           </p>
                           {selectedFlow.updatedAt && (
                             <p className="text-xs text-gray-500">
-                              Actualizado el
-                              {" "}
-                              {new Date(selectedFlow.updatedAt).toLocaleString("es-AR", {
-                                dateStyle: "short",
-                                timeStyle: "short",
-                              })}
+                              Actualizado el{" "}
+                              {new Date(selectedFlow.updatedAt).toLocaleString(
+                                "es-AR",
+                                {
+                                  dateStyle: "short",
+                                  timeStyle: "short",
+                                },
+                              )}
                             </p>
                           )}
                         </div>
                         <Badge
                           variant={
-                            flowStatusVariants[selectedFlow.status ?? ""] ?? "secondary"
+                            flowStatusVariants[selectedFlow.status ?? ""] ??
+                            "secondary"
                           }
                           className="whitespace-nowrap"
                         >
@@ -947,7 +962,9 @@ const BroadcastsPage = () => {
                             Sesiones activas
                           </p>
                           <p className="mt-1 font-medium text-gray-800">
-                            {numberFormatter.format(selectedFlow._count?.sessions ?? 0)}
+                            {numberFormatter.format(
+                              selectedFlow._count?.sessions ?? 0,
+                            )}
                           </p>
                         </div>
                       </div>
@@ -970,18 +987,19 @@ const BroadcastsPage = () => {
                           Editar en constructor
                         </Button>
                       </div>
-                      {selectedFlow.status && selectedFlow.status !== "Active" && (
-                        <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                          <AlertTriangle className="mt-0.5 h-4 w-4" />
-                          <span>
-                            Este flujo está marcado como
-                            {" "}
-                            {flowStatusLabels[selectedFlow.status] ?? selectedFlow.status}.
-                            Actívalo para continuar automáticamente la
-                            conversación luego del envío masivo.
-                          </span>
-                        </div>
-                      )}
+                      {selectedFlow.status &&
+                        selectedFlow.status !== "Active" && (
+                          <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                            <AlertTriangle className="mt-0.5 h-4 w-4" />
+                            <span>
+                              Este flujo está marcado como{" "}
+                              {flowStatusLabels[selectedFlow.status] ??
+                                selectedFlow.status}
+                              . Actívalo para continuar automáticamente la
+                              conversación luego del envío masivo.
+                            </span>
+                          </div>
+                        )}
                     </div>
                   )}
                 </>
@@ -1072,7 +1090,9 @@ const BroadcastsPage = () => {
                 <div>
                   <div className="mb-1 flex items-center justify-between text-xs text-gray-500">
                     <span>Longitud del mensaje</span>
-                    <span className={messageTooLong ? "text-red-600" : undefined}>
+                    <span
+                      className={messageTooLong ? "text-red-600" : undefined}
+                    >
                       {message.length} / {MESSAGE_CHARACTER_LIMIT}
                     </span>
                   </div>
@@ -1220,7 +1240,8 @@ const BroadcastsPage = () => {
                   <div className="flex items-center gap-3 text-sm text-gray-600">
                     <Filter className="h-4 w-4" />
                     <span>
-                      {selectedContacts.length} seleccionados de {filteredContacts.length}
+                      {selectedContacts.length} seleccionados de{" "}
+                      {filteredContacts.length}
                     </span>
                   </div>
                 )}
@@ -1283,11 +1304,16 @@ const BroadcastsPage = () => {
                               <p className="text-sm font-medium text-gray-800">
                                 {contact.name || contact.phone}
                               </p>
-                              <p className="text-xs text-gray-500">{contact.phone}</p>
+                              <p className="text-xs text-gray-500">
+                                {contact.phone}
+                              </p>
                               {contact.tags && contact.tags.length > 0 && (
                                 <div className="flex flex-wrap gap-1 mt-1">
                                   {contact.tags.map((tagRelation) => (
-                                    <Badge key={tagRelation.tag.id} variant="outline">
+                                    <Badge
+                                      key={tagRelation.tag.id}
+                                      variant="outline"
+                                    >
                                       {tagRelation.tag.name}
                                     </Badge>
                                   ))}
@@ -1340,16 +1366,17 @@ const BroadcastsPage = () => {
           </div>
           <div className="space-y-2 text-sm text-gray-600">
             <p>
-              Envía un POST a <code className="font-mono">/api/broadcasts</code> con el
-              contenido de tu campaña y la segmentación deseada.
+              Envía un POST a <code className="font-mono">/api/broadcasts</code>{" "}
+              con el contenido de tu campaña y la segmentación deseada.
             </p>
             <p>
-              Recuerda incluir el <code className="font-mono">flowId</code> del chatbot que
-              debe continuar la conversación luego del mensaje masivo.
+              Recuerda incluir el <code className="font-mono">flowId</code> del
+              chatbot que debe continuar la conversación luego del mensaje
+              masivo.
             </p>
             <p>
-              Puedes programar tus envíos y reutilizar plantillas desde tus flujos para
-              mantener una comunicación consistente.
+              Puedes programar tus envíos y reutilizar plantillas desde tus
+              flujos para mantener una comunicación consistente.
             </p>
           </div>
           <div>
@@ -1357,7 +1384,7 @@ const BroadcastsPage = () => {
               Ejemplo de petición
             </p>
             <pre className="bg-gray-900 text-gray-100 text-xs rounded-lg p-4 overflow-x-auto whitespace-pre-wrap">
-{exampleCurl}
+              {exampleCurl}
             </pre>
           </div>
         </motion.div>
@@ -1369,10 +1396,15 @@ const BroadcastsPage = () => {
         animate="visible"
         className="grid grid-cols-1 xl:grid-cols-3 gap-6"
       >
-        <motion.div variants={itemVariants} className="bg-white rounded-lg shadow-md xl:col-span-2">
+        <motion.div
+          variants={itemVariants}
+          className="bg-white rounded-lg shadow-md xl:col-span-2"
+        >
           <div className="p-6 border-b border-gray-100 flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-gray-800">Historial de campañas</h3>
+              <h3 className="text-lg font-semibold text-gray-800">
+                Historial de campañas
+              </h3>
               <p className="text-sm text-gray-500">
                 Consulta el desempeño de tus envíos masivos.
               </p>
@@ -1382,8 +1414,8 @@ const BroadcastsPage = () => {
             )}
           </div>
           <div className="p-6">
-            <Table
-              columns={columns}
+            <Table //@ts-expect-error bla
+              columns={columns} //@ts-expect-error bla
               data={broadcasts}
               emptyState={{
                 title: "Aún no registras campañas",
@@ -1404,7 +1436,10 @@ const BroadcastsPage = () => {
           </div>
         </motion.div>
 
-        <motion.div variants={itemVariants} className="bg-white rounded-lg shadow-md">
+        <motion.div
+          variants={itemVariants}
+          className="bg-white rounded-lg shadow-md"
+        >
           <div className="p-6 border-b border-gray-100">
             <h3 className="text-lg font-semibold text-gray-800">
               Detalle del envío
@@ -1420,11 +1455,17 @@ const BroadcastsPage = () => {
                   <h4 className="text-base font-semibold text-gray-800">
                     {selectedBroadcast.title || "Sin título"}
                   </h4>
-                  <Badge variant={statusVariants[selectedBroadcast.status] ?? "secondary"}>
-                    {statusLabels[selectedBroadcast.status] ?? selectedBroadcast.status}
+                  <Badge
+                    variant={
+                      statusVariants[selectedBroadcast.status] ?? "secondary"
+                    }
+                  >
+                    {statusLabels[selectedBroadcast.status] ??
+                      selectedBroadcast.status}
                   </Badge>
                   <p className="text-xs text-gray-500">
-                    Enviada el {new Date(selectedBroadcast.createdAt).toLocaleString()}
+                    Enviada el{" "}
+                    {new Date(selectedBroadcast.createdAt).toLocaleString()}
                   </p>
                   <p className="text-xs text-gray-500">
                     Flujo asociado:
@@ -1439,9 +1480,13 @@ const BroadcastsPage = () => {
                 </p>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div className="bg-indigo-50 text-indigo-900 rounded-lg p-3">
-                    <p className="text-xs uppercase tracking-wide">Destinatarios</p>
+                    <p className="text-xs uppercase tracking-wide">
+                      Destinatarios
+                    </p>
                     <p className="text-lg font-semibold">
-                      {numberFormatter.format(selectedBroadcast.totalRecipients)}
+                      {numberFormatter.format(
+                        selectedBroadcast.totalRecipients,
+                      )}
                     </p>
                   </div>
                   <div className="bg-green-50 text-green-900 rounded-lg p-3">
@@ -1451,7 +1496,9 @@ const BroadcastsPage = () => {
                     </p>
                   </div>
                   <div className="bg-yellow-50 text-yellow-900 rounded-lg p-3">
-                    <p className="text-xs uppercase tracking-wide">Pendientes</p>
+                    <p className="text-xs uppercase tracking-wide">
+                      Pendientes
+                    </p>
                     <p className="text-lg font-semibold">
                       {numberFormatter.format(
                         selectedBroadcast.totalRecipients -
@@ -1479,14 +1526,17 @@ const BroadcastsPage = () => {
                       >
                         <div>
                           <p className="text-sm font-medium text-gray-800">
-                            {recipient.contact?.name || recipient.contact?.phone}
+                            {recipient.contact?.name ||
+                              recipient.contact?.phone}
                           </p>
                           <p className="text-xs text-gray-500">
                             {recipient.contact?.phone}
                           </p>
                         </div>
                         <Badge
-                          variant={statusVariants[recipient.status] ?? "secondary"}
+                          variant={
+                            statusVariants[recipient.status] ?? "secondary"
+                          }
                           className="whitespace-nowrap"
                         >
                           {statusLabels[recipient.status] ?? recipient.status}
