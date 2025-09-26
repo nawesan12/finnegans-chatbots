@@ -21,6 +21,9 @@ import {
   ZoomOut,
   Minimize2,
   Clipboard,
+  HardDriveDownload,
+  ArchiveRestore,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -44,6 +47,12 @@ type TopbarProps = {
   zoomLevel?: number;
   /** opcional: nombre base para exportar */
   exportName?: string;
+  onSaveDraft?: () => Promise<void> | void;
+  savingDraft?: boolean;
+  onOpenDrafts?: () => void;
+  dirty?: boolean;
+  currentDraftName?: string | null;
+  lastSavedAt?: string | null;
 };
 
 export function Topbar({
@@ -60,10 +69,39 @@ export function Topbar({
   selectedId,
   zoomLevel,
   exportName = "flow",
+  onSaveDraft,
+  savingDraft = false,
+  onOpenDrafts,
+  dirty = false,
+  currentDraftName,
+  lastSavedAt,
 }: TopbarProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+
+  const draftLabel = useMemo(() => {
+    if (!currentDraftName || !currentDraftName.trim()) {
+      return "Borrador sin título";
+    }
+    return currentDraftName.trim();
+  }, [currentDraftName]);
+
+  const lastSavedLabel = useMemo(() => {
+    if (!lastSavedAt) return null;
+    const date = new Date(lastSavedAt);
+    if (Number.isNaN(date.getTime())) return lastSavedAt;
+    try {
+      return new Intl.DateTimeFormat("es-AR", {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(date);
+    } catch {
+      return date.toLocaleString();
+    }
+  }, [lastSavedAt]);
 
   // --- Helpers ---
   const copySelectedId = async () => {
@@ -148,7 +186,8 @@ export function Topbar({
       }
       if (mod && e.key.toLowerCase() === "s" && !typing) {
         e.preventDefault();
-        handleExport();
+        if (e.shiftKey) handleExport();
+        else onSaveDraft?.();
         return;
       }
       if (mod && e.key.toLowerCase() === "z" && !typing) {
@@ -195,6 +234,7 @@ export function Topbar({
     zoomIn,
     zoomOut,
     fitView,
+    onSaveDraft,
   ]);
 
   const zoomLabel = useMemo(
@@ -246,10 +286,40 @@ export function Topbar({
         onClick={handleExport}
         disabled={busy}
         aria-label="Exportar"
-        title="Exportar (⌘/Ctrl+S)"
+        title="Exportar (⇧+⌘/Ctrl+S)"
       >
         <Download className="h-4 w-4 mr-2" />
         Exportar
+      </Button>
+
+      <Button
+        onClick={onSaveDraft}
+        disabled={savingDraft || !onSaveDraft}
+        aria-label="Guardar borrador"
+        title={dirty ? "Guardar cambios (⌘/Ctrl+S)" : "Guardar borrador (⌘/Ctrl+S)"}
+      >
+        {savingDraft ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Guardando…
+          </>
+        ) : (
+          <>
+            <HardDriveDownload className="mr-2 h-4 w-4" />
+            Guardar
+          </>
+        )}
+      </Button>
+
+      <Button
+        variant="secondary"
+        onClick={onOpenDrafts}
+        disabled={!onOpenDrafts}
+        aria-label="Gestionar borradores"
+        title="Gestionar borradores"
+      >
+        <ArchiveRestore className="mr-2 h-4 w-4" />
+        Borradores
       </Button>
 
       <Separator orientation="vertical" className="mx-2" />
@@ -293,10 +363,25 @@ export function Topbar({
       </Button>
 
       <div className="ml-auto flex items-center gap-1">
+        <div className="hidden items-center gap-1 pr-2 sm:flex">
+          <Badge variant="outline" title="Borrador actual">
+            {draftLabel}
+          </Badge>
+          {dirty ? (
+            <Badge variant="destructive" title="Cambios sin guardar">
+              Cambios sin guardar
+            </Badge>
+          ) : lastSavedLabel ? (
+            <Badge variant="secondary" title={`Último guardado ${lastSavedLabel}`}>
+              Guardado {lastSavedLabel}
+            </Badge>
+          ) : null}
+        </div>
+
         {selectedId && (
           <>
             <Badge variant="outline" title="Nodo seleccionado">
-              Selected: {selectedId}
+              Nodo: {selectedId}
             </Badge>
             <Button
               variant="ghost"
