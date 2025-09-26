@@ -301,6 +301,9 @@ const FlowsPage = () => {
     });
   }, [flows, statusFilter, searchTerm]);
 
+  const hasActiveFilters =
+    statusFilter !== "all" || Boolean(searchTerm.trim());
+
   const handleCreateNewFlow = () => {
     startNewFlow();
   };
@@ -471,12 +474,14 @@ const FlowsPage = () => {
       {
         key: "broadcasts",
         label: "Campañas",
+        align: "right" as const,
         render: (row: FlowWithCounts) =>
           numberFormatter.format(row._count?.broadcasts ?? 0),
       },
       {
         key: "sessions",
         label: "Sesiones",
+        align: "right" as const,
         render: (row: FlowWithCounts) =>
           numberFormatter.format(row._count?.sessions ?? 0),
       },
@@ -789,7 +794,27 @@ const FlowsPage = () => {
                   Actualizando listado...
                 </div>
               )}
-              <Table columns={columns} data={filteredFlows} />
+              <Table
+                columns={columns}
+                data={filteredFlows}
+                emptyState={{
+                  title: hasActiveFilters
+                    ? "No se encontraron flujos"
+                    : "Aún no creaste flujos",
+                  description: hasActiveFilters
+                    ? "Prueba con otros filtros o restablece la búsqueda para ver todos tus flujos."
+                    : "Diseña tu primer flujo para automatizar respuestas y continuar las conversaciones de tus campañas.",
+                  action: (
+                    <Button
+                      type="button"
+                      onClick={handleCreateNewFlow}
+                      className="bg-[#8694ff] text-white hover:bg-indigo-700"
+                    >
+                      <Plus className="mr-2 h-4 w-4" /> Crear flujo
+                    </Button>
+                  ),
+                }}
+              />
             </div>
           </motion.div>
         </motion.div>
