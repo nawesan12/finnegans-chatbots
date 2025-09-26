@@ -1,49 +1,93 @@
 "use client";
-import React from "react";
+
+import * as React from "react";
 import { motion } from "framer-motion";
-import { containerVariants, itemVariants } from "@/lib/animations";
 import { Inbox } from "lucide-react";
+
+import { containerVariants, itemVariants } from "@/lib/animations";
+import { cn } from "@/lib/utils";
+
+type Alignment = "left" | "center" | "right";
 
 type TableColumn<T> = {
   key: keyof T | string;
-  label: string;
+  label: React.ReactNode;
   render?: (row: T) => React.ReactNode;
+  className?: string;
+  headerClassName?: string;
+  align?: Alignment;
+};
+
+type TableEmptyState = {
+  title: string;
+  description?: string;
+  action?: React.ReactNode;
+  icon?: React.ComponentType<React.SVGProps<SVGSVGElement>>;
 };
 
 type TableProps<T> = {
   columns: TableColumn<T>[];
   data: T[];
+  emptyState?: TableEmptyState;
+  getRowKey?: (row: T, index: number) => string | number;
+  className?: string;
 };
 
-function Table<T extends { id: string | number }>({
+const alignmentClassNames: Record<Alignment, string> = {
+  left: "text-left",
+  center: "text-center",
+  right: "text-right",
+};
+
+function Table<T extends Record<PropertyKey, unknown>>({
   columns,
   data,
+  emptyState,
+  getRowKey,
+  className,
 }: TableProps<T>) {
   if (!data || data.length === 0) {
+    const EmptyIcon = emptyState?.icon ?? Inbox;
     return (
-      <div className="text-center py-12">
-        <Inbox className="mx-auto h-12 w-12 text-gray-400" />
-        <h3 className="mt-2 text-sm font-medium text-gray-900">Sin datos</h3>
-        <p className="mt-1 text-sm text-gray-500">
-          No hay datos para mostrar en este momento.
-        </p>
+      <div className={cn("flex flex-col items-center gap-3 py-12 text-center", className)}>
+        <EmptyIcon className="h-12 w-12 text-gray-300" />
+        <div className="space-y-1">
+          <h3 className="text-sm font-semibold text-gray-900">
+            {emptyState?.title ?? "Sin datos"}
+          </h3>
+          <p className="text-sm text-gray-500">
+            {emptyState?.description ?? "No hay información para mostrar en este momento."}
+          </p>
+        </div>
+        {emptyState?.action ? (
+          <div className="mt-2 flex flex-wrap justify-center gap-2">
+            {emptyState.action}
+          </div>
+        ) : null}
       </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div className={cn("overflow-x-auto", className)}>
       <table className="min-w-full bg-white">
         <thead className="bg-gray-50">
           <tr>
-            {columns.map((col) => (
-              <th //@ts-expect-error it exists
-                key={col?.key}
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-              >
-                {col?.label}
-              </th>
-            ))}
+            {columns.map((column) => {
+              const alignment = alignmentClassNames[column.align ?? "left"];
+              return (
+                <th
+                  key={String(column.key)}
+                  className={cn(
+                    "px-6 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500",
+                    alignment,
+                    column.headerClassName,
+                  )}
+                >
+                  {column.label}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <motion.tbody
@@ -52,29 +96,43 @@ function Table<T extends { id: string | number }>({
           animate="visible"
           className="divide-y divide-gray-200"
         >
-          {data.map((row) => (
-            <motion.tr
-              key={row.id}
-              variants={itemVariants}
-              className="hover:bg-gray-50"
-            >
-              {columns.map((col) => (
-                <td //@ts-expect-error it exists
-                  key={col?.key}
-                  className="px-6 py-4 whitespace-nowrap text-sm text-gray-700"
-                >
-                  {col.render
-                    ? col.render(row) //@ts-expect-error it exists
-                    : ((row as Record<string, unknown>)[col.key as keyof T] ??
-                      null)}
-                </td>
-              ))}
-            </motion.tr>
-          ))}
+          {data.map((row, index) => {
+            const rowKey = getRowKey?.(row, index) ??
+              ((row as { id?: string | number }).id ?? index);
+            return (
+              <motion.tr
+                key={String(rowKey)}
+                variants={itemVariants}
+                className="hover:bg-gray-50"
+              >
+                {columns.map((column) => {
+                  const alignment = alignmentClassNames[column.align ?? "left"];
+                  const cellValue = column.render
+                    ? column.render(row)
+                    : (row as Record<PropertyKey, React.ReactNode>)[
+                        column.key as PropertyKey
+                      ] ?? null;
+                  return (
+                    <td
+                      key={`${String(rowKey)}-${String(column.key)}`}
+                      className={cn(
+                        "whitespace-nowrap px-6 py-4 text-sm text-gray-700",
+                        alignment,
+                        column.className,
+                      )}
+                    >
+                      {cellValue}
+                    </td>
+                  );
+                })}
+              </motion.tr>
+            );
+          })}
         </motion.tbody>
       </table>
     </div>
   );
 }
 
+export type { TableColumn, TableProps };
 export default Table;

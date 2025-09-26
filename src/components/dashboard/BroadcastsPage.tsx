@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { containerVariants, itemVariants } from "@/lib/animations";
 import MetricCard from "@/components/dashboard/MetricCard";
+import PageHeader from "@/components/dashboard/PageHeader";
 import Table from "@/components/dashboard/Table";
 import { useAuthStore } from "@/lib/store";
 import { toast } from "sonner";
@@ -168,8 +169,13 @@ const BroadcastsPage = () => {
   const [loadingFlows, setLoadingFlows] = useState(false);
   const [selectedFlowId, setSelectedFlowId] = useState<string>("");
   const [previewCopied, setPreviewCopied] = useState(false);
+  const composerRef = useRef<HTMLDivElement | null>(null);
 
   const messageTooLong = message.length > MESSAGE_CHARACTER_LIMIT;
+
+  const handleScrollToComposer = useCallback(() => {
+    composerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
 
   const numberFormatter = useMemo(
     () =>
@@ -536,9 +542,27 @@ const BroadcastsPage = () => {
         render: (row: BroadcastItem) =>
           new Date(row.createdAt).toLocaleString(),
       },
-      { key: "totalRecipients", label: "Destinatarios" },
-      { key: "successCount", label: "Enviados" },
-      { key: "failureCount", label: "Errores" },
+      {
+        key: "totalRecipients",
+        label: "Destinatarios",
+        align: "right" as const,
+        render: (row: BroadcastItem) =>
+          numberFormatter.format(row.totalRecipients ?? 0),
+      },
+      {
+        key: "successCount",
+        label: "Enviados",
+        align: "right" as const,
+        render: (row: BroadcastItem) =>
+          numberFormatter.format(row.successCount ?? 0),
+      },
+      {
+        key: "failureCount",
+        label: "Errores",
+        align: "right" as const,
+        render: (row: BroadcastItem) =>
+          numberFormatter.format(row.failureCount ?? 0),
+      },
       {
         key: "status",
         label: "Estado",
@@ -561,7 +585,7 @@ const BroadcastsPage = () => {
         ),
       },
     ],
-    [],
+    [numberFormatter],
   );
 
   const selectedBroadcast = useMemo(
@@ -709,8 +733,34 @@ const BroadcastsPage = () => {
     return `curl -X POST https://tu-dominio.com/api/broadcasts \\n  -H "Content-Type: application/json" \\n  -H "Authorization: Bearer YOUR_TOKEN" \\n  -d '${JSON.stringify(payload, null, 2)}'`;
   }, []);
 
+  const headerActions = (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => router.push("/dashboard/flows")}
+      >
+        <GitBranch className="h-4 w-4" />
+        Gestionar flujos
+      </Button>
+      <Button
+        type="button"
+        onClick={handleScrollToComposer}
+        className="bg-[#8694ff] text-white hover:bg-indigo-700"
+      >
+        <Plus className="h-4 w-4" />
+        Nueva campaña
+      </Button>
+    </>
+  );
+
   return (
     <div className="p-6 space-y-6">
+      <PageHeader
+        title="Mensajes masivos"
+        description="Envía campañas multicanal, reutiliza tus flujos automatizados y controla el desempeño de cada envío."
+        actions={headerActions}
+      />
       <motion.div
         className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6"
         variants={containerVariants}
@@ -729,6 +779,7 @@ const BroadcastsPage = () => {
         animate="visible"
       >
         <motion.div
+          ref={composerRef}
           variants={itemVariants}
           className="bg-white p-6 rounded-lg shadow-md xl:col-span-2"
         >
@@ -1331,7 +1382,25 @@ const BroadcastsPage = () => {
             )}
           </div>
           <div className="p-6">
-            <Table columns={columns} data={broadcasts} />
+            <Table
+              columns={columns}
+              data={broadcasts}
+              emptyState={{
+                title: "Aún no registras campañas",
+                description:
+                  "Usa el compositor superior para enviar tu primer mensaje masivo y monitorear aquí su desempeño.",
+                action: (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleScrollToComposer}
+                  >
+                    <Megaphone className="h-4 w-4" />
+                    Crear campaña ahora
+                  </Button>
+                ),
+              }}
+            />
           </div>
         </motion.div>
 

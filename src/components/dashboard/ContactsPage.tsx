@@ -1,14 +1,31 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+} from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { MoreVertical, Upload } from "lucide-react";
-import { itemVariants } from "@/lib/animations";
+import { MoreVertical, Upload, UserPlus, Search } from "lucide-react";
+
+import PageHeader from "@/components/dashboard/PageHeader";
 import Table from "@/components/dashboard/Table";
-import { Skeleton } from "@/components/ui/skeleton";
+import { itemVariants } from "@/lib/animations";
 import { toast } from "sonner";
 import { useAuthStore } from "@/lib/store";
 import { useDashboardActions } from "@/lib/dashboard-context";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type ContactTagRelation = { tag: { id: string; name: string } };
 
@@ -23,9 +40,19 @@ type ContactRow = {
 const ContactsPage = () => {
   const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [tagFilter, setTagFilter] = useState<string>("all");
   const token = useAuthStore((state) => state.token);
   const hasHydrated = useAuthStore((state) => state.hasHydrated);
   const dashboardActions = useDashboardActions();
+
+  const numberFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat("es-AR", {
+        maximumFractionDigits: 0,
+      }),
+    [],
+  );
 
   const fetchContacts = useCallback(async () => {
     if (!token) {
@@ -40,12 +67,14 @@ const ContactsPage = () => {
       });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to fetch contacts");
+        throw new Error(errorData.error || "No se pudieron obtener los contactos");
       }
       const data: ContactRow[] = await response.json();
       setContacts(data);
     } catch (error) {
-      toast.error((error as Error)?.message ?? "Error al obtener contactos");
+      toast.error(
+        (error as Error)?.message ?? "Error al obtener la agenda de contactos",
+      );
     } finally {
       setLoading(false);
     }
@@ -55,7 +84,7 @@ const ContactsPage = () => {
     if (!hasHydrated) {
       return;
     }
-    fetchContacts();
+    void fetchContacts();
   }, [fetchContacts, hasHydrated]);
 
   useEffect(() => {
@@ -66,6 +95,62 @@ const ContactsPage = () => {
     return () => window.removeEventListener("contacts:updated", handler);
   }, [fetchContacts]);
 
+  const availableTags = useMemo(() => {
+    const entries = new Map<string, { id: string; name: string }>();
+    contacts.forEach((contact) => {
+      contact.tags?.forEach(({ tag }) => {
+        if (!entries.has(tag.id)) {
+          entries.set(tag.id, tag);
+        }
+      });
+    });
+    return Array.from(entries.values()).sort((a, b) =>
+      a.name.localeCompare(b.name, "es", { sensitivity: "base" }),
+    );
+  }, [contacts]);
+
+  const filteredContacts = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    return contacts.filter((contact) => {
+      const matchesTag =
+        tagFilter === "all" ||
+        contact.tags?.some((relation) => relation.tag.id === tagFilter);
+
+      if (!matchesTag) {
+        return false;
+      }
+
+      if (!normalizedSearch) {
+        return true;
+      }
+
+      const name = contact.name?.toLowerCase() ?? "";
+      const phone = contact.phone.toLowerCase();
+      const tagNames = contact.tags?.map((relation) =>
+        relation.tag.name.toLowerCase(),
+      );
+
+      return [name, phone, ...(tagNames ?? [])].some((value) =>
+        value.includes(normalizedSearch),
+      );
+    });
+  }, [contacts, searchTerm, tagFilter]);
+
+  const hasActiveFilters = Boolean(searchTerm.trim() || tagFilter !== "all");
+
+  const handleClearFilters = () => {
+    setSearchTerm("");
+    setTagFilter("all");
+  };
+
+  const handleOpenImport = () => {
+    dashboardActions?.openImportContacts?.();
+  };
+
+  const handleOpenNewContact = () => {
+    dashboardActions?.openNewContact?.();
+  };
+
   const columns = [
     {
       key: "name",
@@ -73,63 +158,121 @@ const ContactsPage = () => {
       render: (row: ContactRow) => (
         <Link
           href={`/dashboard/contacts/${row.id}`}
-          className="text-[#8694ff] hover:text-indigo-700 font-medium transition-colors"
+          className="font-medium text-[#8694ff] transition-colors hover:text-indigo-700"
         >
           {row.name || "Sin nombre"}
         </Link>
       ),
     },
-    { key: "phone", label: "Telefono" },
+    {
+      key: "phone",
+      label: "Teléfono",
+      className: "font-medium text-gray-900",
+    },
     {
       key: "tags",
       label: "Etiquetas",
       render: (row: ContactRow) => (
-        <div className="flex space-x-1">
-          {row.tags?.map((t) => (
-            <span
-              key={t.tag.id}
-              className="px-2 text-xs font-semibold rounded-full bg-gray-200 text-gray-700"
-            >
-              {t.tag.name}
-            </span>
-          ))}
+        <div className="flex flex-wrap gap-1">
+          {row.tags?.length ? (
+            row.tags.map((relation) => (
+              <span
+                key={relation.tag.id}
+                className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600"
+              >
+                {relation.tag.name}
+              </span>
+            ))
+          ) : (
+            <span className="text-xs text-gray-400">Sin etiquetas</span>
+          )}
         </div>
       ),
     },
     {
       key: "updatedAt",
-      label: "Last Contact",
-      render: (row: ContactRow) =>
-        new Date(row.updatedAt).toLocaleDateString(),
+      label: "Última actualización",
+      align: "right" as const,
+      className: "text-gray-500",
+      render: (row: ContactRow) => (
+        <span>
+          {new Date(row.updatedAt).toLocaleDateString("es-AR", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          })}
+        </span>
+      ),
     },
     {
       key: "actions",
-      label: "Actions",
+      label: "Acciones",
+      align: "center" as const,
       render: () => (
-        <button className="text-[#4bc3fe] hover:text-indigo-900">
+        <button className="text-[#4bc3fe] transition-colors hover:text-indigo-900">
           <MoreVertical className="h-5 w-5" />
         </button>
       ),
     },
   ];
 
-  if (loading) {
+  const emptyStateTitle = hasActiveFilters
+    ? "No se encontraron contactos"
+    : "Aún no tienes contactos";
+
+  const emptyStateDescription = hasActiveFilters
+    ? "Prueba ajustando la búsqueda o quitando los filtros aplicados."
+    : "Importa tu base de datos o crea un contacto manualmente para comenzar a conversar.";
+
+  const headerActions = (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={handleOpenNewContact}
+      >
+        <UserPlus className="h-4 w-4" />
+        Nuevo contacto
+      </Button>
+      <Button
+        type="button"
+        onClick={handleOpenImport}
+        className="bg-[#8694ff] text-white hover:bg-indigo-700"
+      >
+        <Upload className="h-4 w-4" />
+        Importar contactos
+      </Button>
+    </>
+  );
+
+  const summaryText = `Mostrando ${numberFormatter.format(
+    filteredContacts.length,
+  )} de ${numberFormatter.format(contacts.length)} contactos`;
+
+  const isInitialLoading = loading && !contacts.length;
+
+  if (isInitialLoading) {
     return (
-      <div className="p-6">
+      <div className="space-y-6 p-6">
+        <PageHeader
+          title="Contactos"
+          description="Centraliza y segmenta tu base de clientes para nutrir tus campañas y automatizaciones."
+          actions={headerActions}
+        />
         <motion.div
           variants={itemVariants}
           className="overflow-hidden rounded-lg bg-white shadow-md"
         >
-          <div className="flex justify-end border-b border-gray-100 p-4">
+          <div className="flex justify-end border-b border-gray-100 p-6">
             <Skeleton className="h-9 w-40 rounded-md" />
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full bg-white">
               <thead className="bg-gray-50">
                 <tr>
-                  {columns.map((column: { key: string; label: string }) => (
+                  {columns.map((column) => (
                     <th
-                      key={`contacts-loading-header-${column.key}`}
+                      key={`contacts-loading-header-${String(column.key)}`}
                       className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
                     >
                       {column.label}
@@ -139,7 +282,7 @@ const ContactsPage = () => {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {Array.from({ length: 5 }).map((_, rowIndex) => (
-                  <tr key={`contacts-loading-row-${rowIndex}`}> 
+                  <tr key={`contacts-loading-row-${rowIndex}`}>
                     <td className="whitespace-nowrap px-6 py-4 text-sm">
                       <div className="space-y-2">
                         <Skeleton className="h-4 w-40" />
@@ -176,23 +319,92 @@ const ContactsPage = () => {
   }
 
   return (
-    <div className="p-6">
+    <div className="space-y-6 p-6">
+      <PageHeader
+        title="Contactos"
+        description="Centraliza y segmenta tu base de clientes para nutrir tus campañas y automatizaciones."
+        actions={headerActions}
+      />
       <motion.div
         variants={itemVariants}
-        className="bg-white rounded-lg shadow-md"
+        className="rounded-lg bg-white shadow-md"
       >
-        <div className="p-4 flex justify-end">
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => dashboardActions?.openImportContacts?.()}
-            className="bg-[#8694ff] text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-indigo-700 flex items-center space-x-2 transition-colors"
-          >
-            <Upload className="h-4 w-4" />
-            <span>Importar Contactos</span>
-          </motion.button>
+        <div className="space-y-4 border-b border-gray-100 p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-1 flex-col gap-3 md:flex-row md:items-center">
+              <div className="relative w-full max-w-sm">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                <Input
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Buscar por nombre, teléfono o etiqueta"
+                  className="pl-9"
+                />
+              </div>
+              <Select value={tagFilter} onValueChange={setTagFilter}>
+                <SelectTrigger className="w-full max-w-[200px]">
+                  <SelectValue placeholder="Filtrar por etiqueta" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas las etiquetas</SelectItem>
+                  {availableTags.map((tag) => (
+                    <SelectItem key={tag.id} value={tag.id}>
+                      {tag.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
+              <span>{summaryText}</span>
+              {hasActiveFilters ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleClearFilters}
+                >
+                  Limpiar filtros
+                </Button>
+              ) : null}
+              {loading ? (
+                <span className="flex items-center gap-2 text-gray-400">
+                  <span className="h-2 w-2 animate-ping rounded-full bg-[#8694ff]" />
+                  Actualizando lista...
+                </span>
+              ) : null}
+            </div>
+          </div>
         </div>
-        <Table columns={columns} data={contacts} />
+        <Table
+          columns={columns}
+          data={filteredContacts}
+          emptyState={{
+            title: emptyStateTitle,
+            description: emptyStateDescription,
+            action: (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleOpenNewContact}
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Nuevo contacto
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleOpenImport}
+                  className="bg-[#8694ff] text-white hover:bg-indigo-700"
+                >
+                  <Upload className="h-4 w-4" />
+                  Importar contactos
+                </Button>
+              </>
+            ),
+          }}
+          className="rounded-b-lg"
+        />
       </motion.div>
     </div>
   );
