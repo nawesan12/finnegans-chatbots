@@ -83,6 +83,9 @@ type FlowBuilderProps = {
   initialFlow?: Partial<FlowData> | null;
   flowId?: string | null;
   flowName?: string | null;
+  onSaveFlow?: (definition: FlowData) => Promise<boolean | void> | boolean | void;
+  savingFlow?: boolean;
+  canSaveFlow?: boolean;
 };
 type ImportEvent =
   | React.ChangeEvent<HTMLInputElement>
@@ -218,7 +221,17 @@ const toFlowState = (
 };
 
 const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
-  ({ initialFlow, flowId, flowName }, ref) => {
+  (
+    {
+      initialFlow,
+      flowId,
+      flowName,
+      onSaveFlow: onSaveFlowProp,
+      savingFlow = false,
+      canSaveFlow = true,
+    },
+    ref,
+  ) => {
     const [nodes, setNodes, onNodesChange] =
       useNodesState<FlowNode["data"]>(defaultNodes);
     const [edges, setEdges, onEdgesChange] =
@@ -346,6 +359,12 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
         didRestoreRef.current = true;
       }
     }, [applyFlow, initialFlow]);
+
+    useEffect(() => {
+      if (flowName && !currentDraftName) {
+        setCurrentDraftName(flowName);
+      }
+    }, [currentDraftName, flowName]);
 
     // Expose ref API
     useImperativeHandle(ref, () => ({
@@ -582,6 +601,21 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       }
       await handleSaveDraft({ id: currentDraftId, name: currentDraftName });
     }, [currentDraftId, currentDraftName, handleSaveDraft]);
+
+    const handlePersistFlow = useCallback(async () => {
+      if (!onSaveFlowProp) return;
+      const sanitized = sanitizeFlowDefinition({ nodes, edges });
+      const snapshot = JSON.stringify(sanitized);
+      try {
+        const result = await onSaveFlowProp(sanitized);
+        if (result === false) return;
+        lastSavedSnapshotRef.current = snapshot;
+        setDirty(false);
+        setLastSavedAt(new Date().toISOString());
+      } catch (error) {
+        console.error("Error al guardar el flujo", error);
+      }
+    }, [edges, nodes, onSaveFlowProp]);
 
     const handleLoadDraft = useCallback(
       (draftId: string) => {
@@ -994,6 +1028,7 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
         if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
           e.preventDefault();
           if (e.shiftKey) handleExport();
+          else if (onSaveFlowProp) void handlePersistFlow();
           else void handleQuickSave();
         }
         if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
@@ -1039,6 +1074,8 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
       undo,
       redo,
       handleQuickSave,
+      handlePersistFlow,
+      onSaveFlowProp,
     ]);
 
     // zoom controls
@@ -1203,11 +1240,14 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
               zoomLevel={zoomLevel}
               exportName="whatsapp-flow"
               onSaveDraft={handleQuickSave}
+              onSaveFlow={onSaveFlowProp ? handlePersistFlow : undefined}
               savingDraft={savingDraft}
+              savingFlow={savingFlow}
               onOpenDrafts={() => setDraftDialogOpen(true)}
               dirty={dirty}
               currentDraftName={currentDraftName}
               lastSavedAt={lastSavedAt}
+              canSaveFlow={canSaveFlow}
             />
           </div>
 

@@ -24,6 +24,7 @@ import {
   HardDriveDownload,
   ArchiveRestore,
   Loader2,
+  Save,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -49,10 +50,13 @@ type TopbarProps = {
   exportName?: string;
   onSaveDraft?: () => Promise<void> | void;
   savingDraft?: boolean;
+  onSaveFlow?: () => Promise<void> | void;
+  savingFlow?: boolean;
   onOpenDrafts?: () => void;
   dirty?: boolean;
   currentDraftName?: string | null;
   lastSavedAt?: string | null;
+  canSaveFlow?: boolean;
 };
 
 export function Topbar({
@@ -71,10 +75,13 @@ export function Topbar({
   exportName = "flow",
   onSaveDraft,
   savingDraft = false,
+  onSaveFlow,
+  savingFlow = false,
   onOpenDrafts,
   dirty = false,
   currentDraftName,
   lastSavedAt,
+  canSaveFlow = true,
 }: TopbarProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -187,7 +194,8 @@ export function Topbar({
       if (mod && e.key.toLowerCase() === "s" && !typing) {
         e.preventDefault();
         if (e.shiftKey) handleExport();
-        else onSaveDraft?.();
+        else if (onSaveFlow) void onSaveFlow();
+        else void onSaveDraft?.();
         return;
       }
       if (mod && e.key.toLowerCase() === "z" && !typing) {
@@ -235,6 +243,7 @@ export function Topbar({
     zoomOut,
     fitView,
     onSaveDraft,
+    onSaveFlow,
   ]);
 
   const zoomLabel = useMemo(
@@ -293,10 +302,33 @@ export function Topbar({
       </Button>
 
       <Button
+        onClick={onSaveFlow}
+        disabled={savingFlow || !onSaveFlow || !canSaveFlow}
+        aria-label="Guardar flujo"
+        title={
+          dirty
+            ? "Guardar cambios (⌘/Ctrl+S)"
+            : "Guardar flujo (⌘/Ctrl+S)"
+        }
+      >
+        {savingFlow ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Guardando…
+          </>
+        ) : (
+          <>
+            <Save className="mr-2 h-4 w-4" />
+            Guardar flujo
+          </>
+        )}
+      </Button>
+
+      <Button
         onClick={onSaveDraft}
         disabled={savingDraft || !onSaveDraft}
         aria-label="Guardar borrador"
-        title={dirty ? "Guardar cambios (⌘/Ctrl+S)" : "Guardar borrador (⌘/Ctrl+S)"}
+        title="Guardar borrador"
       >
         {savingDraft ? (
           <>
@@ -306,7 +338,7 @@ export function Topbar({
         ) : (
           <>
             <HardDriveDownload className="mr-2 h-4 w-4" />
-            Guardar
+            Guardar borrador
           </>
         )}
       </Button>
