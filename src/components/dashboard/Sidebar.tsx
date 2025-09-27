@@ -1,5 +1,6 @@
 "use client";
-import React from "react";
+
+import React, { useMemo } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
@@ -7,13 +8,209 @@ import { usePathname } from "next/navigation";
 import {
   BarChart2,
   Bot,
+  CircleHelp,
   Megaphone,
   MessageSquare,
-  Users,
   Settings,
+  Users,
   ChevronLeft,
   ChevronRight,
+  LifeBuoy,
+  Star,
 } from "lucide-react";
+
+import { useAuthStore } from "@/lib/store";
+import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+
+type SidebarNavItem = {
+  id: string;
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  label: string;
+  href: string;
+  badge?: { label: string; variant?: "default" | "secondary" | "outline" };
+  description?: string;
+};
+
+type SidebarSectionConfig = {
+  id: string;
+  label: string;
+  items: SidebarNavItem[];
+};
+
+const SidebarNavLink = ({
+  item,
+  isCollapsed,
+  isActive,
+}: {
+  item: SidebarNavItem;
+  isCollapsed: boolean;
+  isActive: boolean;
+}) => {
+  const Icon = item.icon;
+  const isExternal = item.href.startsWith("http");
+
+  return (
+    <Link
+      key={item.id}
+      href={item.href}
+      target={isExternal ? "_blank" : undefined}
+      rel={isExternal ? "noreferrer" : undefined}
+      className={cn(
+        "group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
+        isActive
+          ? "bg-[#4bc3fe] text-[#04102D] shadow-sm"
+          : "text-white/80 hover:bg-white/10 hover:text-white",
+      )}
+      aria-current={isActive ? "page" : undefined}
+      title={isCollapsed ? item.label : undefined}
+    >
+      <span
+        className={cn(
+          "flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white transition-colors",
+          isActive && "border-transparent bg-white text-[#04102D]",
+        )}
+      >
+        <Icon className="h-4 w-4" aria-hidden="true" />
+      </span>
+      {!isCollapsed && (
+        <motion.div
+          className="flex flex-1 items-center justify-between"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.2 }}
+        >
+          <div className="flex flex-1 flex-col">
+            <span className="truncate text-sm font-semibold text-white">
+              {item.label}
+            </span>
+            {item.description && (
+              <span className="text-xs text-white/60">{item.description}</span>
+            )}
+          </div>
+          {item.badge && (
+            <Badge variant={item.badge.variant ?? "secondary"}>
+              {item.badge.label}
+            </Badge>
+          )}
+        </motion.div>
+      )}
+    </Link>
+  );
+};
+
+const SidebarSectionGroup = ({
+  section,
+  pathname,
+  isCollapsed,
+}: {
+  section: SidebarSectionConfig;
+  pathname: string;
+  isCollapsed: boolean;
+}) => {
+  return (
+    <div className="space-y-2">
+      {!isCollapsed && (
+        <span className="px-3 text-xs font-semibold uppercase tracking-wider text-white/50">
+          {section.label}
+        </span>
+      )}
+      <div className="space-y-1">
+        {section.items.map((item) => {
+          const isActive =
+            pathname === item.href ||
+            (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`));
+
+          return (
+            <SidebarNavLink
+              key={item.id}
+              item={item}
+              isCollapsed={isCollapsed}
+              isActive={isActive}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+const SidebarSupportCard = ({ isCollapsed }: { isCollapsed: boolean }) => {
+  if (isCollapsed) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-white shadow-inner">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10">
+          <LifeBuoy className="h-5 w-5" aria-hidden="true" />
+        </div>
+        <div className="space-y-1 text-sm">
+          <p className="font-semibold">¿Necesitas ayuda?</p>
+          <p className="text-xs text-white/70">
+            Nuestro equipo está disponible para asistirte con integraciones y
+            automatizaciones avanzadas.
+          </p>
+          <Link
+            href="mailto:soporte@finnegans.ai"
+            className="inline-flex items-center text-xs font-semibold text-[#4bc3fe] transition-colors hover:text-white"
+          >
+            Escríbenos
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const SidebarFooter = ({
+  isCollapsed,
+}: {
+  isCollapsed: boolean;
+}) => {
+  const user = useAuthStore((state) => state.user);
+
+  return (
+    <div className="border-t border-white/10 p-4">
+      <div className="flex items-center gap-3">
+        <div className="relative h-10 w-10 overflow-hidden rounded-full border border-white/10 bg-white/20">
+          <Image
+            src="/finnegans.svg"
+            alt={user?.name ?? "Usuario"}
+            width={40}
+            height={40}
+            className="h-full w-full object-cover"
+          />
+        </div>
+        {!isCollapsed && (
+          <motion.div
+            className="flex flex-1 flex-col"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.2 }}
+          >
+            <span className="text-sm font-semibold text-white">
+              {user?.name ?? "Admin"}
+            </span>
+            <span className="text-xs text-white/60">
+              {user?.email ?? "admin@botflow.io"}
+            </span>
+          </motion.div>
+        )}
+        {!isCollapsed && (
+          <Link
+            href="/dashboard/settings"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-white/80 transition-colors hover:border-white/30 hover:text-white"
+            aria-label="Ver configuración de la cuenta"
+          >
+            <Settings className="h-4 w-4" aria-hidden="true" />
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+};
 
 const Sidebar = ({
   isCollapsed,
@@ -23,109 +220,129 @@ const Sidebar = ({
   setIsCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
 }) => {
   const pathname = usePathname();
-  const navItems = [
-    {
-      id: "dashboard",
-      icon: BarChart2,
-      label: "Panel de Control",
-      href: "/dashboard",
-    },
-    { id: "flows", icon: Bot, label: "Flujos", href: "/dashboard/flows" },
-    {
-      id: "broadcasts",
-      icon: Megaphone,
-      label: "Mensajes Masivos",
-      href: "/dashboard/broadcasts",
-    },
-    {
-      id: "logs",
-      icon: MessageSquare,
-      label: "Registros",
-      href: "/dashboard/logs",
-    },
-    {
-      id: "contacts",
-      icon: Users,
-      label: "Contactos",
-      href: "/dashboard/contacts",
-    },
-    {
-      id: "settings",
-      icon: Settings,
-      label: "Configuración",
-      href: "/dashboard/settings",
-    },
-  ];
+
+  const navSections = useMemo<SidebarSectionConfig[]>(
+    () => [
+      {
+        id: "overview",
+        label: "General",
+        items: [
+          {
+            id: "dashboard",
+            icon: BarChart2,
+            label: "Panel de Control",
+            href: "/dashboard",
+            description: "Resumen en tiempo real",
+          },
+          {
+            id: "flows",
+            icon: Bot,
+            label: "Flujos",
+            href: "/dashboard/flows",
+            description: "Diseña automatizaciones",
+          },
+        ],
+      },
+      {
+        id: "communication",
+        label: "Comunicación",
+        items: [
+          {
+            id: "broadcasts",
+            icon: Megaphone,
+            label: "Mensajes Masivos",
+            href: "/dashboard/broadcasts",
+            description: "Programaciones y campañas",
+            badge: { label: "Nuevo", variant: "outline" },
+          },
+          {
+            id: "logs",
+            icon: MessageSquare,
+            label: "Registros",
+            href: "/dashboard/logs",
+            description: "Conversaciones y tickets",
+          },
+          {
+            id: "contacts",
+            icon: Users,
+            label: "Contactos",
+            href: "/dashboard/contacts",
+            description: "Segmentos y etiquetas",
+          },
+        ],
+      },
+      {
+        id: "resources",
+        label: "Recursos",
+        items: [
+          {
+            id: "knowledge",
+            icon: CircleHelp,
+            label: "Centro de ayuda",
+            href: "https://finnegans.ai/docs",
+            description: "Guías y documentación",
+          },
+        ],
+      },
+    ],
+    [],
+  );
 
   return (
     <motion.aside
-      animate={{ width: isCollapsed ? "5rem" : "16rem" }}
-      transition={{ duration: 0.3 }}
-      className="bg-[#04102D] text-white flex flex-col"
+      animate={{ width: isCollapsed ? "5.5rem" : "18rem" }}
+      transition={{ duration: 0.3, ease: "easeInOut" }}
+      className="flex h-full flex-col overflow-hidden bg-[#04102D] text-white shadow-2xl"
     >
-      <div className="flex items-center justify-between p-4 border-b border-gray-700 h-16">
-        {!isCollapsed && (
+      <div className="flex h-16 items-center justify-between border-b border-white/10 px-4">
+        {!isCollapsed ? (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-            className="flex items-center"
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+            className="flex items-center gap-2"
           >
-            <Image src="/finnegans.svg" alt="Logo" width={200} height={200} />
+            <Image
+              src="/finnegans.svg"
+              alt="Finnegans"
+              width={144}
+              height={32}
+              priority
+            />
+            <Badge variant="secondary" className="bg-white/10 text-white">
+              beta
+            </Badge>
+          </motion.div>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-white/10"
+          >
+            <Star className="h-5 w-5" aria-hidden="true" />
           </motion.div>
         )}
         <button
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className="p-2 rounded-lg hover:bg-gray-700"
+          onClick={() => setIsCollapsed((previous) => !previous)}
+          className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 text-white/80 transition-colors hover:border-white/30 hover:text-white"
+          aria-label={isCollapsed ? "Expandir menú" : "Contraer menú"}
+          aria-expanded={!isCollapsed}
         >
-          {isCollapsed ? <ChevronRight /> : <ChevronLeft />}
+          {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
         </button>
       </div>
-      <nav className="flex-1 px-2 py-4 space-y-2">
-        {navItems.map((item) => (
-          <Link
-            key={item.id}
-            href={item.href}
-            className={`flex items-center p-3 rounded-lg transition-colors ${
-              pathname === item.href ? "bg-[#4bc3fe]" : "hover:bg-gray-700"
-            }`}
-          >
-            <item.icon className="h-5 w-5" />
-            {!isCollapsed && (
-              <motion.span
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.2 }}
-                className="ml-4 font-medium"
-              >
-                {item.label}
-              </motion.span>
-            )}
-          </Link>
-        ))}
-      </nav>
-      <div className="p-4 border-t border-gray-700">
-        <div className="flex items-center">
-          <Image
-            className="h-10 w-10 rounded-full object-cover"
-            src="/finnegans.svg"
-            alt="Admin"
-            width={40}
-            height={40}
+      <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-6">
+        {navSections.map((section) => (
+          <SidebarSectionGroup
+            key={section.id}
+            section={section}
+            pathname={pathname}
+            isCollapsed={isCollapsed}
           />
-          {!isCollapsed && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.2 }}
-              className="ml-3"
-            >
-              <p className="text-sm font-medium">Admin User</p>
-              <p className="text-xs text-gray-400">admin@botflow.io</p>
-            </motion.div>
-          )}
-        </div>
-      </div>
+        ))}
+        <SidebarSupportCard isCollapsed={isCollapsed} />
+      </nav>
+      <SidebarFooter isCollapsed={isCollapsed} />
     </motion.aside>
   );
 };
