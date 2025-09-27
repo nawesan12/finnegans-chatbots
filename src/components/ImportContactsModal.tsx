@@ -20,19 +20,19 @@ const modalContentVariants = {
   exit: { y: "50%", opacity: 0, scale: 0.9 },
 };
 
-const ImportContactsModal = ({
-  isOpen,
-  onClose,
-}: {
+type ImportContactsModalProps = {
   isOpen: boolean;
   onClose: () => void;
-}) => {
-  const [file, setFile] = useState();
-  const [uploadStatus, setUploadStatus] = useState("idle"); // idle, uploading, success, error
+};
+
+type UploadStatus = "idle" | "uploading" | "success" | "error";
+
+const ImportContactsModal = ({ isOpen, onClose }: ImportContactsModalProps) => {
+  const [file, setFile] = useState<File | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<UploadStatus>("idle");
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    if (acceptedFiles && acceptedFiles.length > 0) {
-      //@ts-expect-error it exists
+    if (acceptedFiles.length > 0) {
       setFile(acceptedFiles[0]);
       setUploadStatus("idle");
     }
@@ -53,8 +53,7 @@ const ImportContactsModal = ({
     // Simulate upload process
     setTimeout(() => {
       // Here you would typically parse the file and add contacts
-      //@ts-expect-error it exists
-      console.log("Importing file:", file?.name);
+      console.log("Importing file:", file.name);
       setUploadStatus("success");
       window.dispatchEvent(new CustomEvent("contacts:updated"));
       setTimeout(() => {
@@ -64,7 +63,6 @@ const ImportContactsModal = ({
   };
 
   const handleClose = () => {
-    //@ts-expect-error it exists
     setFile(null);
     setUploadStatus("idle");
     onClose();
@@ -81,7 +79,7 @@ const ImportContactsModal = ({
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
           onClick={handleClose}
         >
-          <motion.div //@ts-expect-error it exists
+          <motion.div
             variants={modalContentVariants}
             initial="hidden"
             animate="visible"
@@ -140,21 +138,14 @@ const ImportContactsModal = ({
                     <FileText className="h-6 w-6 text-gray-500 mr-3" />
                     <div>
                       <p className="font-medium text-gray-800">
-                        {
-                          //@ts-expect-error it exists
-                          file?.name
-                        }
+                        {file.name}
                       </p>
                       <p className="text-sm text-gray-500">
-                        {
-                          //@ts-expect-error it exists
-                          (file.size / 1024).toFixed(2)
-                        }{" "}
-                        KB
+                        {(file.size / 1024).toFixed(2)} KB
                       </p>
                     </div>
                   </div>
-                  <button //@ts-expect-error it exists
+                  <button
                     onClick={() => setFile(null)}
                     className="p-1 rounded-full text-gray-400 hover:bg-gray-200"
                   >
