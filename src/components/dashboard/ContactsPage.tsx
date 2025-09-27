@@ -20,16 +20,32 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import EditContactModal from "@/components/EditContactModal";
 
 type ContactTagRelation = { tag: { id: string; name: string } };
 
-type ContactRow = {
+export type ContactRow = {
   id: string;
   name?: string | null;
   phone: string;
@@ -42,6 +58,12 @@ const ContactsPage = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [tagFilter, setTagFilter] = useState<string>("all");
+  const [contactToEdit, setContactToEdit] = useState<ContactRow | null>(null);
+  const [contactToDelete, setContactToDelete] = useState<ContactRow | null>(
+    null,
+  );
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const token = useAuthStore((state) => state.token);
   const hasHydrated = useAuthStore((state) => state.hasHydrated);
   const dashboardActions = useDashboardActions();
@@ -151,70 +173,156 @@ const ContactsPage = () => {
     dashboardActions?.openNewContact?.();
   };
 
-  const columns = [
-    {
-      key: "name",
-      label: "Nombre",
-      render: (row: ContactRow) => (
-        <Link
-          href={`/dashboard/contacts/${row.id}`}
-          className="font-medium text-[#8694ff] transition-colors hover:text-indigo-700"
-        >
-          {row.name || "Sin nombre"}
-        </Link>
-      ),
-    },
-    {
-      key: "phone",
-      label: "Teléfono",
-      className: "font-medium text-gray-900",
-    },
-    {
-      key: "tags",
-      label: "Etiquetas",
-      render: (row: ContactRow) => (
-        <div className="flex flex-wrap gap-1">
-          {row.tags?.length ? (
-            row.tags.map((relation) => (
-              <span
-                key={relation.tag.id}
-                className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600"
+  const handleCopyPhone = useCallback(async (phone: string) => {
+    try {
+      if (typeof navigator === "undefined" || !navigator.clipboard) {
+        throw new Error("clipboard-unavailable");
+      }
+      await navigator.clipboard.writeText(phone);
+      toast.success("Número de teléfono copiado");
+    } catch (error) {
+      console.error(error);
+      toast.error("No se pudo copiar el teléfono");
+    }
+  }, []);
+
+  const handleOpenEdit = useCallback((contact: ContactRow) => {
+    setContactToEdit(contact);
+  }, []);
+
+  const handleOpenDeleteDialog = useCallback((contact: ContactRow) => {
+    setContactToDelete(contact);
+    setIsDeleteDialogOpen(true);
+  }, []);
+
+  const handleDeleteContact = useCallback(async () => {
+    if (!contactToDelete) {
+      return;
+    }
+    if (!token) {
+      toast.error("No se pudo autenticar la sesión actual");
+      return;
+    }
+
+    try {
+      setIsDeleting(true);
+      const response = await fetch(`/api/contacts/${contactToDelete.id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("No se pudo eliminar el contacto");
+      }
+
+      toast.success("Contacto eliminado");
+      window.dispatchEvent(new CustomEvent("contacts:updated"));
+      setIsDeleteDialogOpen(false);
+      setContactToDelete(null);
+    } catch (error) {
+      console.error(error);
+      toast.error("Ocurrió un error al eliminar el contacto");
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [contactToDelete, token]);
+
+  const columns = useMemo(
+    () => [
+      {
+        key: "name",
+        label: "Nombre",
+        render: (row: ContactRow) => (
+          <Link
+            href={`/dashboard/contacts/${row.id}`}
+            className="font-medium text-[#8694ff] transition-colors hover:text-indigo-700"
+          >
+            {row.name || "Sin nombre"}
+          </Link>
+        ),
+      },
+      {
+        key: "phone",
+        label: "Teléfono",
+        className: "font-medium text-gray-900",
+      },
+      {
+        key: "tags",
+        label: "Etiquetas",
+        render: (row: ContactRow) => (
+          <div className="flex flex-wrap gap-1">
+            {row.tags?.length ? (
+              row.tags.map((relation) => (
+                <span
+                  key={relation.tag.id}
+                  className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600"
+                >
+                  {relation.tag.name}
+                </span>
+              ))
+            ) : (
+              <span className="text-xs text-gray-400">Sin etiquetas</span>
+            )}
+          </div>
+        ),
+      },
+      {
+        key: "updatedAt",
+        label: "Última actualización",
+        align: "right" as const,
+        className: "text-gray-500",
+        render: (row: ContactRow) => (
+          <span>
+            {new Date(row.updatedAt).toLocaleDateString("es-AR", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            })}
+          </span>
+        ),
+      },
+      {
+        key: "actions",
+        label: "Acciones",
+        align: "center" as const,
+        render: (row: ContactRow) => (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="rounded-full p-1.5 text-[#4bc3fe] transition-colors hover:bg-[#eef2ff] hover:text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-200">
+                <MoreVertical className="h-5 w-5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem asChild>
+                <Link
+                  href={`/dashboard/contacts/${row.id}`}
+                  className="w-full text-left"
+                >
+                  Ver detalle
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => void handleCopyPhone(row.phone)}>
+                Copiar teléfono
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => handleOpenEdit(row)}>
+                Editar contacto
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleOpenDeleteDialog(row)}
+                className="text-red-600 focus:text-red-600"
               >
-                {relation.tag.name}
-              </span>
-            ))
-          ) : (
-            <span className="text-xs text-gray-400">Sin etiquetas</span>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: "updatedAt",
-      label: "Última actualización",
-      align: "right" as const,
-      className: "text-gray-500",
-      render: (row: ContactRow) => (
-        <span>
-          {new Date(row.updatedAt).toLocaleDateString("es-AR", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-          })}
-        </span>
-      ),
-    },
-    {
-      key: "actions",
-      label: "Acciones",
-      align: "center" as const,
-      render: () => (
-        <button className="text-[#4bc3fe] transition-colors hover:text-indigo-900">
-          <MoreVertical className="h-5 w-5" />
-        </button>
-      ),
-    },
-  ];
+                Eliminar contacto
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ),
+      },
+    ],
+    [handleCopyPhone, handleOpenDeleteDialog, handleOpenEdit],
+  );
 
   const emptyStateTitle = hasActiveFilters
     ? "No se encontraron contactos"
@@ -405,6 +513,65 @@ const ContactsPage = () => {
           }}
           className="rounded-b-lg"
         />
+        <EditContactModal
+          open={Boolean(contactToEdit)}
+          contact={contactToEdit}
+          onOpenChange={(open) => {
+            if (!open) {
+              setContactToEdit(null);
+            }
+          }}
+        />
+        <Dialog
+          open={isDeleteDialogOpen}
+          onOpenChange={(open) => {
+            if (!open && !isDeleting) {
+              setIsDeleteDialogOpen(false);
+              setContactToDelete(null);
+            } else if (open) {
+              setIsDeleteDialogOpen(true);
+            }
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Eliminar contacto</DialogTitle>
+              <DialogDescription>
+                Esta acción no se puede deshacer. ¿Querés eliminar a
+                {" "}
+                <span className="font-medium text-gray-900">
+                  {contactToDelete?.name || contactToDelete?.phone || "este contacto"}
+                </span>
+                ?
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  if (isDeleting) {
+                    return;
+                  }
+                  setIsDeleteDialogOpen(false);
+                  setContactToDelete(null);
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  void handleDeleteContact();
+                }}
+                disabled={isDeleting}
+                className="bg-red-600 text-white hover:bg-red-700"
+              >
+                {isDeleting ? "Eliminando..." : "Eliminar"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </motion.div>
     </div>
   );
