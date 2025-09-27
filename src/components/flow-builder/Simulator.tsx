@@ -11,10 +11,21 @@ import {
   Loader2,
   Download,
   SkipForward,
+  StopCircle,
   Timer,
+  CheckCircle2,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import type { FlowEdge, FlowNode } from "./types";
 import { isNodeOfType } from "./types";
 
@@ -91,12 +102,18 @@ export function Simulator({
   const [ignoreDelays, setIgnoreDelays] = useState(false);
   const [stepMode, setStepMode] = useState(false);
   const [awaitingStep, setAwaitingStep] = useState(false);
+  const [selectedTriggerId, setSelectedTriggerId] = useState<string>();
+  const [initialContextDraft, setInitialContextDraft] = useState("");
+  const [initialContextError, setInitialContextError] = useState<string | null>(
+    null,
+  );
 
   const logRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
   const contextRef = useRef<SimContext>({ vars: {} });
   const awaitingStepRef = useRef(false);
+  const abortExecutionRef = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -118,6 +135,31 @@ export function Simulator({
   }, [stepMode]);
 
   const idMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
+
+  const triggerNodes = useMemo(
+    () => nodes.filter((node) => isNodeOfType(node, "trigger")),
+    [nodes],
+  );
+
+  useEffect(() => {
+    if (!triggerNodes.length) {
+      setSelectedTriggerId(undefined);
+      return;
+    }
+    setSelectedTriggerId((current) => {
+      if (current && triggerNodes.some((node) => node.id === current)) {
+        return current;
+      }
+      return triggerNodes[0]?.id;
+    });
+  }, [triggerNodes]);
+
+  const selectedTriggerKeyword = useMemo(() => {
+    if (!triggerNodes.length) return "";
+    const current = triggerNodes.find((node) => node.id === selectedTriggerId);
+    const fallback = current ?? triggerNodes[0];
+    return (fallback?.data.keyword ?? "").toString();
+  }, [selectedTriggerId, triggerNodes]);
 
   const outgoing = useMemo(() => {
     const map = new Map<string, FlowEdge[]>();
@@ -163,6 +205,51 @@ export function Simulator({
     setAwaitingStep(false);
   }, []);
 
+  const parseInitialContext = useCallback(
+    ({ silent = false }: { silent?: boolean } = {}) => {
+      const trimmed = initialContextDraft.trim();
+      if (!trimmed) {
+        if (!silent) {
+          setInitialContextError(null);
+        }
+        return {} as Record<string, unknown>;
+      }
+
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed === null || Array.isArray(parsed) || typeof parsed !== "object") {
+          throw new Error("El JSON debe ser un objeto (por ejemplo, {\"foo\": \"bar\"}).");
+        }
+        if (!silent) {
+          setInitialContextError(null);
+        }
+        return parsed as Record<string, unknown>;
+      } catch (error: unknown) {
+        if (!silent) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "No se pudo interpretar el JSON";
+          setInitialContextError(`Revisá el contexto: ${message}`);
+        }
+        return null;
+      }
+    },
+    [initialContextDraft],
+  );
+
+  const applyInitialContext = useCallback(() => {
+    const parsed = parseInitialContext();
+    if (!parsed) return;
+    const nextContext: SimContext = { vars: structuredClone(parsed) };
+    contextRef.current = nextContext;
+    setContext(nextContext);
+    addLog({
+      type: "system",
+      text: "Contexto inicial aplicado manualmente",
+    });
+  }, [addLog, parseInitialContext]);
+
   const execute = useCallback(
     async (startNodeObj: FlowNode | string) => {
       let current: FlowNode | null =
@@ -172,11 +259,17 @@ export function Simulator({
 
       const visited = new Set<string>();
       let guard = 0;
+      abortExecutionRef.current = false;
+      let aborted = false;
 
       while (current && guard < 500) {
         await maybeStepPause();
 
         if (!mountedRef.current) return;
+        if (abortExecutionRef.current) {
+          aborted = true;
+          break;
+        }
         guard += 1;
 
         if (visited.has(current.id)) {
@@ -221,6 +314,10 @@ export function Simulator({
                 const nextContext: SimContext = { vars: nextVars };
                 contextRef.current = nextContext;
                 return nextContext;
+              });
+              addLog({
+                type: "system",
+                text: `📝 ${key} = ${value}`,
               });
             }
             break;
@@ -293,7 +390,10 @@ export function Simulator({
                 contextRef.current = nextContext;
                 return nextContext;
               });
-              addLog({ type: "system", text: `Stored result in ${assignTo}` });
+              addLog({
+                type: "system",
+                text: `HTTP ${res.status} almacenado en ${assignTo}`,
+              });
             } catch (error: unknown) {
               if (error instanceof DOMException && error.name === "AbortError") {
                 addLog({ type: "system", text: "API call aborted" });
@@ -329,6 +429,18 @@ export function Simulator({
             current = nextId ? idMap.get(nextId) ?? null : null;
             continue;
           }
+          case "handoff": {
+            if (!isNodeOfType(current, "handoff")) break;
+            const queue = tpl(current.data.queue ?? "", runtimeContext);
+            const note = tpl(current.data.note ?? "", runtimeContext);
+            const parts = [
+              "🤝 Transferencia a un agente",
+              queue ? `Cola: ${queue}` : null,
+              note ? `Nota: ${note}` : null,
+            ].filter(Boolean);
+            addLog({ type: "system", text: parts.join(" · ") });
+            break;
+          }
           case "end": {
             addLog({ type: "system", text: "🏁 End" });
             current = null;
@@ -349,6 +461,13 @@ export function Simulator({
 
       awaitingStepRef.current = false;
       setAwaitingStep(false);
+      const wasAborted = abortExecutionRef.current || aborted;
+      abortExecutionRef.current = false;
+
+      if (wasAborted) {
+        addLog({ type: "system", text: "Simulación detenida" });
+        return;
+      }
 
       if (guard >= 500) {
         addLog({ type: "system", text: "Guard limit reached" });
@@ -376,6 +495,7 @@ export function Simulator({
       setAwaitingStep(false);
       setIsRunning(true);
       addLog({ type: "user", text: messageToSend });
+      let shouldClearInput = true;
 
       try {
         if (isPaused && pausedNode) {
@@ -422,7 +542,16 @@ export function Simulator({
             }
           }
         } else {
-          const initial: SimContext = { vars: {} };
+          const base = parseInitialContext();
+          if (base === null) {
+            addLog({
+              type: "system",
+              text: "Contexto inicial inválido. Corregilo para continuar.",
+            });
+            shouldClearInput = false;
+            return;
+          }
+          const initial: SimContext = { vars: structuredClone(base) };
           contextRef.current = initial;
           setContext(initial);
           const msgLc = messageToSend.toLowerCase();
@@ -438,7 +567,9 @@ export function Simulator({
           }
         }
       } finally {
-        setInput("");
+        if (shouldClearInput) {
+          setInput("");
+        }
         setIsRunning(false);
       }
     },
@@ -452,21 +583,35 @@ export function Simulator({
       nodes,
       outgoing,
       pausedNode,
+      parseInitialContext,
     ],
   );
 
   const reset = useCallback(() => {
     abortRef.current?.abort();
+    abortExecutionRef.current = false;
     setLog([]);
     setIsPaused(false);
     setPausedNode(null);
-    const initial = { vars: {} };
+    const base = parseInitialContext({ silent: true });
+    const initial = { vars: structuredClone(base ?? {}) } satisfies SimContext;
     contextRef.current = initial;
     setContext(initial);
-    setInput("/start");
+    setInput(selectedTriggerKeyword || "/start");
     awaitingStepRef.current = false;
     setAwaitingStep(false);
-  }, []);
+  }, [parseInitialContext, selectedTriggerKeyword]);
+
+  const stop = useCallback(() => {
+    if (!isRunning) return;
+    abortExecutionRef.current = true;
+    awaitingStepRef.current = false;
+    setAwaitingStep(false);
+    setIsPaused(false);
+    setPausedNode(null);
+    abortRef.current?.abort();
+    setIsRunning(false);
+  }, [isRunning]);
 
   const copyLog = useCallback(() => {
     const formatted = log
@@ -505,6 +650,19 @@ export function Simulator({
     reset();
   }, [nodes, edges, reset]);
 
+  const statusInfo = useMemo(() => {
+    if (isRunning && awaitingStep) {
+      return { label: "Esperando paso", variant: "secondary" as const };
+    }
+    if (isRunning && isPaused) {
+      return { label: "Esperando respuesta", variant: "secondary" as const };
+    }
+    if (isRunning) {
+      return { label: "Ejecutando", variant: "default" as const };
+    }
+    return { label: "Listo", variant: "outline" as const };
+  }, [awaitingStep, isPaused, isRunning]);
+
   return (
     <Card className="h-full">
       <CardHeader>
@@ -513,9 +671,54 @@ export function Simulator({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            {stepMode && <span>Step activado</span>}
+            {ignoreDelays && <span>Delays ignorados</span>}
+          </div>
+        </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
           {/* Panel de entrada */}
           <div className="col-span-2 space-y-2">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center">
+              <Label className="text-xs font-medium text-muted-foreground">
+                Triggers
+              </Label>
+              <Select
+                value={selectedTriggerId ?? triggerNodes[0]?.id ?? ""}
+                onValueChange={(value) => {
+                  setSelectedTriggerId(value);
+                  const chosen = triggerNodes.find((node) => node.id === value);
+                  if (chosen?.data.keyword) {
+                    setInput(chosen.data.keyword.toString());
+                  }
+                }}
+                disabled={!triggerNodes.length}
+              >
+                <SelectTrigger size="sm" className="w-full md:w-auto">
+                  <SelectValue placeholder="Sin triggers" />
+                </SelectTrigger>
+                <SelectContent>
+                  {triggerNodes.length === 0 ? (
+                    <SelectItem value="">Sin triggers</SelectItem>
+                  ) : (
+                    triggerNodes.map((node) => (
+                      <SelectItem key={node.id} value={node.id}>
+                        <div className="flex flex-col text-left">
+                          <span>{node.data.keyword || "(sin texto)"}</span>
+                          {node.data.description && (
+                            <span className="text-[10px] text-muted-foreground">
+                              {node.data.description}
+                            </span>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -538,6 +741,15 @@ export function Simulator({
                   <Rocket className="h-4 w-4 mr-2" />
                 )}
                 {isRunning ? "Ejecutando" : isPaused ? "Enviar" : "Iniciar"}
+              </Button>
+
+              <Button
+                variant="outline"
+                onClick={stop}
+                disabled={!isRunning}
+              >
+                <StopCircle className="h-4 w-4 mr-2" />
+                Detener
               </Button>
 
               <Button variant="outline" onClick={reset}>
@@ -645,6 +857,38 @@ export function Simulator({
             <div className="border rounded-lg p-3 h-[260px] bg-muted/20 text-xs overflow-auto font-mono">
               <div className="font-semibold mb-2">Context (vars)</div>
               <pre>{JSON.stringify(context.vars, null, 2)}</pre>
+            </div>
+            <div className="mt-3 space-y-2">
+              <Label htmlFor="simulator-initial-context" className="text-xs">
+                Contexto inicial (JSON opcional)
+              </Label>
+              <Textarea
+                id="simulator-initial-context"
+                value={initialContextDraft}
+                onChange={(event) => setInitialContextDraft(event.target.value)}
+                placeholder='{"contact":{"nombre":"Ada"}}'
+                className="h-32"
+              />
+              {initialContextError ? (
+                <p className="text-xs text-destructive">{initialContextError}</p>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">
+                  Se fusiona al iniciar un flujo. Dejalo vacío para comenzar con un
+                  contexto limpio.
+                </p>
+              )}
+              <div className="flex items-center justify-end gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => parseInitialContext()}
+                >
+                  Validar
+                </Button>
+                <Button size="sm" onClick={applyInitialContext}>
+                  <CheckCircle2 className="h-4 w-4 mr-1" /> Aplicar ahora
+                </Button>
+              </div>
             </div>
           </div>
         </div>
