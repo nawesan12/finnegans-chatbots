@@ -74,19 +74,37 @@ function getWebhookToken(
   return null;
 }
 
+const FLOW_TRIGGER_CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, X-Webhook-Token",
+  "Access-Control-Max-Age": "300",
+} as const;
+
+function withFlowTriggerCors(response: NextResponse) {
+  for (const [key, value] of Object.entries(FLOW_TRIGGER_CORS_HEADERS)) {
+    response.headers.set(key, value);
+  }
+  return response;
+}
+
 async function handleFlowTrigger(request: Request, flowId: string) {
   let parsed: unknown;
   try {
     parsed = await request.json();
   } catch (error) {
     console.error("Invalid JSON payload for flow trigger:", error);
-    return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
+    return withFlowTriggerCors(
+      NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 }),
+    );
   }
 
   if (!isPlainObject(parsed)) {
-    return NextResponse.json(
-      { error: "Payload must be a JSON object" },
-      { status: 400 },
+    return withFlowTriggerCors(
+      NextResponse.json(
+        { error: "Payload must be a JSON object" },
+        { status: 400 },
+      ),
     );
   }
 
@@ -96,23 +114,29 @@ async function handleFlowTrigger(request: Request, flowId: string) {
   });
 
   if (!flow) {
-    return NextResponse.json({ error: "Flow not found" }, { status: 404 });
+    return withFlowTriggerCors(
+      NextResponse.json({ error: "Flow not found" }, { status: 404 }),
+    );
   }
 
   const token = getWebhookToken(request, parsed);
   const validToken = await isVerifyTokenValid(token, flow.userId);
 
   if (!validToken) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return withFlowTriggerCors(
+      NextResponse.json({ error: "Forbidden" }, { status: 403 }),
+    );
   }
 
   const from =
     pickFirstString(parsed, ["from", "phone", "wa_id", "waId"]) ?? null;
 
   if (!from) {
-    return NextResponse.json(
-      { error: "Missing contact phone identifier" },
-      { status: 400 },
+    return withFlowTriggerCors(
+      NextResponse.json(
+        { error: "Missing contact phone identifier" },
+        { status: 400 },
+      ),
     );
   }
 
@@ -127,9 +151,8 @@ async function handleFlowTrigger(request: Request, flowId: string) {
     ]) ?? null;
 
   if (!message) {
-    return NextResponse.json(
-      { error: "Missing message text" },
-      { status: 400 },
+    return withFlowTriggerCors(
+      NextResponse.json({ error: "Missing message text" }, { status: 400 }),
     );
   }
 
@@ -182,18 +205,22 @@ async function handleFlowTrigger(request: Request, flowId: string) {
   });
 
   if (!result.success) {
-    return NextResponse.json(
-      { error: result.error },
-      { status: result.status ?? 500 },
+    return withFlowTriggerCors(
+      NextResponse.json(
+        { error: result.error },
+        { status: result.status ?? 500 },
+      ),
     );
   }
 
-  return NextResponse.json({
-    success: true,
-    flowId: result.flowId,
-    sessionId: result.sessionId,
-    contactId: result.contactId,
-  });
+  return withFlowTriggerCors(
+    NextResponse.json({
+      success: true,
+      flowId: result.flowId,
+      sessionId: result.sessionId,
+      contactId: result.contactId,
+    }),
+  );
 }
 
 // This endpoint is used for webhook verification.
@@ -324,4 +351,16 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
+}
+
+export async function OPTIONS(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const flowId = searchParams.get("flowId");
+
+  if (!flowId) {
+    return NextResponse.json({ error: "Not Found" }, { status: 404 });
+  }
+
+  const response = new NextResponse(null, { status: 204 });
+  return withFlowTriggerCors(response);
 }
