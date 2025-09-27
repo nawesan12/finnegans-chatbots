@@ -2,21 +2,21 @@ import { Prisma } from "@prisma/client";
 import type { Session } from "@prisma/client";
 import { z } from "zod";
 import {
-  //@ts-expect-error it exists
-  Node, //@ts-expect-error it exists
-  Edge,
-  TriggerDataSchema,
-  MessageDataSchema,
-  OptionsDataSchema,
-  DelayDataSchema,
-  ConditionDataSchema,
   APICallDataSchema,
   AssignVarDataSchema,
-  MediaDataSchema,
-  HandoffDataSchema,
+  ConditionDataSchema,
+  DelayDataSchema,
   EndDataSchema,
+  type FlowEdgePayload,
+  type FlowNodePayload,
   GoToDataSchema,
-} from "@/components/flow-builder/types";
+  HandoffDataSchema,
+  MediaDataSchema,
+  MessageDataSchema,
+  OptionsDataSchema,
+  TriggerDataSchema,
+  sanitizeFlowDefinition,
+} from "@/lib/flow-schema";
 import prisma from "@/lib/prisma";
 import type { SendMessageResult } from "@/lib/meta";
 
@@ -34,24 +34,9 @@ type EndData = z.infer<typeof EndDataSchema>;
 type GoToData = z.infer<typeof GoToDataSchema>;
 
 // Define a more specific Node type
-type FlowNode = Node<
-  | TriggerData
-  | MessageData
-  | OptionsData
-  | DelayData
-  | ConditionData
-  | APICallData
-  | AssignVarData
-  | MediaData
-  | HandoffData
-  | EndData
-  | GoToData
->;
+type FlowNode = FlowNodePayload & { data: unknown };
 
-interface FlowData {
-  nodes: FlowNode[];
-  edges: Edge[];
-}
+type FlowEdge = FlowEdgePayload;
 
 type SendMessage = (
   userId: string,
@@ -128,6 +113,9 @@ type FlowRuntimeContext = {
   lastInputTrimmed?: string;
   lastInputNormalized?: string;
   triggerMessage?: string;
+  handoffQueue?: string;
+  handoffNote?: string;
+  endReason?: string;
 };
 
 // This function is now stateful and operates on a session
@@ -144,9 +132,12 @@ export async function executeFlow(
   const MAX_DELAY_MS = 60_000; // cap delays to 60s/server safety
   const API_TIMEOUT_MS = 15_000;
 
-  const flow = session.flow.definition as FlowData;
-  const nodes = flow?.nodes ?? [];
-  const edges = flow?.edges ?? [];
+  const flow = sanitizeFlowDefinition(session.flow.definition);
+  const nodes: FlowNode[] = flow.nodes.map((node) => ({
+    ...node,
+    data: node.data ?? {},
+  }));
+  const edges: FlowEdge[] = flow.edges;
 
   let inboundPayload: InboundPayload | null = {
     text: messageText ?? "",
@@ -159,7 +150,7 @@ export async function executeFlow(
 
   // Fast indices
   const nodeById = new Map(nodes.map((n) => [n.id, n]));
-  const outgoingBySource = new Map<string, Edge[]>();
+  const outgoingBySource = new Map<string, FlowEdge[]>();
   for (const e of edges) {
     if (!e.source || !e.target) continue;
     const arr = outgoingBySource.get(e.source) ?? [];
@@ -405,15 +396,24 @@ export async function executeFlow(
       (e) => e.sourceHandle === handleId,
     );
 
-  const updateSession = async (
-    patch: Partial<Session> & {
-      context?: FlowRuntimeContext | null;
-      currentNodeId?: string | null;
-      status?: Session["status"];
-    },
-  ) => {
-    const { context: patchContext, ...rest } = patch;
-    const data = { ...rest } as Prisma.SessionUpdateInput;
+  type SessionPatch = {
+    status?: Session["status"];
+    currentNodeId?: string | null;
+    context?: FlowRuntimeContext | null;
+  };
+
+  const updateSession = async ({
+    status,
+    currentNodeId,
+    context: patchContext,
+  }: SessionPatch) => {
+    const data: Prisma.SessionUpdateInput = {};
+    if (status !== undefined) {
+      data.status = status;
+    }
+    if (currentNodeId !== undefined) {
+      data.currentNodeId = currentNodeId;
+    }
     if (patchContext !== undefined) {
       data.context =
         patchContext === null
@@ -451,7 +451,7 @@ export async function executeFlow(
     if (!paused) {
       console.error(
         `Node ${session.currentNodeId} not found in flow ${session.flowId}`,
-      ); //@ts-expect-error it exists
+      );
       await updateSession({ status: "Errored", context });
       return;
     }
@@ -459,13 +459,15 @@ export async function executeFlow(
     if (paused.type === "options") {
       // Resume from options
       const optionsData = paused.data as OptionsData;
-      const idx = (optionsData.options || []).findIndex(
-        //@ts-expect-error bla
-        (opt) => toLc(opt) === toLc(messageText),
+      const normalizedOptions = Array.isArray(optionsData.options)
+        ? optionsData.options
+        : [];
+      const idx = normalizedOptions.findIndex(
+        (opt) => toLc(opt) === toLc(messageText ?? ""),
       );
 
       const matchedOption =
-        idx !== -1 ? ((optionsData.options ?? [])[idx] ?? null) : null;
+        idx !== -1 ? normalizedOptions[idx] ?? null : null;
       const baseInbound: InboundPayload = {
         ...(inboundPayload ?? { text: messageText ?? "" }),
         type: "option-selection",
@@ -485,22 +487,21 @@ export async function executeFlow(
         ? (nodeById.get(nextId) as FlowNode | undefined)
         : undefined;
       if (nextId && !currentNode) {
-        console.error(`Next node ${nextId} not found (resume)`); //@ts-expect-error it exists
+        console.error(`Next node ${nextId} not found (resume)`);
         await updateSession({ status: "Errored", context });
         return;
-      } //@ts-expect-error it exists
+      }
       await updateSession({ status: "Active", context });
     } else {
       currentNode = paused;
     }
   } else {
     // New / active session: match trigger
-    //@ts-expect-error bla
-    const lc = toLc(messageText);
+    const lc = toLc(messageText ?? "");
     currentNode = nodes.find(
       (n) =>
         n.type === "trigger" && toLc((n.data as TriggerData).keyword) === lc,
-    ) as FlowNode | undefined;
+    );
 
     if (currentNode) {
       context.triggerMessage = messageText ?? undefined;
@@ -521,19 +522,16 @@ export async function executeFlow(
   try {
     while (currentNode) {
       if (steps++ > SAFE_MAX_STEPS) {
-        //@ts-expect-error it exists
         await updateSession({ status: "Errored", context });
         console.error("Guard limit reached");
         return;
       }
       if (visited.has(currentNode.id)) {
-        //@ts-expect-error it exists
         await updateSession({ status: "Errored", context });
         console.error("Loop detected at", currentNode.id);
         return;
       }
       visited.add(currentNode.id);
-      //@ts-expect-error it exists
       await updateSession({ currentNodeId: currentNode.id, context });
 
       let nextNodeId: string | undefined;
@@ -587,7 +585,7 @@ export async function executeFlow(
             );
           } else {
             recordOutbound("options", { text, options });
-          } //@ts-expect-error it exists
+          }
           await updateSession({ status: "Paused", context });
           return; // wait for user input
         }
@@ -676,7 +674,9 @@ export async function executeFlow(
         }
 
         case "handoff": {
-          //@ts-expect-error it exists
+          const data = currentNode.data as HandoffData;
+          context.handoffQueue = data.queue;
+          context.handoffNote = data.note ? tpl(data.note) : undefined;
           await updateSession({ status: "Paused", context });
           return; // agent picks up
         }
@@ -688,9 +688,11 @@ export async function executeFlow(
         }
 
         case "end": {
+          const data = currentNode.data as EndData;
+          context.endReason = data.reason ?? "end";
           await updateSession({
             status: "Completed",
-            currentNodeId: null, //@ts-expect-error it exists
+            currentNodeId: null,
             context,
           });
           return;
@@ -709,7 +711,7 @@ export async function executeFlow(
         // No outgoing path → stop gracefully
         await updateSession({
           status: "Completed",
-          currentNodeId: null, //@ts-expect-error it exists
+          currentNodeId: null,
           context,
         });
         return;
@@ -717,18 +719,17 @@ export async function executeFlow(
 
       const next = nodeById.get(nextNodeId);
       if (!next) {
-        console.error(`Next node ${nextNodeId} not found`); //@ts-expect-error it exists
+        console.error(`Next node ${nextNodeId} not found`);
         await updateSession({ status: "Errored", context });
         return;
       }
 
       // Persist context between steps
-      //@ts-expect-error it exists
       await updateSession({ context });
-      currentNode = next as FlowNode;
+      currentNode = next;
     }
   } catch (err) {
-    console.error("Flow execution error:", err); //@ts-expect-error it exists
+    console.error("Flow execution error:", err);
     await updateSession({ status: "Errored", context });
   }
 }
