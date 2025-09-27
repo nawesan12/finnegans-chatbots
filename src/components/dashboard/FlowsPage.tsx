@@ -308,73 +308,94 @@ const FlowsPage = () => {
     startNewFlow();
   };
 
-  const handleSaveFlow = async () => {
-    if (!editingFlow || !flowBuilderRef.current) return;
-    if (!user?.id) {
-      toast.error("Necesitas iniciar sesión para guardar flujos");
-      return;
-    }
-
-    const trimmedName = editingFlow.name?.trim();
-    if (!trimmedName) {
-      toast.error("Asigna un nombre al flujo antes de guardar");
-      return;
-    }
-
-    try {
-      setIsSaving(true);
-      const flowData = flowBuilderRef.current.getFlowData();
-      const triggerNode = flowData?.nodes?.find(
-        (node) => node.type === "trigger",
-      );
-      const keyword = String(
-        ((triggerNode?.data as { keyword?: string })?.keyword ??
-          editingFlow.trigger ??
-          "default") ||
-          "default",
-      ).trim();
-      const normalizedTrigger = keyword.length ? keyword : "default";
-      const normalizedPhone = editingFlow.phoneNumber?.trim() || null;
-      const isNewFlow = !editingFlow.id;
-
-      const url = isNewFlow ? "/api/flows" : `/api/flows/${editingFlow.id}`;
-      const method = isNewFlow ? "POST" : "PUT";
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: token ? `Bearer ${token}` : "",
-        },
-        body: JSON.stringify({
-          name: trimmedName,
-          trigger: normalizedTrigger,
-          status: editingFlow.status ?? "Draft",
-          definition: flowData,
-          phoneNumber: normalizedPhone,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(
-          `No se pudo ${isNewFlow ? "crear" : "guardar"} el flujo`,
-        );
+  const handleSaveFlow = useCallback(
+    async (definitionOverride?: FlowData) => {
+      if (!editingFlow) {
+        toast.error("Selecciona o crea un flujo antes de guardar");
+        return false;
+      }
+      if (!user?.id) {
+        toast.error("Necesitas iniciar sesión para guardar flujos");
+        return false;
       }
 
-      const updatedFlow: FlowWithCounts = await response.json();
-      openFlowForEditing(updatedFlow);
-      toast.success(
-        `Flujo ${isNewFlow ? "creado" : "actualizado"} correctamente`,
-      );
-      await fetchFlows();
-    } catch (error) {
-      toast.error(
-        (error as Error)?.message ?? "Ocurrió un error al guardar el flujo",
-      );
-    } finally {
-      setIsSaving(false);
-    }
-  };
+      const trimmedName = editingFlow.name?.trim();
+      if (!trimmedName) {
+        toast.error("Asigna un nombre al flujo antes de guardar");
+        return false;
+      }
+
+      const flowData =
+        definitionOverride ?? flowBuilderRef.current?.getFlowData();
+      if (!flowData) {
+        toast.error("No pudimos leer el flujo a guardar");
+        return false;
+      }
+
+      try {
+        setIsSaving(true);
+        const triggerNode = flowData?.nodes?.find(
+          (node) => node.type === "trigger",
+        );
+        const keyword = String(
+          ((triggerNode?.data as { keyword?: string })?.keyword ??
+            editingFlow.trigger ??
+            "default") ||
+            "default",
+        ).trim();
+        const normalizedTrigger = keyword.length ? keyword : "default";
+        const normalizedPhone = editingFlow.phoneNumber?.trim() || null;
+        const isNewFlow = !editingFlow.id;
+
+        const url = isNewFlow ? "/api/flows" : `/api/flows/${editingFlow.id}`;
+        const method = isNewFlow ? "POST" : "PUT";
+
+        const response = await fetch(url, {
+          method,
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: token ? `Bearer ${token}` : "",
+          },
+          body: JSON.stringify({
+            name: trimmedName,
+            trigger: normalizedTrigger,
+            status: editingFlow.status ?? "Draft",
+            definition: flowData,
+            phoneNumber: normalizedPhone,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(
+            `No se pudo ${isNewFlow ? "crear" : "guardar"} el flujo`,
+          );
+        }
+
+        const updatedFlow: FlowWithCounts = await response.json();
+        openFlowForEditing(updatedFlow);
+        toast.success(
+          `Flujo ${isNewFlow ? "creado" : "actualizado"} correctamente`,
+        );
+        await fetchFlows();
+        return true;
+      } catch (error) {
+        toast.error(
+          (error as Error)?.message ?? "Ocurrió un error al guardar el flujo",
+        );
+        return false;
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [
+      editingFlow,
+      fetchFlows,
+      flowBuilderRef,
+      openFlowForEditing,
+      token,
+      user?.id,
+    ],
+  );
 
   const handleStatusChange = useCallback(
     async (flowId: string, nextStatus: string) => {
@@ -687,9 +708,11 @@ const FlowsPage = () => {
                 </Button>
                 <Button
                   type="button"
-                  onClick={handleSaveFlow}
+                  onClick={() => void handleSaveFlow()}
                   className="bg-[#4bc3fe] text-white hover:bg-indigo-700"
-                  disabled={isSaving}
+                  disabled={
+                    isSaving || !editingFlow?.name?.trim()?.length
+                  }
                 >
                   {isSaving ? (
                     <span className="flex items-center gap-2 text-sm font-medium">
@@ -712,6 +735,9 @@ const FlowsPage = () => {
               initialFlow={initialFlow}
               flowId={editingFlow?.id ?? null}
               flowName={editingFlow?.name ?? null}
+              onSaveFlow={handleSaveFlow}
+              savingFlow={isSaving}
+              canSaveFlow={Boolean(editingFlow?.name?.trim()?.length)}
             />
           </div>
         </motion.div>
