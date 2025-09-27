@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   ChevronRight,
   LifeBuoy,
+  Mail,
   Star,
 } from "lucide-react";
 
@@ -142,22 +143,33 @@ const SidebarSupportCard = ({ isCollapsed }: { isCollapsed: boolean }) => {
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-white shadow-inner">
-      <div className="flex items-center gap-3">
+      <div className="flex items-start gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10">
           <LifeBuoy className="h-5 w-5" aria-hidden="true" />
         </div>
-        <div className="space-y-1 text-sm">
-          <p className="font-semibold">¿Necesitas ayuda?</p>
-          <p className="text-xs text-white/70">
-            Nuestro equipo está disponible para asistirte con integraciones y
-            automatizaciones avanzadas.
-          </p>
-          <Link
-            href="mailto:soporte@finnegans.ai"
-            className="inline-flex items-center text-xs font-semibold text-[#4bc3fe] transition-colors hover:text-white"
-          >
-            Escríbenos
-          </Link>
+        <div className="space-y-3 text-sm">
+          <div className="space-y-1">
+            <p className="font-semibold">¿Necesitas ayuda?</p>
+            <p className="text-xs text-white/70">
+              Explora guías paso a paso o contacta a nuestro equipo para
+              recibir acompañamiento personalizado.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/dashboard/help"
+              className="inline-flex items-center gap-1 rounded-lg border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-white/20"
+            >
+              Centro de ayuda
+            </Link>
+            <Link
+              href="mailto:soporte@finnegans.ai"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-[#4bc3fe] transition-colors hover:text-white"
+            >
+              <Mail className="h-3.5 w-3.5" aria-hidden="true" />
+              Escríbenos
+            </Link>
+          </div>
         </div>
       </div>
     </div>
@@ -279,8 +291,8 @@ const Sidebar = ({
             id: "knowledge",
             icon: CircleHelp,
             label: "Centro de ayuda",
-            href: "https://finnegans.ai/docs",
-            description: "Guías y documentación",
+            href: "/dashboard/help",
+            description: "Guías, tutoriales y soporte",
           },
         ],
       },
