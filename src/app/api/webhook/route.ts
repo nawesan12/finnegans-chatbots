@@ -317,8 +317,14 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const mode = searchParams.get("hub.mode");
-    const token = searchParams.get("hub.verify_token");
-    const challenge = searchParams.get("hub.challenge");
+    const token =
+      searchParams.get("hub.verify_token") ??
+      searchParams.get("verify_token") ??
+      searchParams.get("token");
+    const challenge =
+      searchParams.get("hub.challenge") ??
+      searchParams.get("challenge") ??
+      null;
 
     if (mode?.toLowerCase() !== "subscribe") {
       return NextResponse.json({ error: "Invalid mode" }, { status: 400 });
