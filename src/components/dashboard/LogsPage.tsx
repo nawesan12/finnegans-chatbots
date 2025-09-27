@@ -2,7 +2,14 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Search } from "lucide-react";
+import {
+  AlertTriangle,
+  Clock3,
+  MessageSquare,
+  RefreshCw,
+  Search,
+  Users,
+} from "lucide-react";
 
 import PageHeader from "@/components/dashboard/PageHeader";
 import Table from "@/components/dashboard/Table";
@@ -20,6 +27,17 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { useAuthStore } from "@/lib/store";
+import MetricCard from "@/components/dashboard/MetricCard";
+import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogClose,
+} from "@/components/ui/dialog";
 
 interface LogEntry {
   id: string;
@@ -57,6 +75,9 @@ const LogsPage = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [channelFilter, setChannelFilter] = useState<string>("all");
+  const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const token = useAuthStore((state) => state.token);
   const hasHydrated = useAuthStore((state) => state.hasHydrated);
 
@@ -84,6 +105,7 @@ const LogsPage = () => {
       }
       const data: LogEntry[] = await response.json();
       setLogs(data);
+      setLastUpdated(new Date());
     } catch (error) {
       toast.error((error as Error)?.message ?? "Error al obtener registros");
     } finally {
@@ -166,6 +188,188 @@ const LogsPage = () => {
     setChannelFilter("all");
   };
 
+  const successStatuses = useMemo(
+    () =>
+      new Set([
+        "completed",
+        "delivered",
+        "sent",
+        "read",
+      ]),
+    [],
+  );
+
+  const pendingStatuses = useMemo(
+    () =>
+      new Set([
+        "processing",
+        "pending",
+        "in progress",
+        "queued",
+        "warning",
+      ]),
+    [],
+  );
+
+  const failedStatuses = useMemo(
+    () =>
+      new Set([
+        "failed",
+        "error",
+        "completedwitherrors",
+      ]),
+    [],
+  );
+
+  const aggregatedMetrics = useMemo(() => {
+    const uniqueContacts = new Set<string>();
+    let successful = 0;
+    let failed = 0;
+    let pending = 0;
+    let inbound = 0;
+    let outbound = 0;
+    let undefinedDirection = 0;
+
+    logs.forEach((log) => {
+      if (log.contact?.phone) {
+        uniqueContacts.add(log.contact.phone);
+      }
+
+      const normalizedStatus = log.status?.toLowerCase() ?? "";
+      if (successStatuses.has(normalizedStatus)) {
+        successful += 1;
+      } else if (failedStatuses.has(normalizedStatus)) {
+        failed += 1;
+      } else if (pendingStatuses.has(normalizedStatus)) {
+        pending += 1;
+      }
+
+      const rawDirection = log.direction ?? "";
+      const normalizedDirection = rawDirection.toLowerCase().trim();
+      if (!normalizedDirection) {
+        undefinedDirection += 1;
+        return;
+      }
+
+      if (
+        ["inbound", "incoming", "entrada", "entrante", "received"].some((term) =>
+          normalizedDirection.includes(term),
+        )
+      ) {
+        inbound += 1;
+        return;
+      }
+
+      if (
+        ["outbound", "outgoing", "saliente", "envio", "sent"].some((term) =>
+          normalizedDirection.includes(term),
+        )
+      ) {
+        outbound += 1;
+        return;
+      }
+
+      undefinedDirection += 1;
+    });
+
+    const total = logs.length;
+    const successRate = total ? Math.round((successful / total) * 100) : 0;
+
+    return {
+      total,
+      successful,
+      failed,
+      pending,
+      successRate,
+      uniqueContacts: uniqueContacts.size,
+      inbound,
+      outbound,
+      undefinedDirection,
+    };
+  }, [failedStatuses, logs, pendingStatuses, successStatuses]);
+
+  const formattedSuccessRate = aggregatedMetrics.total
+    ? `${aggregatedMetrics.successRate}%`
+    : "—";
+
+  const totalDirections =
+    aggregatedMetrics.inbound +
+    aggregatedMetrics.outbound +
+    aggregatedMetrics.undefinedDirection;
+
+  const formatDirectionLabel = (direction?: string | null) => {
+    const rawDirection = direction ?? "";
+    const normalizedDirection = rawDirection.toLowerCase().trim();
+    if (!normalizedDirection) {
+      return "Sin clasificar";
+    }
+
+    if (
+      ["inbound", "incoming", "entrada", "entrante", "received"].some((term) =>
+        normalizedDirection.includes(term),
+      )
+    ) {
+      return "Entrante";
+    }
+
+    if (
+      ["outbound", "outgoing", "saliente", "envio", "sent"].some((term) =>
+        normalizedDirection.includes(term),
+      )
+    ) {
+      return "Saliente";
+    }
+
+    return direction ?? "Sin clasificar";
+  };
+
+  const handleViewDetails = (log: LogEntry) => {
+    setSelectedLog(log);
+    setIsDetailOpen(true);
+  };
+
+  const handleDetailOpenChange = (open: boolean) => {
+    setIsDetailOpen(open);
+    if (!open) {
+      setSelectedLog(null);
+    }
+  };
+
+  const handleCopyMessage = async () => {
+    if (!selectedLog?.message) {
+      return;
+    }
+
+    if (!navigator?.clipboard) {
+      toast.error("La función de copiado no está disponible en este navegador.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(selectedLog.message);
+      toast.success("Mensaje copiado al portapapeles");
+    } catch (error) {
+      toast.error(
+        (error as Error)?.message ?? "No pudimos copiar el mensaje, inténtalo otra vez.",
+      );
+    }
+  };
+
+  const lastUpdatedLabel = useMemo(() => {
+    if (!lastUpdated) {
+      return "Sincronizando";
+    }
+
+    return new Intl.DateTimeFormat("es-AR", {
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(lastUpdated);
+  }, [lastUpdated]);
+
+  const handleRefresh = () => {
+    void fetchLogs();
+  };
+
   const columns = [
     {
       key: "contact",
@@ -192,6 +396,27 @@ const LogsPage = () => {
       render: (row: LogEntry) => (
         <span className="text-gray-700">{row.flow?.name ?? "Sin flujo"}</span>
       ),
+    },
+    {
+      key: "direction",
+      label: "Dirección",
+      render: (row: LogEntry) => {
+        const label = formatDirectionLabel(row.direction);
+        return (
+          <Badge
+            variant="outline"
+            className={cn(
+              "border-gray-200 bg-gray-50 text-gray-600",
+              label === "Entrante" &&
+                "border-emerald-200 bg-emerald-50 text-emerald-700",
+              label === "Saliente" &&
+                "border-indigo-200 bg-indigo-50 text-indigo-700",
+            )}
+          >
+            {label}
+          </Badge>
+        );
+      },
     },
     {
       key: "channel",
@@ -222,6 +447,32 @@ const LogsPage = () => {
             timeStyle: "short",
           })}
         </span>
+      ),
+    },
+    {
+      key: "message",
+      label: "Detalle",
+      className: "whitespace-normal",
+      render: (row: LogEntry) => (
+        <div className="max-w-xs space-y-1 text-sm text-gray-600">
+          <p className="font-medium text-gray-700">
+            {row.message ? row.message : "Sin mensaje registrado"}
+          </p>
+          {row.error ? (
+            <p className="text-xs text-red-500">Error: {row.error}</p>
+          ) : null}
+          {(row.message && row.message.length > 0) || row.error ? (
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              className="h-auto px-0 text-indigo-600"
+              onClick={() => handleViewDetails(row)}
+            >
+              Ver detalle completo
+            </Button>
+          ) : null}
+        </div>
       ),
     },
   ];
@@ -308,6 +559,108 @@ const LogsPage = () => {
       />
       <motion.div
         variants={itemVariants}
+        className="grid gap-4 md:grid-cols-2 xl:grid-cols-4"
+      >
+        <MetricCard
+          title="Total de registros"
+          value={numberFormatter.format(aggregatedMetrics.total)}
+          icon={MessageSquare}
+        />
+        <MetricCard
+          title="Tasa de éxito"
+          value={formattedSuccessRate}
+          change={
+            aggregatedMetrics.total
+              ? `${numberFormatter.format(aggregatedMetrics.successful)} mensajes entregados`
+              : undefined
+          }
+          icon={RefreshCw}
+        />
+        <MetricCard
+          title="En seguimiento"
+          value={numberFormatter.format(aggregatedMetrics.pending)}
+          icon={Clock3}
+        />
+        <MetricCard
+          title="Errores detectados"
+          value={numberFormatter.format(aggregatedMetrics.failed)}
+          icon={AlertTriangle}
+        />
+      </motion.div>
+      <motion.div
+        variants={itemVariants}
+        className="grid gap-4 lg:grid-cols-3"
+      >
+        <div className="rounded-lg bg-white p-6 shadow-md lg:col-span-2">
+          <p className="text-sm font-medium text-gray-500">Dirección de los mensajes</p>
+          <div className="mt-4 space-y-4">
+            {["Entrantes", "Salientes", "Sin clasificar"].map((label) => {
+              const count =
+                label === "Entrantes"
+                  ? aggregatedMetrics.inbound
+                  : label === "Salientes"
+                    ? aggregatedMetrics.outbound
+                    : aggregatedMetrics.undefinedDirection;
+              if (!count) {
+                return null;
+              }
+
+              const color =
+                label === "Entrantes"
+                  ? "bg-emerald-500"
+                  : label === "Salientes"
+                    ? "bg-indigo-500"
+                    : "bg-gray-400";
+
+              return (
+                <div key={label} className="space-y-2">
+                  <div className="flex items-center justify-between text-sm text-gray-600">
+                    <span className="flex items-center gap-2">
+                      <span className={cn("h-2 w-2 rounded-full", color)} />
+                      {label}
+                    </span>
+                    <span className="font-medium text-gray-900">
+                      {numberFormatter.format(count)}
+                    </span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                    <div
+                      className={cn("h-full rounded-full", color)}
+                      style={{
+                        width: `${
+                          totalDirections
+                            ? Math.round((count / totalDirections) * 100)
+                            : 0
+                        }%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+            {!totalDirections ? (
+              <p className="text-sm text-gray-500">
+                Aún no podemos clasificar la dirección de los mensajes recibidos.
+              </p>
+            ) : null}
+          </div>
+        </div>
+        <div className="rounded-lg bg-white p-6 shadow-md">
+          <p className="text-sm font-medium text-gray-500">Contactos únicos</p>
+          <p className="mt-3 text-3xl font-semibold text-gray-900">
+            {numberFormatter.format(aggregatedMetrics.uniqueContacts)}
+          </p>
+          <p className="mt-2 text-sm text-gray-500">
+            Representan a los contactos con los que intercambiaste mensajes en el período visualizado.
+          </p>
+          <div className="mt-4 flex items-center gap-2 text-xs text-gray-400">
+            <Users className="h-4 w-4" />
+            <span>Última actualización: {lastUpdatedLabel}</span>
+          </div>
+        </div>
+      </motion.div>
+      <motion.div
+        variants={itemVariants}
         className="rounded-lg bg-white shadow-md"
       >
         <div className="space-y-4 border-b border-gray-100 p-6">
@@ -367,6 +720,23 @@ const LogsPage = () => {
                   Actualizando registros...
                 </span>
               ) : null}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={loading}
+                className="text-indigo-600 hover:text-indigo-700"
+              >
+                <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                Actualizar
+              </Button>
+              {!loading ? (
+                <span className="flex items-center gap-2 text-gray-400">
+                  <RefreshCw className="h-3 w-3" />
+                  {lastUpdatedLabel}
+                </span>
+              ) : null}
             </div>
           </div>
         </div>
@@ -389,6 +759,84 @@ const LogsPage = () => {
           className="rounded-b-lg"
         />
       </motion.div>
+      <Dialog open={isDetailOpen} onOpenChange={handleDetailOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Detalle del registro</DialogTitle>
+            <DialogDescription>
+              Revisa la información completa intercambiada con el contacto.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 text-sm text-gray-600">
+            <div>
+              <p className="text-xs uppercase text-gray-400">Contacto</p>
+              <p className="font-medium text-gray-900">
+                {selectedLog?.contact?.name ?? selectedLog?.contact?.phone ?? "Sin datos"}
+              </p>
+              {selectedLog?.contact?.name && selectedLog?.contact?.phone ? (
+                <p className="text-xs text-gray-500">{selectedLog.contact.phone}</p>
+              ) : null}
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div>
+                <p className="text-xs uppercase text-gray-400">Estado</p>
+                <p className="font-medium text-gray-900">
+                  {selectedLog?.status ?? "Desconocido"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase text-gray-400">Canal</p>
+                <p className="font-medium text-gray-900">
+                  {selectedLog?.channel ?? "--"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase text-gray-400">Dirección</p>
+                <p className="font-medium text-gray-900">
+                  {formatDirectionLabel(selectedLog?.direction)}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase text-gray-400">Registrado</p>
+                <p className="font-medium text-gray-900">
+                  {selectedLog
+                    ? new Date(selectedLog.createdAt).toLocaleString("es-AR", {
+                        dateStyle: "short",
+                        timeStyle: "short",
+                      })
+                    : "--"}
+                </p>
+              </div>
+            </div>
+            <div>
+              <p className="text-xs uppercase text-gray-400">Mensaje</p>
+              <div className="mt-1 rounded-lg border border-gray-100 bg-gray-50 p-3 text-gray-700">
+                {selectedLog?.message ?? "Sin mensaje disponible"}
+              </div>
+            </div>
+            {selectedLog?.error ? (
+              <div>
+                <p className="text-xs uppercase text-gray-400">Detalle del error</p>
+                <div className="mt-1 rounded-lg border border-red-100 bg-red-50 p-3 text-red-700">
+                  {selectedLog.error}
+                </div>
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            {selectedLog?.message ? (
+              <Button type="button" variant="outline" onClick={() => void handleCopyMessage()}>
+                Copiar mensaje
+              </Button>
+            ) : null}
+            <DialogClose asChild>
+              <Button type="button" variant="secondary">
+                Cerrar
+              </Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
