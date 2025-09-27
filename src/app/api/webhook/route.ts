@@ -19,13 +19,22 @@ async function isVerifyTokenValid(token: string | null, userId?: string) {
     return false;
   }
 
-  if (envMetaConfig.verifyToken && token === envMetaConfig.verifyToken) {
+  const trimmedToken = token.trim();
+
+  if (!trimmedToken) {
+    return false;
+  }
+
+  if (
+    envMetaConfig.verifyToken &&
+    trimmedToken === envMetaConfig.verifyToken.trim()
+  ) {
     return true;
   }
 
   const userWithToken = await prisma.user.findFirst({
     where: {
-      metaVerifyToken: token,
+      metaVerifyToken: trimmedToken,
       ...(userId ? { id: userId } : {}),
     },
     select: { id: true },
@@ -72,6 +81,81 @@ function getWebhookToken(
   }
 
   return null;
+}
+
+type SupportedSignatureAlgorithm = "sha256" | "sha1";
+
+type SignatureCandidate = {
+  algorithm: SupportedSignatureAlgorithm;
+  digest: Buffer;
+};
+
+function parseSignatureHeader(signature: string): SignatureCandidate[] {
+  const segments = signature
+    .split(",")
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0);
+
+  const candidates: SignatureCandidate[] = [];
+
+  for (const segment of segments) {
+    const [algorithmRaw, digestRaw] = segment.split("=");
+    if (!digestRaw) {
+      continue;
+    }
+
+    const algorithm = algorithmRaw?.trim().toLowerCase();
+    if (algorithm !== "sha256" && algorithm !== "sha1") {
+      continue;
+    }
+
+    const digest = digestRaw.trim();
+    if (!/^[0-9a-fA-F]+$/.test(digest) || digest.length % 2 !== 0) {
+      continue;
+    }
+
+    try {
+      candidates.push({
+        algorithm,
+        digest: Buffer.from(digest, "hex"),
+      });
+    } catch (error) {
+      console.error("Failed to parse webhook signature digest", error);
+    }
+  }
+
+  return candidates;
+}
+
+function verifyWebhookSignature(
+  signatureHeader: string,
+  payload: string,
+  secret: string,
+): boolean {
+  const candidates = parseSignatureHeader(signatureHeader);
+
+  if (!candidates.length) {
+    return false;
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const hmac = crypto.createHmac(candidate.algorithm, secret);
+      hmac.update(payload);
+      const expected = Buffer.from(hmac.digest("hex"), "hex");
+
+      if (
+        expected.length === candidate.digest.length &&
+        crypto.timingSafeEqual(expected, candidate.digest)
+      ) {
+        return true;
+      }
+    } catch (error) {
+      console.error("Failed to verify webhook signature", error);
+    }
+  }
+
+  return false;
 }
 
 const FLOW_TRIGGER_CORS_HEADERS = {
@@ -236,7 +320,7 @@ export async function GET(request: NextRequest) {
     const token = searchParams.get("hub.verify_token");
     const challenge = searchParams.get("hub.challenge");
 
-    if (mode !== "subscribe") {
+    if (mode?.toLowerCase() !== "subscribe") {
       return NextResponse.json({ error: "Invalid mode" }, { status: 400 });
     }
 
@@ -273,9 +357,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    const signature = request.headers.get("x-hub-signature-256");
+    const signatureHeader =
+      request.headers.get("x-hub-signature-256") ??
+      request.headers.get("x-hub-signature");
 
-    if (!signature) {
+    if (!signatureHeader) {
       return NextResponse.json({ error: "Missing signature" }, { status: 401 });
     }
 
@@ -327,17 +413,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "User not configured" }, { status: 404 });
     }
 
-    const hmac = crypto.createHmac("sha256", appSecret);
-    hmac.update(body);
-    const expectedSignature = `sha256=${hmac.digest("hex")}`;
-
-    const expectedBuffer = Buffer.from(expectedSignature);
-    const receivedBuffer = Buffer.from(signature);
-    const signaturesMatch =
-      expectedBuffer.length === receivedBuffer.length &&
-      crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
-
-    if (!signaturesMatch) {
+    if (!verifyWebhookSignature(signatureHeader, body, appSecret)) {
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
 
