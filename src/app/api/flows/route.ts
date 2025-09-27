@@ -10,7 +10,7 @@ const FlowPayloadSchema = z.object({
   trigger: z.string().optional(),
   status: z.string().optional(),
   definition: z.unknown().optional(),
-  phoneNumber: z.string().optional(),
+  phoneNumber: z.string().optional().nullable(),
 });
 
 export async function GET(request: Request) {
