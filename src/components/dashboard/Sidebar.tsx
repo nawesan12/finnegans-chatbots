@@ -120,7 +120,8 @@ const SidebarSectionGroup = ({
         {section.items.map((item) => {
           const isActive =
             pathname === item.href ||
-            (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`));
+            (item.href !== "/dashboard" &&
+              pathname.startsWith(`${item.href}/`));
 
           return (
             <SidebarNavLink
@@ -151,8 +152,8 @@ const SidebarSupportCard = ({ isCollapsed }: { isCollapsed: boolean }) => {
           <div className="space-y-1">
             <p className="font-semibold">¿Necesitas ayuda?</p>
             <p className="text-xs text-white/70">
-              Explora guías paso a paso o contacta a nuestro equipo para
-              recibir acompañamiento personalizado.
+              Explora guías paso a paso o contacta a nuestro equipo para recibir
+              acompañamiento personalizado.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -176,11 +177,7 @@ const SidebarSupportCard = ({ isCollapsed }: { isCollapsed: boolean }) => {
   );
 };
 
-const SidebarFooter = ({
-  isCollapsed,
-}: {
-  isCollapsed: boolean;
-}) => {
+const SidebarFooter = ({ isCollapsed }: { isCollapsed: boolean }) => {
   const user = useAuthStore((state) => state.user);
 
   return (
@@ -321,18 +318,13 @@ const Sidebar = ({
               height={32}
               priority
             />
-            <Badge variant="secondary" className="bg-white/10 text-white">
-              beta
-            </Badge>
           </motion.div>
         ) : (
           <motion.div
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-white/10"
-          >
-            <Star className="h-5 w-5" aria-hidden="true" />
-          </motion.div>
+            className="flex h-10 w-10 items-center justify-center"
+          ></motion.div>
         )}
         <button
           onClick={() => setIsCollapsed((previous) => !previous)}
@@ -340,7 +332,11 @@ const Sidebar = ({
           aria-label={isCollapsed ? "Expandir menú" : "Contraer menú"}
           aria-expanded={!isCollapsed}
         >
-          {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          {isCollapsed ? (
+            <ChevronRight className="h-4 w-4" />
+          ) : (
+            <ChevronLeft className="h-4 w-4" />
+          )}
         </button>
       </div>
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-6">
