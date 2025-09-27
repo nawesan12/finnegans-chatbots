@@ -17,7 +17,6 @@ import {
   ChevronRight,
   LifeBuoy,
   Mail,
-  Star,
 } from "lucide-react";
 
 import { useAuthStore } from "@/lib/store";
