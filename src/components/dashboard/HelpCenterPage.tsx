@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  type ComponentType,
-  type SVGProps,
-  useMemo,
-  useState,
-} from "react";
+import { type ComponentType, type SVGProps, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
@@ -129,13 +124,7 @@ const helpArticles: HelpArticle[] = [
       "Configura credenciales, variables de entorno y verifica el webhook oficial sin errores.",
     category: "Integraciones",
     icon: CloudCog,
-    tags: [
-      "whatsapp",
-      "meta",
-      "webhook",
-      "integraciones",
-      "credenciales",
-    ],
+    tags: ["whatsapp", "meta", "webhook", "integraciones", "credenciales"],
     steps: [
       "Obtén el App Secret, Token de largo plazo, Phone Number ID y Verify Token desde Meta for Developers.",
       "Carga las credenciales en Settings → WhatsApp Cloud o mediante variables de entorno si trabajas en modo multi-tenant.",
@@ -303,7 +292,7 @@ const HelpCenterPage = () => {
   }, [query]);
 
   return (
-    <div className="flex flex-col gap-10 pb-12">
+    <div className="flex flex-col gap-10 pb-12  px-8 md:px-20 py-11">
       <PageHeader
         title="Centro de ayuda"
         description="Explora guías prácticas, flujos recomendados y canales de soporte para sacar el máximo provecho de Finnegans Chatbots."
@@ -318,14 +307,18 @@ const HelpCenterPage = () => {
         <Card className="bg-gradient-to-br from-white via-white to-slate-50">
           <CardHeader className="space-y-6">
             <div className="flex flex-col gap-3">
-              <Badge variant="secondary" className="w-fit bg-[#04102D]/5 text-[#04102D]">
+              <Badge
+                variant="secondary"
+                className="w-fit bg-[#04102D]/5 text-[#04102D]"
+              >
                 Siempre actualizado
               </Badge>
               <CardTitle className="text-2xl font-semibold text-[#04102D]">
                 Encuentra respuestas en segundos
               </CardTitle>
               <CardDescription className="text-sm text-slate-600">
-                Escribe lo que necesitas y filtraremos las guías relevantes del equipo de éxito de clientes.
+                Escribe lo que necesitas y filtraremos las guías relevantes del
+                equipo de éxito de clientes.
               </CardDescription>
             </div>
             <div className="space-y-3">
@@ -340,7 +333,11 @@ const HelpCenterPage = () => {
                 />
               </div>
               <p className="text-xs text-slate-500">
-                Ejemplos: <span className="font-medium">&quot;webhook&quot;, &quot;automatizaciones&quot;, &quot;roles&quot;</span>
+                Ejemplos:{" "}
+                <span className="font-medium">
+                  &quot;webhook&quot;, &quot;automatizaciones&quot;,
+                  &quot;roles&quot;
+                </span>
               </p>
             </div>
           </CardHeader>
@@ -369,7 +366,10 @@ const HelpCenterPage = () => {
 
         <motion.div
           className="grid gap-4 md:grid-cols-2"
-          variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.08 } } }}
+          variants={{
+            hidden: {},
+            visible: { transition: { staggerChildren: 0.08 } },
+          }}
           initial="hidden"
           animate="visible"
         >
@@ -385,7 +385,10 @@ const HelpCenterPage = () => {
                         <Icon className="h-5 w-5" aria-hidden="true" />
                       </div>
                       {action.badge ? (
-                        <Badge variant="outline" className="border-[#4bc3fe]/40 bg-[#4bc3fe]/10 text-[#04102D]">
+                        <Badge
+                          variant="outline"
+                          className="border-[#4bc3fe]/40 bg-[#4bc3fe]/10 text-[#04102D]"
+                        >
                           {action.badge}
                         </Badge>
                       ) : null}
@@ -398,7 +401,12 @@ const HelpCenterPage = () => {
                     </CardDescription>
                   </CardHeader>
                   <CardFooter className="pt-0">
-                    <Button asChild variant="ghost" size="sm" className="text-[#04102D] hover:text-[#04102D]">
+                    <Button
+                      asChild
+                      variant="ghost"
+                      size="sm"
+                      className="text-[#04102D] hover:text-[#04102D]"
+                    >
                       <Link href={action.href}>
                         Explorar
                         <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
@@ -425,7 +433,9 @@ const HelpCenterPage = () => {
             <BookOpen className="h-4 w-4" aria-hidden="true" />
             Guías destacadas
           </div>
-          <h2 className="text-2xl font-semibold text-slate-900">Contenido curado para tu equipo</h2>
+          <h2 className="text-2xl font-semibold text-slate-900">
+            Contenido curado para tu equipo
+          </h2>
           <p className="max-w-3xl text-sm text-slate-600">
             {filteredArticles.length === helpArticles.length
               ? "Accede a tutoriales completos sobre configuración, automatizaciones y operación diaria."
@@ -442,7 +452,8 @@ const HelpCenterPage = () => {
                   No encontramos coincidencias
                 </CardTitle>
                 <CardDescription className="text-sm text-slate-600">
-                  Intenta con otra palabra clave o revisa las categorías principales a continuación.
+                  Intenta con otra palabra clave o revisa las categorías
+                  principales a continuación.
                 </CardDescription>
               </CardHeader>
               <CardFooter>
@@ -481,7 +492,10 @@ const HelpCenterPage = () => {
                           </CardDescription>
                         </div>
                       </div>
-                      <Badge variant="secondary" className="bg-slate-100 text-slate-700">
+                      <Badge
+                        variant="secondary"
+                        className="bg-slate-100 text-slate-700"
+                      >
                         {article.category}
                       </Badge>
                     </div>
@@ -538,7 +552,10 @@ const HelpCenterPage = () => {
                             rel={resource.external ? "noreferrer" : undefined}
                           >
                             Ver recurso
-                            <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+                            <ArrowUpRight
+                              className="h-3.5 w-3.5"
+                              aria-hidden="true"
+                            />
                           </Link>
                         </Button>
                       ))}
@@ -571,25 +588,35 @@ const HelpCenterPage = () => {
               Checklist semanal del equipo
             </CardTitle>
             <CardDescription className="text-sm text-slate-600">
-              Mantén tu operación saludable revisando estos puntos cada lunes. Puedes duplicar la lista y compartirla con tu equipo.
+              Mantén tu operación saludable revisando estos puntos cada lunes.
+              Puedes duplicar la lista y compartirla con tu equipo.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <ul className="space-y-3 text-sm text-slate-700">
               <li>
-                <span className="font-semibold text-[#04102D]">1.</span> Revisa logs con estado pendiente o fallido y documenta la causa raíz.
+                <span className="font-semibold text-[#04102D]">1.</span> Revisa
+                logs con estado pendiente o fallido y documenta la causa raíz.
               </li>
               <li>
-                <span className="font-semibold text-[#04102D]">2.</span> Actualiza etiquetas de contactos activos e identifica oportunidades de campañas proactivas.
+                <span className="font-semibold text-[#04102D]">2.</span>{" "}
+                Actualiza etiquetas de contactos activos e identifica
+                oportunidades de campañas proactivas.
               </li>
               <li>
-                <span className="font-semibold text-[#04102D]">3.</span> Confirma que los flujos críticos tengan versiones recientes y nodos de fallback configurados.
+                <span className="font-semibold text-[#04102D]">3.</span>{" "}
+                Confirma que los flujos críticos tengan versiones recientes y
+                nodos de fallback configurados.
               </li>
               <li>
-                <span className="font-semibold text-[#04102D]">4.</span> Exporta métricas clave (mensajes enviados, tasa de finalización) y compártelas con stakeholders.
+                <span className="font-semibold text-[#04102D]">4.</span> Exporta
+                métricas clave (mensajes enviados, tasa de finalización) y
+                compártelas con stakeholders.
               </li>
               <li>
-                <span className="font-semibold text-[#04102D]">5.</span> Valida accesos del equipo: remueve usuarios inactivos y refuerza MFA donde aplique.
+                <span className="font-semibold text-[#04102D]">5.</span> Valida
+                accesos del equipo: remueve usuarios inactivos y refuerza MFA
+                donde aplique.
               </li>
             </ul>
           </CardContent>
@@ -601,25 +628,39 @@ const HelpCenterPage = () => {
               <ShieldCheck className="h-4 w-4" aria-hidden="true" />
               Seguridad
             </div>
-            <CardTitle className="text-xl font-semibold">Recomendaciones clave</CardTitle>
+            <CardTitle className="text-xl font-semibold">
+              Recomendaciones clave
+            </CardTitle>
             <CardDescription className="text-sm text-white/70">
-              Protege tu cuenta y evita pérdidas de información sensible en tus canales automatizados.
+              Protege tu cuenta y evita pérdidas de información sensible en tus
+              canales automatizados.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-white/80">
             <p>
-              • Configura dominios verificados en Meta y limita el uso de tokens personales a entornos de staging.
+              • Configura dominios verificados en Meta y limita el uso de tokens
+              personales a entornos de staging.
             </p>
             <p>
-              • Utiliza variables de entorno en lugar de credenciales incrustadas en flujos o notas.
+              • Utiliza variables de entorno en lugar de credenciales
+              incrustadas en flujos o notas.
             </p>
             <p>
-              • Documenta procesos de recuperación y comparte el enlace directo a este Centro de ayuda con tu mesa de servicio.
+              • Documenta procesos de recuperación y comparte el enlace directo
+              a este Centro de ayuda con tu mesa de servicio.
             </p>
           </CardContent>
           <CardFooter>
-            <Button asChild variant="secondary" className="bg-white text-[#04102D] hover:bg-white/90">
-              <Link href="https://finnegans.ai/docs/security" target="_blank" rel="noreferrer">
+            <Button
+              asChild
+              variant="secondary"
+              className="bg-white text-[#04102D] hover:bg-white/90"
+            >
+              <Link
+                href="https://finnegans.ai/docs/security"
+                target="_blank"
+                rel="noreferrer"
+              >
                 Más recomendaciones de seguridad
                 <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
               </Link>
@@ -650,7 +691,11 @@ const HelpCenterPage = () => {
               <CardContent className="space-y-3 text-sm text-slate-600">
                 <p>{faq.answer}</p>
                 {faq.cta ? (
-                  <Button asChild variant="link" className="h-auto px-0 text-[#04102D]">
+                  <Button
+                    asChild
+                    variant="link"
+                    className="h-auto px-0 text-[#04102D]"
+                  >
                     <Link href={faq.cta.href} target="_blank" rel="noreferrer">
                       {faq.cta.label}
                     </Link>
@@ -679,7 +724,8 @@ const HelpCenterPage = () => {
             Elige el canal que mejor se adapte a tu caso
           </h2>
           <p className="max-w-2xl text-sm text-slate-600">
-            Nuestro equipo de especialistas acompaña implementaciones, entrenamientos y auditorías de bots en empresas de toda la región.
+            Nuestro equipo de especialistas acompaña implementaciones,
+            entrenamientos y auditorías de bots en empresas de toda la región.
           </p>
         </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -687,7 +733,10 @@ const HelpCenterPage = () => {
             const Icon = channel.icon;
 
             return (
-              <Card key={channel.id} className="flex h-full flex-col border-slate-200 bg-white shadow-sm">
+              <Card
+                key={channel.id}
+                className="flex h-full flex-col border-slate-200 bg-white shadow-sm"
+              >
                 <CardHeader className="space-y-4">
                   <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#04102D]/5 text-[#04102D]">
                     <Icon className="h-6 w-6" aria-hidden="true" />
@@ -700,7 +749,10 @@ const HelpCenterPage = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardFooter className="mt-auto">
-                  <Button asChild className="w-full bg-[#04102D] text-white hover:bg-[#04102D]/90">
+                  <Button
+                    asChild
+                    className="w-full bg-[#04102D] text-white hover:bg-[#04102D]/90"
+                  >
                     <Link href={channel.href} target="_blank" rel="noreferrer">
                       {channel.label}
                     </Link>
