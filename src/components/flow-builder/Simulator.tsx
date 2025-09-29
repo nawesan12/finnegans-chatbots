@@ -1,5 +1,11 @@
 "use client";
-import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import React, {
+  useState,
+  useMemo,
+  useEffect,
+  useRef,
+  useCallback,
+} from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -60,20 +66,20 @@ const setDeepValue = (
   path: string,
   value: unknown,
 ) => {
-    const segments = path.split(".");
-    let cursor: Record<string, unknown> = target;
-    segments.forEach((segment, index) => {
-      if (index === segments.length - 1) {
-        cursor[segment] = value as unknown;
-        return;
-      }
-      const existing = cursor[segment];
-      if (typeof existing !== "object" || existing === null) {
-        cursor[segment] = {};
-      }
-      cursor = cursor[segment] as Record<string, unknown>;
-    });
-  };
+  const segments = path.split(".");
+  let cursor: Record<string, unknown> = target;
+  segments.forEach((segment, index) => {
+    if (index === segments.length - 1) {
+      cursor[segment] = value as unknown;
+      return;
+    }
+    const existing = cursor[segment];
+    if (typeof existing !== "object" || existing === null) {
+      cursor[segment] = {};
+    }
+    cursor = cursor[segment] as Record<string, unknown>;
+  });
+};
 
 // Eval “segura” de condición: solo recibe `context`
 const evalCondition = (expression: string, context: SimContext) => {
@@ -217,8 +223,14 @@ export function Simulator({
 
       try {
         const parsed = JSON.parse(trimmed);
-        if (parsed === null || Array.isArray(parsed) || typeof parsed !== "object") {
-          throw new Error("El JSON debe ser un objeto (por ejemplo, {\"foo\": \"bar\"}).");
+        if (
+          parsed === null ||
+          Array.isArray(parsed) ||
+          typeof parsed !== "object"
+        ) {
+          throw new Error(
+            'El JSON debe ser un objeto (por ejemplo, {"foo": "bar"}).',
+          );
         }
         if (!silent) {
           setInitialContextError(null);
@@ -254,7 +266,7 @@ export function Simulator({
     async (startNodeObj: FlowNode | string) => {
       let current: FlowNode | null =
         typeof startNodeObj === "string"
-          ? idMap.get(startNodeObj) ?? null
+          ? (idMap.get(startNodeObj) ?? null)
           : startNodeObj;
 
       const visited = new Set<string>();
@@ -309,7 +321,10 @@ export function Simulator({
             if (typeof key === "string" && key.trim()) {
               const value = tpl(rawValue, runtimeContext);
               setContext((prev) => {
-                const nextVars = structuredClone(prev.vars) as Record<string, unknown>;
+                const nextVars = structuredClone(prev.vars) as Record<
+                  string,
+                  unknown
+                >;
                 setDeepValue(nextVars, key, value);
                 const nextContext: SimContext = { vars: nextVars };
                 contextRef.current = nextContext;
@@ -349,14 +364,17 @@ export function Simulator({
           }
           case "api": {
             if (!isNodeOfType(current, "api")) break;
-            const method = (current.data.method ?? "GET").toString().toUpperCase();
+            const method = (current.data.method ?? "GET")
+              .toString()
+              .toUpperCase();
             const url = tpl(current.data.url, runtimeContext);
             const bodyRaw = current.data.body ?? "";
             const assignTo = current.data.assignTo ?? "apiResult";
             const rawHeaders = current.data.headers ?? {};
             const headers = Object.fromEntries(
               Object.entries(rawHeaders).filter(
-                (entry): entry is [string, string] => typeof entry[1] === "string",
+                (entry): entry is [string, string] =>
+                  typeof entry[1] === "string",
               ),
             );
             addLog({ type: "system", text: `Calling ${method} ${url}` });
@@ -395,10 +413,14 @@ export function Simulator({
                 text: `HTTP ${res.status} almacenado en ${assignTo}`,
               });
             } catch (error: unknown) {
-              if (error instanceof DOMException && error.name === "AbortError") {
+              if (
+                error instanceof DOMException &&
+                error.name === "AbortError"
+              ) {
                 addLog({ type: "system", text: "API call aborted" });
               } else {
-                const message = error instanceof Error ? error.message : String(error);
+                const message =
+                  error instanceof Error ? error.message : String(error);
                 addLog({ type: "system", text: `API error: ${message}` });
               }
             }
@@ -413,12 +435,14 @@ export function Simulator({
               );
               const edgesFrom = outgoing.get(current.id) ?? [];
               const edge = edgesFrom.find(
-                (candidate) => candidate.sourceHandle === (result ? "true" : "false"),
+                (candidate) =>
+                  candidate.sourceHandle === (result ? "true" : "false"),
               );
-              current = edge ? idMap.get(edge.target) ?? null : null;
+              current = edge ? (idMap.get(edge.target) ?? null) : null;
               continue;
             } catch (error: unknown) {
-              const message = error instanceof Error ? error.message : String(error);
+              const message =
+                error instanceof Error ? error.message : String(error);
               addLog({ type: "system", text: `Condition error: ${message}` });
             }
             break;
@@ -426,7 +450,7 @@ export function Simulator({
           case "goto": {
             if (!isNodeOfType(current, "goto")) break;
             const nextId = current.data.targetNodeId ?? "";
-            current = nextId ? idMap.get(nextId) ?? null : null;
+            current = nextId ? (idMap.get(nextId) ?? null) : null;
             continue;
           }
           case "handoff": {
@@ -456,7 +480,7 @@ export function Simulator({
         }
 
         const nextEdge = outgoing.get(current.id)?.[0];
-        current = nextEdge ? idMap.get(nextEdge.target) ?? null : null;
+        current = nextEdge ? (idMap.get(nextEdge.target) ?? null) : null;
       }
 
       awaitingStepRef.current = false;
@@ -507,8 +531,8 @@ export function Simulator({
             const opts = Array.isArray(pausedNode.data.options)
               ? pausedNode.data.options
               : [];
-            const idx = opts.findIndex((option) =>
-              option.toLowerCase().trim() === userText,
+            const idx = opts.findIndex(
+              (option) => option.toLowerCase().trim() === userText,
             );
 
             let nextNodeId: string | undefined;
@@ -706,12 +730,18 @@ export function Simulator({
                     triggerNodes.map((node) => (
                       <SelectItem key={node.id} value={node.id}>
                         <div className="flex flex-col text-left">
-                          <span>{node.data.keyword || "(sin texto)"}</span>
-                          {node.data.description && (
-                            <span className="text-[10px] text-muted-foreground">
-                              {node.data.description}
-                            </span>
-                          )}
+                          <span>{node?.data?.keyword || "(sin texto)"}</span>
+                          {
+                            //@ts-expect-error bla
+                            node?.data?.description && (
+                              <span className="text-[10px] text-muted-foreground">
+                                {
+                                  //@ts-expect-error bla
+                                  node?.data?.description
+                                }
+                              </span>
+                            )
+                          }
                         </div>
                       </SelectItem>
                     ))
@@ -743,11 +773,7 @@ export function Simulator({
                 {isRunning ? "Ejecutando" : isPaused ? "Enviar" : "Iniciar"}
               </Button>
 
-              <Button
-                variant="outline"
-                onClick={stop}
-                disabled={!isRunning}
-              >
+              <Button variant="outline" onClick={stop} disabled={!isRunning}>
                 <StopCircle className="h-4 w-4 mr-2" />
                 Detener
               </Button>
@@ -870,11 +896,13 @@ export function Simulator({
                 className="h-32"
               />
               {initialContextError ? (
-                <p className="text-xs text-destructive">{initialContextError}</p>
+                <p className="text-xs text-destructive">
+                  {initialContextError}
+                </p>
               ) : (
                 <p className="text-[11px] text-muted-foreground">
-                  Se fusiona al iniciar un flujo. Dejalo vacío para comenzar con un
-                  contexto limpio.
+                  Se fusiona al iniciar un flujo. Dejalo vacío para comenzar con
+                  un contexto limpio.
                 </p>
               )}
               <div className="flex items-center justify-end gap-2">
