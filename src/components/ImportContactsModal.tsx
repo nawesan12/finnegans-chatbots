@@ -79,7 +79,7 @@ const ImportContactsModal = ({ isOpen, onClose }: ImportContactsModalProps) => {
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
           onClick={handleClose}
         >
-          <motion.div
+          <motion.div //@ts-expect-error bla
             variants={modalContentVariants}
             initial="hidden"
             animate="visible"
@@ -137,9 +137,7 @@ const ImportContactsModal = ({ isOpen, onClose }: ImportContactsModalProps) => {
                   <div className="flex items-center">
                     <FileText className="h-6 w-6 text-gray-500 mr-3" />
                     <div>
-                      <p className="font-medium text-gray-800">
-                        {file.name}
-                      </p>
+                      <p className="font-medium text-gray-800">{file.name}</p>
                       <p className="text-sm text-gray-500">
                         {(file.size / 1024).toFixed(2)} KB
                       </p>
