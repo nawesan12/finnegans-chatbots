@@ -212,7 +212,11 @@ export async function POST(request: Request) {
     let successCount = 0;
     let failureCount = 0;
 
-    for (const recipient of broadcast.recipients) {
+    let tokenError: string | null = null;
+    let forcedStopIndex: number | null = null;
+
+    for (let index = 0; index < broadcast.recipients.length; index++) {
+      const recipient = broadcast.recipients[index];
       const contact = contactsMap.get(recipient.contactId);
       if (!contact) {
         failureCount += 1;
@@ -255,6 +259,18 @@ export async function POST(request: Request) {
               statusUpdatedAt: new Date(),
             },
           });
+
+          if (
+            (sendResult.status === 401 ||
+              sendResult.error?.toLowerCase().includes("access token")) &&
+            !tokenError
+          ) {
+            tokenError =
+              sendResult.error ??
+              "Meta access token expired. Please reconnect WhatsApp in Settings.";
+            forcedStopIndex = index;
+            break;
+          }
         }
       } catch (error) {
         console.error("Error sending broadcast message:", error);
@@ -264,6 +280,25 @@ export async function POST(request: Request) {
           data: {
             status: "Failed",
             error: "Unexpected error",
+            statusUpdatedAt: new Date(),
+          },
+        });
+      }
+    }
+
+    if (tokenError !== null && forcedStopIndex !== null) {
+      for (
+        let index = forcedStopIndex + 1;
+        index < broadcast.recipients.length;
+        index++
+      ) {
+        const recipient = broadcast.recipients[index];
+        failureCount += 1;
+        await prisma.broadcastRecipient.update({
+          where: { id: recipient.id },
+          data: {
+            status: "Failed",
+            error: tokenError,
             statusUpdatedAt: new Date(),
           },
         });

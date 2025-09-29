@@ -1107,11 +1107,23 @@ export async function sendMessage(
       const errorMessage = graphMessage?.trim().length
         ? graphMessage
         : fallback;
+
+      const lowerMessage = errorMessage?.toLowerCase() ?? "";
+      const isAccessTokenError =
+        res.status === 401 ||
+        ((res.status === 400 || res.status === 403) &&
+          (lowerMessage.includes("access token") ||
+            lowerMessage.includes("session has expired")));
+
+      const normalizedError = isAccessTokenError
+        ? "Meta access token expired. Please reconnect WhatsApp in Settings."
+        : errorMessage;
+
       console.error("Error sending message:", res.status, errorMessage);
       return {
         success: false,
         status: res.status,
-        error: errorMessage,
+        error: normalizedError,
         details: json,
       };
     }
