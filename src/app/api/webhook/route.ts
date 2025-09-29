@@ -253,10 +253,8 @@ async function handleFlowTrigger(request: Request, flowId: string) {
   const interactive = isPlainObject(parsed.interactive)
     ? {
         type:
-          pickFirstString(parsed.interactive, [
-            "type",
-            "interactiveType",
-          ]) ?? null,
+          pickFirstString(parsed.interactive, ["type", "interactiveType"]) ??
+          null,
         id:
           pickFirstString(parsed.interactive, ["id", "selectionId", "value"]) ??
           null,
@@ -271,8 +269,7 @@ async function handleFlowTrigger(request: Request, flowId: string) {
       pickFirstString(parsed, ["type", "messageType"]) ??
       (interactive && interactive.type ? "interactive" : "text"),
     rawText:
-      pickFirstString(parsed, ["rawText", "raw", "message", "text"]) ??
-      message,
+      pickFirstString(parsed, ["rawText", "raw", "message", "text"]) ?? message,
     interactive:
       interactive && (interactive.id || interactive.title || interactive.type)
         ? interactive
@@ -307,12 +304,6 @@ async function handleFlowTrigger(request: Request, flowId: string) {
   );
 }
 
-// This endpoint is used for webhook verification.
-// Meta sends a GET request with a challenge to this endpoint.
-// The verify token can be provided globally via the META_VERIFY_TOKEN environment
-// variable or per user (stored in the database). The verification request from
-// Meta does not include user-identifying information, so we try the global token
-// first and then fall back to any user-level token that matches.
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -321,30 +312,30 @@ export async function GET(request: NextRequest) {
     const challenge = searchParams.get("hub.challenge");
 
     if (mode?.toLowerCase() !== "subscribe") {
-      return NextResponse.json({ error: "Invalid mode" }, { status: 400 });
+      return new NextResponse("Invalid mode", { status: 400 });
     }
-
     if (!challenge) {
-      return NextResponse.json(
-        { error: "Missing hub.challenge parameter" },
-        { status: 400 },
-      );
+      return new NextResponse("Missing hub.challenge", { status: 400 });
     }
 
-    if (!(await isVerifyTokenValid(token))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    // 🚀 Fast path: solo ENV, sin DB
+    const envToken =
+      process.env.META_VERIFY_TOKEN?.trim() ??
+      process.env.WHATSAPP_VERIFY_TOKEN?.trim() ??
+      envMetaConfig.verifyToken?.trim();
+
+    if (!envToken || token?.trim() !== envToken) {
+      return new NextResponse("Forbidden", { status: 403 });
     }
 
+    // Meta exige texto plano exacto
     return new NextResponse(challenge, {
       status: 200,
       headers: { "Content-Type": "text/plain" },
     });
-  } catch (error) {
-    console.error("Webhook verification error:", error);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 },
-    );
+  } catch (e) {
+    console.error("Webhook verification error:", e);
+    return new NextResponse("Internal Server Error", { status: 500 });
   }
 }
 
@@ -376,7 +367,10 @@ export async function POST(request: Request) {
       data = JSON.parse(body) as MetaWebhookEvent;
     } catch (error) {
       console.error("Invalid webhook payload:", error);
-      return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid JSON payload" },
+        { status: 400 },
+      );
     }
 
     const phoneNumberId =
@@ -410,7 +404,10 @@ export async function POST(request: Request) {
         "User/app secret not configured for phone number ID:",
         phoneNumberId,
       );
-      return NextResponse.json({ error: "User not configured" }, { status: 404 });
+      return NextResponse.json(
+        { error: "User not configured" },
+        { status: 404 },
+      );
     }
 
     if (!verifyWebhookSignature(signatureHeader, body, appSecret)) {
