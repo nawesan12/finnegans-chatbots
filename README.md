@@ -14,7 +14,12 @@ META_APP_SECRET="your-meta-app-secret"
 META_ACCESS_TOKEN="whatsapp-cloud-access-token"
 META_PHONE_NUMBER_ID="your-phone-number-id"
 META_BUSINESS_ACCOUNT_ID="your-waba-id"
-# Alternative variable names also supported: WHATSAPP_KEY, WHATSAPP_NUMBER_ID, ACCOUNT_NUMBER_ID
+# Alternative variable names also supported (legacy deployments):
+# - META_VERIFY_TOKEN: WHATSAPP_VERIFY_TOKEN, VERIFY_TOKEN
+# - META_APP_SECRET: WHATSAPP_APP_SECRET, APP_SECRET_KEY
+# - META_ACCESS_TOKEN: WHATSAPP_KEY, ACCESS_TOKEN
+# - META_PHONE_NUMBER_ID: WHATSAPP_NUMBER_ID
+# - META_BUSINESS_ACCOUNT_ID: ACCOUNT_NUMBER_ID
 ```
 
 The app stores the WhatsApp Business credentials (`metaAppSecret`, `metaAccessToken`, and `metaPhoneNumberId`) per user through the dashboard settings UI. The environment variables above act as a global fallback, which is useful for single-tenant deployments or quick testing without filling the settings UI. If both are provided, the per-user configuration always takes precedence.

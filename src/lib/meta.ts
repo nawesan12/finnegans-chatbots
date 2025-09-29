@@ -21,11 +21,18 @@ export function getMetaEnvironmentConfig(): MetaEnvironmentConfig {
     verifyToken:
       process.env.META_VERIFY_TOKEN ??
       process.env.WHATSAPP_VERIFY_TOKEN ??
+      process.env.VERIFY_TOKEN ??
       null,
     appSecret:
-      process.env.META_APP_SECRET ?? process.env.WHATSAPP_APP_SECRET ?? null,
+      process.env.META_APP_SECRET ??
+      process.env.WHATSAPP_APP_SECRET ??
+      process.env.APP_SECRET_KEY ??
+      null,
     accessToken:
-      process.env.META_ACCESS_TOKEN ?? process.env.WHATSAPP_KEY ?? null,
+      process.env.META_ACCESS_TOKEN ??
+      process.env.WHATSAPP_KEY ??
+      process.env.ACCESS_TOKEN ??
+      null,
     phoneNumberId:
       process.env.META_PHONE_NUMBER_ID ??
       process.env.WHATSAPP_NUMBER_ID ??

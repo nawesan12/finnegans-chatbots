@@ -33,7 +33,7 @@ META_PHONE_NUMBER_ID="numero-id"
 META_BUSINESS_ACCOUNT_ID="waba-id"
 ```
 
-> **Nota:** También existen alias `WHATSAPP_*` para cada clave en caso de que ya los utilices.
+> **Nota:** También existen alias heredados para facilitar migraciones: `WHATSAPP_VERIFY_TOKEN` o `VERIFY_TOKEN` para el verify token, `WHATSAPP_APP_SECRET` o `APP_SECRET_KEY` para el app secret, `WHATSAPP_KEY` o `ACCESS_TOKEN` para el access token, `WHATSAPP_NUMBER_ID` para el phone number ID y `ACCOUNT_NUMBER_ID` para el WhatsApp Business Account ID.
 
 ## 4. Apuntar el webhook y verificarlo
 
