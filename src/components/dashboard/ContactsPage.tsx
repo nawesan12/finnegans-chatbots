@@ -14,6 +14,7 @@ import PageHeader from "@/components/dashboard/PageHeader";
 import Table from "@/components/dashboard/Table";
 import { itemVariants } from "@/lib/animations";
 import { toast } from "sonner";
+import { authenticatedFetch } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/store";
 import { useDashboardActions } from "@/lib/dashboard-context";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -84,9 +85,7 @@ const ContactsPage = () => {
 
     try {
       setLoading(true);
-      const response = await fetch("/api/contacts", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await authenticatedFetch("/api/contacts");
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || "No se pudieron obtener los contactos");
@@ -206,12 +205,12 @@ const ContactsPage = () => {
 
     try {
       setIsDeleting(true);
-      const response = await fetch(`/api/contacts/${contactToDelete.id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
+      const response = await authenticatedFetch(
+        `/api/contacts/${contactToDelete.id}`,
+        {
+          method: "DELETE",
         },
-      });
+      );
 
       if (!response.ok) {
         throw new Error("No se pudo eliminar el contacto");

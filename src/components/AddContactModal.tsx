@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { authenticatedFetch } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/store";
 
 type AddContactModalProps = {
@@ -27,11 +28,10 @@ const AddContactModal = ({ open, onOpenChange, userId }: AddContactModalProps) =
 
     try {
       setSubmitting(true);
-      const response = await fetch("/api/contacts", {
+      const response = await authenticatedFetch("/api/contacts", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           name,

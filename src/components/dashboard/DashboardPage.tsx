@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { authenticatedFetch } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/store";
 
 type DashboardMetrics = {
@@ -250,13 +251,9 @@ const DashboardPage = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const authHeaders = {
-          Authorization: `Bearer ${token}`,
-        } as const;
-
         const [metricsRes, logsRes] = await Promise.all([
-          fetch("/api/metrics", { headers: authHeaders }),
-          fetch("/api/logs?limit=4", { headers: authHeaders }),
+          authenticatedFetch("/api/metrics"),
+          authenticatedFetch("/api/logs?limit=4"),
         ]);
 
         if (!metricsRes.ok) {
@@ -345,13 +342,8 @@ const DashboardPage = () => {
           params.set("status", selectedStatuses.join(","));
         }
 
-        const response = await fetch(
+        const response = await authenticatedFetch(
           `/api/metrics/messages-volume?${params.toString()}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          },
         );
 
         if (!response.ok) {
@@ -472,13 +464,8 @@ const DashboardPage = () => {
           params.set("status", selectedStatuses.join(","));
         }
 
-        const response = await fetch(
+        const response = await authenticatedFetch(
           `/api/metrics/dashboard-insights?${params.toString()}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          },
         );
 
         if (!response.ok) {
