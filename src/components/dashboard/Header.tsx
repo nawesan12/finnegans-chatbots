@@ -48,7 +48,7 @@ const Header = ({
 
   const handleLogout = () => {
     logout();
-    toast.success("Logged out successfully");
+    toast.success("Sesión cerrada correctamente");
     router.push("/login");
   };
 
