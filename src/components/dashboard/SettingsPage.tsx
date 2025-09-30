@@ -23,6 +23,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { authenticatedFetch } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/store";
 import {
   CheckCircle2,
@@ -79,11 +80,7 @@ const SettingsPage = () => {
 
     try {
       setLoading(true);
-      const response = await fetch("/api/settings", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await authenticatedFetch("/api/settings");
 
       if (!response.ok) {
         throw new Error("No se pudieron cargar los ajustes actuales");
@@ -225,11 +222,10 @@ const SettingsPage = () => {
 
     try {
       setIsSaving(true);
-      const response = await fetch("/api/settings", {
+      const response = await authenticatedFetch("/api/settings", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(settings),
       });

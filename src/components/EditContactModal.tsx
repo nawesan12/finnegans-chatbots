@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { authenticatedFetch } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/store";
 import type { ContactRow } from "@/components/dashboard/ContactsPage";
 
@@ -64,11 +65,10 @@ const EditContactModal = ({ open, contact, onOpenChange }: EditContactModalProps
 
     try {
       setSubmitting(true);
-      const response = await fetch(`/api/contacts/${contact.id}`, {
+      const response = await authenticatedFetch(`/api/contacts/${contact.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           name,

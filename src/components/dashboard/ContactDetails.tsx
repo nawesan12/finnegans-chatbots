@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { containerVariants, itemVariants } from "@/lib/animations";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+import { authenticatedFetch } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/store";
 
 interface ContactTag {
@@ -53,9 +54,9 @@ const ContactDetails = ({ contactId }: { contactId: string }) => {
     const fetchContact = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`/api/contacts/${contactId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const response = await authenticatedFetch(
+          `/api/contacts/${contactId}`,
+        );
         if (!response.ok) {
           throw new Error("No se pudo cargar el contacto");
         }

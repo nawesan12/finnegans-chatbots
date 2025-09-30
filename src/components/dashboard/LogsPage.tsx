@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { authenticatedFetch } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/store";
 import MetricCard from "@/components/dashboard/MetricCard";
 import { cn } from "@/lib/utils";
@@ -97,9 +98,7 @@ const LogsPage = () => {
 
     try {
       setLoading(true);
-      const response = await fetch("/api/logs", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await authenticatedFetch("/api/logs");
       if (!response.ok) {
         throw new Error("No se pudieron obtener los registros de actividad");
       }

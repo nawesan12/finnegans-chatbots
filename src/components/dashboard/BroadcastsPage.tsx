@@ -31,6 +31,7 @@ import PageHeader from "@/components/dashboard/PageHeader";
 import Table from "@/components/dashboard/Table";
 import { useAuthStore } from "@/lib/store";
 import { toast } from "sonner";
+import { authenticatedFetch } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -197,9 +198,7 @@ const BroadcastsPage = () => {
 
     try {
       setLoadingContacts(true);
-      const response = await fetch("/api/contacts", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await authenticatedFetch("/api/contacts");
       if (!response.ok) {
         throw new Error("No se pudieron cargar los contactos");
       }
@@ -217,9 +216,7 @@ const BroadcastsPage = () => {
     if (!user?.id || !token) return;
     try {
       setLoadingBroadcasts(true);
-      const response = await fetch(`/api/broadcasts`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await authenticatedFetch(`/api/broadcasts`);
       if (!response.ok) {
         throw new Error("No se pudieron obtener las campañas");
       }
@@ -243,9 +240,7 @@ const BroadcastsPage = () => {
 
     try {
       setLoadingFlows(true);
-      const response = await fetch(`/api/flows`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await authenticatedFetch(`/api/flows`);
       if (!response.ok) {
         throw new Error("No se pudieron cargar los flujos");
       }
@@ -683,11 +678,10 @@ const BroadcastsPage = () => {
           }. Recuerda activarlo para continuar la conversación automáticamente.`,
         );
       }
-      const response = await fetch("/api/broadcasts", {
+      const response = await authenticatedFetch("/api/broadcasts", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: token ? `Bearer ${token}` : "",
         },
         body: JSON.stringify({
           title: title.trim() || null,

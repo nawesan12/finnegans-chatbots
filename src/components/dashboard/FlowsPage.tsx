@@ -34,6 +34,7 @@ import FlowBuilder, {
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useAuthStore } from "@/lib/store";
+import { authenticatedFetch } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -296,9 +297,7 @@ const FlowsPage = () => {
 
     try {
       setLoading(true);
-      const response = await fetch(`/api/flows`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await authenticatedFetch(`/api/flows`);
       if (!response.ok) {
         throw new Error("No se pudieron obtener los flujos");
       }
@@ -484,11 +483,10 @@ const FlowsPage = () => {
         const url = isNewFlow ? "/api/flows" : `/api/flows/${editingFlow.id}`;
         const method = isNewFlow ? "POST" : "PUT";
 
-        const response = await fetch(url, {
+        const response = await authenticatedFetch(url, {
           method,
           headers: {
             "Content-Type": "application/json",
-            Authorization: token ? `Bearer ${token}` : "",
           },
           body: JSON.stringify({
             name: trimmedName,
@@ -521,14 +519,7 @@ const FlowsPage = () => {
         setIsSaving(false);
       }
     },
-    [
-      editingFlow,
-      fetchFlows,
-      flowBuilderRef,
-      openFlowForEditing,
-      token,
-      user?.id,
-    ],
+    [editingFlow, fetchFlows, flowBuilderRef, openFlowForEditing, user?.id],
   );
 
   const handleStatusChange = useCallback(
@@ -538,11 +529,10 @@ const FlowsPage = () => {
 
       try {
         setUpdatingStatusId(flowId);
-        const response = await fetch(`/api/flows/${flowId}`, {
+        const response = await authenticatedFetch(`/api/flows/${flowId}`, {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            Authorization: token ? `Bearer ${token}` : "",
           },
           body: JSON.stringify({
             name: flow.name,
@@ -574,7 +564,7 @@ const FlowsPage = () => {
         setUpdatingStatusId(null);
       }
     },
-    [flows, token],
+    [flows],
   );
 
   const columns = useMemo(
