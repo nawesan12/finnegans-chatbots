@@ -11,31 +11,68 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
 
 export default function RegisterPage() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    const response = await fetch("/api/auth/register", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ name, email, password }),
-    });
+    if (isSubmitting) {
+      return;
+    }
 
-    if (response.ok) {
-      toast.success("Registration successful!");
+    if (password.length < 8) {
+      toast.error("La contraseña debe tener al menos 8 caracteres.");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      toast.error("Las contraseñas no coinciden.");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name, email, password }),
+      });
+
+      if (!response.ok) {
+        let message = "No pudimos crear tu cuenta";
+        try {
+          const errorData = await response.json();
+          if (typeof errorData?.error === "string") {
+            message = errorData.error;
+          }
+        } catch (error) {
+          console.error("Failed to parse register error", error);
+        }
+        toast.error(message);
+        return;
+      }
+
+      const data = await response.json();
+      toast.success(`¡Bienvenido/a, ${data.name}!`);
       router.push("/login");
-    } else {
-      const errorData = await response.json();
-      toast.error(errorData.error || "Registration failed");
+    } catch (error) {
+      console.error("Register request failed", error);
+      toast.error("Hubo un problema al crear tu cuenta. Intenta nuevamente.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -119,6 +156,8 @@ export default function RegisterPage() {
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
+                  autoComplete="name"
+                  disabled={isSubmitting}
                   className="h-12 border-[#04102D]/20 bg-white focus:border-[#4BC3FE] focus:ring-[#4BC3FE]/40"
                 />
               </div>
@@ -136,6 +175,8 @@ export default function RegisterPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  disabled={isSubmitting}
                   className="h-12 border-[#04102D]/20 bg-white focus:border-[#4BC3FE] focus:ring-[#4BC3FE]/40"
                 />
               </div>
@@ -146,12 +187,30 @@ export default function RegisterPage() {
                 >
                   Contraseña
                 </Label>
-                <Input
+                <PasswordInput
                   id="password"
-                  type="password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="new-password"
+                  disabled={isSubmitting}
+                  className="h-12 border-[#04102D]/20 bg-white focus:border-[#4BC3FE] focus:ring-[#4BC3FE]/40"
+                />
+              </div>
+              <div className="grid gap-2 text-left">
+                <Label
+                  htmlFor="confirm-password"
+                  className="text-sm font-medium text-[#04102D]"
+                >
+                  Confirmar contraseña
+                </Label>
+                <PasswordInput
+                  id="confirm-password"
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  autoComplete="new-password"
+                  disabled={isSubmitting}
                   className="h-12 border-[#04102D]/20 bg-white focus:border-[#4BC3FE] focus:ring-[#4BC3FE]/40"
                 />
               </div>
@@ -160,8 +219,16 @@ export default function RegisterPage() {
               <Button
                 type="submit"
                 className="h-12 w-full rounded-full bg-[#4BC3FE] text-base font-semibold text-[#04102D] hover:bg-[#3EB6F1]"
+                disabled={isSubmitting}
               >
-                Crear cuenta
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Creando cuenta...
+                  </>
+                ) : (
+                  "Crear cuenta"
+                )}
               </Button>
               <p className="text-center text-sm text-[#04102D]/70">
                 ¿Ya tienes una cuenta?{" "}
