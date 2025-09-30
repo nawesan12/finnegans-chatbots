@@ -19,6 +19,10 @@ import {
   Clock3,
   Search,
   Megaphone,
+  Copy as CopyIcon,
+  Link as LinkIcon,
+  Trash2,
+  Pencil,
 } from "lucide-react";
 import { containerVariants, itemVariants } from "@/lib/animations";
 import MetricCard from "@/components/dashboard/MetricCard";
@@ -40,6 +44,13 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type FlowStatus = "Active" | "Draft" | "Inactive" | string;
 type StatusFilter = "all" | "Active" | "Draft" | "Inactive";
@@ -80,6 +91,8 @@ const FlowsPage = () => {
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [duplicatingFlowId, setDuplicatingFlowId] = useState<string | null>(null);
+  const [deletingFlowId, setDeletingFlowId] = useState<string | null>(null);
 
   const flowBuilderRef = useRef<FlowBuilderHandle>(null);
   const router = useRouter();
@@ -152,6 +165,127 @@ const FlowsPage = () => {
     }
     router.push(`/dashboard/broadcasts?flowId=${editingFlow.id}`);
   }, [editingFlow?.id, router]);
+
+  const handleCopyShareLink = useCallback((flow: FlowWithCounts) => {
+    if (typeof window === "undefined") {
+      toast.error("No se pudo copiar el enlace en este entorno");
+      return;
+    }
+
+    const shareUrl = `${window.location.origin}/dashboard/flows?open=${flow.id}`;
+
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard
+        .writeText(shareUrl)
+        .then(() => {
+          toast.success("Enlace copiado al portapapeles");
+        })
+        .catch((error) => {
+          console.error("Error copying flow share link:", error);
+          toast.error("No se pudo copiar el enlace. Intenta nuevamente.");
+        });
+      return;
+    }
+
+    const fallbackCopy = window.prompt(
+      "Copia el enlace manualmente",
+      shareUrl,
+    );
+    if (fallbackCopy !== null) {
+      toast.message("Enlace disponible para copiar manualmente");
+    }
+  }, []);
+
+  const handleDuplicateFlow = useCallback(
+    async (flow: FlowWithCounts) => {
+      if (!token) {
+        toast.error("Necesitas iniciar sesión para duplicar flujos");
+        return;
+      }
+
+      try {
+        setDuplicatingFlowId(flow.id);
+        const response = await fetch(`/api/flows`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: `${flow.name} (copia)`,
+            trigger: flow.trigger,
+            status: "Draft",
+            definition: flow.definition,
+            phoneNumber: flow.phoneNumber ?? null,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("No se pudo duplicar el flujo");
+        }
+
+        const duplicatedFlow: FlowWithCounts = await response.json();
+        toast.success("Flujo duplicado correctamente");
+        openFlowForEditing(duplicatedFlow);
+        await fetchFlows();
+      } catch (error) {
+        console.error("Error duplicating flow:", error);
+        toast.error(
+          (error as Error)?.message ?? "Ocurrió un problema al duplicar el flujo",
+        );
+      } finally {
+        setDuplicatingFlowId(null);
+      }
+    },
+    [fetchFlows, openFlowForEditing, token],
+  );
+
+  const handleDeleteFlow = useCallback(
+    async (flow: FlowWithCounts) => {
+      if (typeof window !== "undefined") {
+        const confirmed = window.confirm(
+          "¿Seguro que deseas eliminar este flujo? Esta acción no se puede deshacer.",
+        );
+        if (!confirmed) {
+          return;
+        }
+      }
+
+      if (!token) {
+        toast.error("Necesitas iniciar sesión para eliminar flujos");
+        return;
+      }
+
+      try {
+        setDeletingFlowId(flow.id);
+        const response = await fetch(`/api/flows/${flow.id}`, {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error("No se pudo eliminar el flujo");
+        }
+
+        if (editingFlow?.id === flow.id) {
+          handleCloseEditing();
+        }
+
+        await fetchFlows();
+        toast.success("Flujo eliminado correctamente");
+      } catch (error) {
+        console.error("Error deleting flow:", error);
+        toast.error(
+          (error as Error)?.message ?? "Ocurrió un error al eliminar el flujo",
+        );
+      } finally {
+        setDeletingFlowId(null);
+      }
+    },
+    [editingFlow?.id, fetchFlows, handleCloseEditing, token],
+  );
 
   const fetchFlows = useCallback(async () => {
     if (!user?.id || !token) {
@@ -510,24 +644,84 @@ const FlowsPage = () => {
         key: "actions",
         label: "Acciones",
         render: (row: FlowWithCounts) => (
-          <div className="flex space-x-2">
-            <button
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="link"
               onClick={() => openFlowForEditing(row)}
-              className="font-medium text-[#4bc3fe] hover:text-indigo-900"
+              className="h-auto px-0 text-[#4bc3fe] hover:text-indigo-900"
             >
               Editar
-            </button>
-            <button
-              className="text-gray-500 transition hover:text-gray-800"
-              title="Más acciones"
-            >
-              <MoreVertical className="h-5 w-5" />
-            </button>
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-gray-500 hover:text-indigo-900"
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem
+                  onSelect={() => openFlowForEditing(row)}
+                >
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Abrir en el editor
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={duplicatingFlowId === row.id}
+                  onSelect={() => {
+                    void handleDuplicateFlow(row);
+                  }}
+                >
+                  {duplicatingFlowId === row.id ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <CopyIcon className="mr-2 h-4 w-4" />
+                  )}
+                  Duplicar flujo
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => handleCopyShareLink(row)}
+                >
+                  <LinkIcon className="mr-2 h-4 w-4" />
+                  Copiar enlace de edición
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  disabled={deletingFlowId === row.id}
+                  onSelect={() => {
+                    void handleDeleteFlow(row);
+                  }}
+                  className="text-red-600 focus:text-red-600"
+                >
+                  {deletingFlowId === row.id ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="mr-2 h-4 w-4" />
+                  )}
+                  Eliminar flujo
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         ),
       },
     ],
-    [handleStatusChange, numberFormatter, openFlowForEditing, updatingStatusId],
+    [
+      deletingFlowId,
+      duplicatingFlowId,
+      handleCopyShareLink,
+      handleDeleteFlow,
+      handleDuplicateFlow,
+      handleStatusChange,
+      numberFormatter,
+      openFlowForEditing,
+      updatingStatusId,
+    ],
   );
 
   const initialFlow = useMemo<Partial<FlowData> | null>(
