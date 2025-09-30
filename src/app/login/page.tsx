@@ -13,35 +13,59 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { ArrowRight, Lock, MessageCircle } from "lucide-react";
+import { ArrowRight, Loader2, Lock, MessageCircle } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { setUser } = useAuthStore();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ email, password }),
-    });
+    if (isSubmitting) {
+      return;
+    }
 
-    if (response.ok) {
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!response.ok) {
+        let message = "Acceso fallido";
+        try {
+          const errorData = await response.json();
+          if (typeof errorData?.error === "string") {
+            message = errorData.error;
+          }
+        } catch (error) {
+          console.error("Failed to parse login error", error);
+        }
+        toast.error(message);
+        return;
+      }
+
       const data = await response.json();
       const { token, ...user } = data;
       setUser(user, token);
       toast.success(`Bienvenido de nuevo, ${data.name}!`);
       router.push("/dashboard");
-    } else {
-      const errorData = await response.json();
-      toast.error(errorData.error || "Acceso fallido");
+    } catch (error) {
+      console.error("Login request failed", error);
+      toast.error("No pudimos iniciar sesión. Intenta nuevamente.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
   return (
@@ -132,6 +156,8 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  disabled={isSubmitting}
                   className="h-12 border-[#04102D]/20 bg-white focus:border-[#4BC3FE] focus:ring-[#4BC3FE]/40"
                 />
               </div>
@@ -142,12 +168,13 @@ export default function LoginPage() {
                 >
                   Contraseña
                 </Label>
-                <Input
+                <PasswordInput
                   id="password"
-                  type="password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  disabled={isSubmitting}
                   className="h-12 border-[#04102D]/20 bg-white focus:border-[#4BC3FE] focus:ring-[#4BC3FE]/40"
                 />
               </div>
@@ -156,9 +183,19 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 className="h-12 w-full items-center justify-center gap-2 rounded-full bg-[#04102D] text-base font-semibold text-white transition hover:bg-[#04102D]/90"
+                disabled={isSubmitting}
               >
-                Iniciar sesión
-                <ArrowRight className="h-4 w-4" />
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Ingresando...
+                  </>
+                ) : (
+                  <>
+                    Iniciar sesión
+                    <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
               </Button>
               <p className="text-center text-sm text-[#04102D]/70">
                 ¿Aún no tienes una cuenta?{" "}
