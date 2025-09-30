@@ -167,13 +167,16 @@ const SettingsPage = () => {
 
   const remainingFields = statusItems.length - completionCount;
 
-  const webhookUrl = useMemo(
-    () =>
-      `${
-        process.env.NEXT_PUBLIC_APP_URL ?? "https://tu-dominio.com"
-      }/api/webhooks/meta`,
-    [],
-  );
+  const webhookUrl = useMemo(() => {
+    const configuredUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+    const runtimeOrigin =
+      typeof window !== "undefined" ? window.location.origin : undefined;
+
+    const baseUrl = (configuredUrl || runtimeOrigin || "https://tu-dominio.com")
+      .replace(/\/$/, "");
+
+    return `${baseUrl}/api/webhook`;
+  }, []);
 
   const toggleSecretVisibility = (field: "metaAppSecret" | "metaAccessToken") => {
     setVisibleSecrets((prev) => ({ ...prev, [field]: !prev[field] }));
