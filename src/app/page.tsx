@@ -39,6 +39,7 @@ const featureHighlights = [
 const navigationItems = [
   { href: "#soluciones", label: "Soluciones" },
   { href: "#equipo", label: "Equipo" },
+  { href: "#casos", label: "Casos" },
   { href: "#implementacion", label: "Implementación" },
   { href: "#recursos", label: "Recursos" },
   { href: "#contacto", label: "Contacto" },
@@ -67,6 +68,39 @@ const integrationList = [
 ];
 
 const trustLogos = ["NovaBank", "Grupo Sideral", "Lumen Retail", "SegurPlus"];
+
+const caseStudies = [
+  {
+    company: "NovaBank",
+    industry: "Banca digital",
+    summary:
+      "Automatizamos la clasificación y resolución de consultas 24/7 con supervisión humana en escalamiento.",
+    metrics: [
+      { label: "Reducción de tiempo de respuesta", value: "-55%" },
+      { label: "Aumento de autoservicio", value: "+3.5x" },
+    ],
+  },
+  {
+    company: "Lumen Retail",
+    industry: "Retail omnicanal",
+    summary:
+      "Unificamos inventario, logística y CRM para brindar seguimiento proactivo en toda la región.",
+    metrics: [
+      { label: "Órdenes gestionadas por bots", value: "78%" },
+      { label: "Satisfacción del cliente", value: "4.8/5" },
+    ],
+  },
+  {
+    company: "SegurPlus",
+    industry: "Seguros corporativos",
+    summary:
+      "Digitalizamos la declaración de siniestros con formularios guiados y asignación automática de agentes.",
+    metrics: [
+      { label: "Casos priorizados correctamente", value: "97%" },
+      { label: "Tiempo de registro", value: "8 min → 2 min" },
+    ],
+  },
+];
 
 const teamHighlights = [
   {
@@ -426,6 +460,65 @@ export default function Home() {
                   <p className="text-sm text-[#04102D]/70">
                     {item.description}
                   </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="casos" className="bg-[#04102D] py-16 text-white">
+          <div className="mx-auto flex w-full max-w-6xl flex-col gap-12 px-6 lg:flex-row lg:items-start">
+            <div className="max-w-xl space-y-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/70">
+                Casos de éxito
+              </p>
+              <h2 className="text-3xl font-semibold leading-tight">
+                Resultados tangibles en industrias reguladas y operaciones de alto volumen.
+              </h2>
+              <p className="text-lg text-white/75">
+                Diseñamos journeys conversacionales que conectan con tus sistemas existentes, respetan el compliance y generan indicadores accionables desde el día uno.
+              </p>
+              <div className="space-y-4 rounded-3xl border border-white/15 bg-white/5 p-6">
+                <p className="text-sm font-semibold text-white">Cómo acompañamos a tu equipo</p>
+                <ul className="space-y-3 text-sm text-white/75">
+                  <li>▶ Workshops ejecutivos para alinear objetivos y KPIs clave.</li>
+                  <li>▶ Equipo técnico dedicado a integraciones y migración de datos.</li>
+                  <li>▶ Mesa de seguimiento quincenal con insights y recomendaciones.</li>
+                </ul>
+                <Button
+                  asChild
+                  className="mt-2 h-11 w-full rounded-full bg-white text-sm font-semibold text-[#04102D] transition hover:bg-white/90"
+                >
+                  <Link href="/register">Solicitar un caso a medida</Link>
+                </Button>
+              </div>
+            </div>
+            <div className="grid flex-1 gap-6">
+              {caseStudies.map((caseStudy) => (
+                <div
+                  key={caseStudy.company}
+                  className="flex flex-col gap-4 rounded-3xl border border-white/15 bg-white/5 p-6"
+                >
+                  <div className="flex flex-col gap-1">
+                    <p className="text-sm font-semibold uppercase tracking-[0.28em] text-white/60">
+                      {caseStudy.industry}
+                    </p>
+                    <p className="text-2xl font-semibold text-white">{caseStudy.company}</p>
+                    <p className="text-sm text-white/75">{caseStudy.summary}</p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {caseStudy.metrics.map((metric) => (
+                      <div
+                        key={`${caseStudy.company}-${metric.label}`}
+                        className="rounded-2xl border border-white/10 bg-white/10 p-4"
+                      >
+                        <p className="text-2xl font-semibold text-white">{metric.value}</p>
+                        <p className="text-xs uppercase tracking-[0.28em] text-white/70">
+                          {metric.label}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
