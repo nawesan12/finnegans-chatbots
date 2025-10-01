@@ -600,7 +600,7 @@ const LeadsPage = () => {
     statusFilter !== "all" || searchTerm.trim().length > 0,
   );
 
-  const handleExport = useCallback(() => {
+  const handleExport = useCallback(async () => {
     if (filteredLeads.length === 0) {
       toast.info("No hay leads para exportar con los filtros actuales.");
       return;
@@ -609,45 +609,53 @@ const LeadsPage = () => {
     setIsExporting(true);
 
     try {
-      const headers = [
-        "Nombre",
-        "Correo",
-        "Empresa",
-        "Teléfono",
-        "Estado",
-        "Mensaje",
-        "Notas",
-        "Recibido",
-        "Actualizado",
-      ];
+      const params = new URLSearchParams();
+      const trimmedSearch = searchTerm.trim();
+      if (statusFilter !== "all") {
+        params.set("status", statusFilter);
+      }
+      if (trimmedSearch) {
+        params.set("search", trimmedSearch);
+      }
 
-      const sanitize = (value: string) =>
-        value.replace(/\r?\n|\r/g, " ").replace(/"/g, '""');
+      const query = params.size > 0 ? `?${params.toString()}` : "";
+      const response = await authenticatedFetch(`/api/leads/export${query}`);
 
-      const rows = filteredLeads.map((lead) => [
-        lead.name,
-        lead.email,
-        lead.company ?? "",
-        lead.phone ?? "",
-        getStatusMeta(lead.status).label,
-        lead.message,
-        lead.notes ?? "",
-        dateFormatter.format(new Date(lead.createdAt)),
-        dateFormatter.format(new Date(lead.updatedAt)),
-      ]);
+      if (!response.ok) {
+        const message =
+          (await parseErrorMessage(response)) ??
+          "No se pudieron exportar los leads.";
+        throw new Error(message);
+      }
 
-      const csvContent = [headers, ...rows]
-        .map((row) => row.map((cell) => `"${sanitize(cell)}"`).join(","))
-        .join("\r\n");
+      const blob = await response.blob();
+      const contentDisposition = response.headers.get("content-disposition");
+      let filename = `leads-${new Date().toISOString().split("T")[0]}.csv`;
 
-      const blob = new Blob(["\ufeff" + csvContent], {
-        type: "text/csv;charset=utf-8;",
-      });
+      if (contentDisposition) {
+        const filenameStarMatch = /filename\*=UTF-8''([^;]+)/i.exec(
+          contentDisposition,
+        );
+        if (filenameStarMatch?.[1]) {
+          try {
+            filename = decodeURIComponent(filenameStarMatch[1]);
+          } catch (error) {
+            console.error("Failed to decode filename", error);
+          }
+        } else {
+          const fallbackMatch = /filename="?([^";]+)"?/i.exec(
+            contentDisposition,
+          );
+          if (fallbackMatch?.[1]) {
+            filename = fallbackMatch[1];
+          }
+        }
+      }
+
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      const timestamp = new Date().toISOString().split("T")[0];
       link.href = url;
-      link.download = `leads-${timestamp}.csv`;
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -655,11 +663,17 @@ const LeadsPage = () => {
       toast.success("Exportamos tus leads en CSV.");
     } catch (error) {
       console.error("Failed to export leads", error);
-      toast.error("No pudimos exportar los leads. Intenta nuevamente.");
+      if (error instanceof UnauthorizedError) {
+        return;
+      }
+      toast.error(
+        (error as Error)?.message ??
+          "No pudimos exportar los leads. Intenta nuevamente.",
+      );
     } finally {
       setIsExporting(false);
     }
-  }, [dateFormatter, filteredLeads]);
+  }, [filteredLeads.length, searchTerm, statusFilter]);
 
   const columns = useMemo<TableColumn<LeadRecord>[]>(
     () => [
@@ -813,7 +827,9 @@ const LeadsPage = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={handleExport}
+              onClick={() => {
+                void handleExport();
+              }}
               disabled={isExporting}
             >
               <Download className="mr-2 h-4 w-4" /> Exportar CSV
