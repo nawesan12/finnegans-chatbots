@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import {
@@ -5,8 +8,10 @@ import {
   Building2,
   CheckCircle2,
   LayoutDashboard,
+  Menu,
   MessageCircle,
   ShieldCheck,
+  X,
 } from "lucide-react";
 
 const featureHighlights = [
@@ -28,6 +33,13 @@ const featureHighlights = [
       "Resuelve automáticamente los casos repetitivos y entrega insights accionables a tus supervisores.",
     icon: MessageCircle,
   },
+];
+
+const navigationItems = [
+  { href: "#soluciones", label: "Soluciones" },
+  { href: "#equipo", label: "Equipo" },
+  { href: "#implementacion", label: "Implementación" },
+  { href: "#contacto", label: "Recursos" },
 ];
 
 const capabilityItems = [
@@ -79,11 +91,15 @@ const teamHighlights = [
 ];
 
 export default function Home() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const closeMobileMenu = () => setMobileMenuOpen(false);
+
   return (
     <div className="min-h-screen bg-white text-[#04102D]">
-      <header className="border-b border-[#04102D]/10 bg-white">
+      <header className="relative border-b border-[#04102D]/10 bg-white">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5">
-          <Link href="/" className="flex items-center gap-3">
+          <Link href="/" className="flex items-center gap-3" onClick={closeMobileMenu}>
             <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#04102D] text-base font-semibold text-white">
               F.
             </span>
@@ -95,18 +111,11 @@ export default function Home() {
             </div>
           </Link>
           <nav className="hidden items-center gap-8 text-sm font-medium text-[#04102D]/70 md:flex">
-            <Link href="#soluciones" className="hover:text-[#04102D]">
-              Soluciones
-            </Link>
-            <Link href="#equipo" className="hover:text-[#04102D]">
-              Equipo
-            </Link>
-            <Link href="#implementacion" className="hover:text-[#04102D]">
-              Implementación
-            </Link>
-            <Link href="#contacto" className="hover:text-[#04102D]">
-              Recursos
-            </Link>
+            {navigationItems.map((item) => (
+              <Link key={item.href} href={item.href} className="hover:text-[#04102D]">
+                {item.label}
+              </Link>
+            ))}
           </nav>
           <div className="hidden items-center gap-3 md:flex">
             <Button
@@ -123,7 +132,49 @@ export default function Home() {
               <Link href="/register">Solicitar demo</Link>
             </Button>
           </div>
+          <button
+            type="button"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-[#04102D]/15 text-[#04102D] transition hover:border-[#04102D]/30 hover:bg-[#04102D]/5 md:hidden"
+            onClick={() => setMobileMenuOpen((prev) => !prev)}
+            aria-expanded={mobileMenuOpen}
+            aria-label="Abrir menú"
+          >
+            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
         </div>
+        {mobileMenuOpen && (
+          <div className="absolute inset-x-0 top-full z-50 border-t border-[#04102D]/10 bg-white shadow-xl md:hidden">
+            <nav className="flex flex-col gap-1 px-6 py-4 text-sm font-medium text-[#04102D]/80">
+              {navigationItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="rounded-xl px-3 py-2 hover:bg-[#04102D]/5 hover:text-[#04102D]"
+                  onClick={closeMobileMenu}
+                >
+                  {item.label}
+                </Link>
+              ))}
+              <div className="mt-3 flex flex-col gap-2">
+                <Button
+                  asChild
+                  variant="ghost"
+                  className="justify-start border border-[#04102D]/10 bg-transparent text-[#04102D] hover:bg-[#04102D]/5"
+                  onClick={closeMobileMenu}
+                >
+                  <Link href="/login">Ingresar</Link>
+                </Button>
+                <Button
+                  asChild
+                  className="justify-center rounded-full bg-[#4BC3FE] px-5 py-2.5 text-sm font-semibold text-[#04102D] hover:bg-[#3EB6F1]"
+                  onClick={closeMobileMenu}
+                >
+                  <Link href="/register">Solicitar demo</Link>
+                </Button>
+              </div>
+            </nav>
+          </div>
+        )}
       </header>
 
       <main className="space-y-24 pb-24">
