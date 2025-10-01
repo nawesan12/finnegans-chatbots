@@ -50,6 +50,59 @@ const leadStatusMap = new Map(
 
 const DEFAULT_BADGE_CLASS = "border-gray-200 bg-gray-50 text-gray-600";
 
+type StatusAccent = {
+  container: string;
+  label: string;
+  value: string;
+  muted: string;
+  progress: string;
+  track: string;
+};
+
+const defaultStatusAccent: StatusAccent = {
+  container: "border-gray-200 bg-white",
+  label: "text-gray-500",
+  value: "text-gray-900",
+  muted: "text-gray-600",
+  progress: "bg-gray-400",
+  track: "bg-gray-100",
+};
+
+const statusCardAccents: Record<LeadStatus, StatusAccent> = {
+  new: {
+    container: "border-sky-100 bg-sky-50",
+    label: "text-sky-600",
+    value: "text-sky-900",
+    muted: "text-sky-700",
+    progress: "bg-sky-400",
+    track: "bg-white/60",
+  },
+  contacted: {
+    container: "border-amber-100 bg-amber-50",
+    label: "text-amber-600",
+    value: "text-amber-900",
+    muted: "text-amber-700",
+    progress: "bg-amber-400",
+    track: "bg-white/60",
+  },
+  qualified: {
+    container: "border-emerald-100 bg-emerald-50",
+    label: "text-emerald-600",
+    value: "text-emerald-900",
+    muted: "text-emerald-700",
+    progress: "bg-emerald-400",
+    track: "bg-white/60",
+  },
+  archived: {
+    container: "border-slate-200 bg-slate-50",
+    label: "text-slate-500",
+    value: "text-slate-800",
+    muted: "text-slate-600",
+    progress: "bg-slate-400",
+    track: "bg-white/60",
+  },
+};
+
 async function parseErrorMessage(response: Response) {
   try {
     const data = await response.json();
@@ -60,6 +113,77 @@ async function parseErrorMessage(response: Response) {
     console.error("Failed to parse error response", error);
   }
   return null;
+}
+
+function parseLeadSummary(data: unknown): LeadSummaryResponse | null {
+  if (typeof data !== "object" || data === null) {
+    return null;
+  }
+
+  const rawTotal = (data as { total?: unknown }).total;
+  const rawByStatus = (data as { byStatus?: unknown }).byStatus;
+
+  if (typeof rawTotal !== "number" || !Array.isArray(rawByStatus)) {
+    return null;
+  }
+
+  const byStatus: LeadSummaryResponse["byStatus"] = rawByStatus
+    .map((item) => {
+      if (typeof item !== "object" || item === null) {
+        return null;
+      }
+      const status = (item as { status?: unknown }).status;
+      const count = (item as { count?: unknown }).count;
+      if (typeof status !== "string" || typeof count !== "number") {
+        return null;
+      }
+      return { status, count };
+    })
+    .filter((value): value is { status: string; count: number } => Boolean(value));
+
+  return {
+    total: rawTotal,
+    byStatus,
+  };
+}
+
+function computeSummaryFromLeads(leads: LeadRecord[]): LeadSummaryResponse {
+  const counts = new Map<string, number>();
+  for (const lead of leads) {
+    counts.set(lead.status, (counts.get(lead.status) ?? 0) + 1);
+  }
+
+  return {
+    total: leads.length,
+    byStatus: Array.from(counts.entries()).map(([status, count]) => ({
+      status,
+      count,
+    })),
+  };
+}
+
+function mergeSummaries(
+  primary: LeadSummaryResponse,
+  fallback: LeadSummaryResponse,
+): LeadSummaryResponse {
+  const counts = new Map<string, number>();
+
+  for (const item of fallback.byStatus) {
+    counts.set(item.status, item.count);
+  }
+
+  for (const item of primary.byStatus) {
+    const current = counts.get(item.status) ?? 0;
+    counts.set(item.status, Math.max(current, item.count));
+  }
+
+  return {
+    total: Math.max(primary.total, fallback.total),
+    byStatus: Array.from(counts.entries()).map(([status, count]) => ({
+      status,
+      count,
+    })),
+  };
 }
 
 function getStatusMeta(status: string) {
@@ -104,6 +228,11 @@ type LeadStatusOption = {
 
 const MAX_NOTES_LENGTH = 2000;
 
+type LeadSummaryResponse = {
+  total: number;
+  byStatus: { status: string; count: number }[];
+};
+
 const LeadsPage = () => {
   const hasHydrated = useAuthStore((state) => state.hasHydrated);
   const router = useRouter();
@@ -116,6 +245,9 @@ const LeadsPage = () => {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [availableStatuses, setAvailableStatuses] = useState<LeadStatusOption[]>(
     () => [...leadStatuses],
+  );
+  const [serverSummary, setServerSummary] = useState<LeadSummaryResponse | null>(
+    null,
   );
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [notesDraft, setNotesDraft] = useState("");
@@ -164,6 +296,7 @@ const LeadsPage = () => {
       const data = (await response.json()) as {
         leads?: LeadRecord[];
         statuses?: LeadStatusOption[];
+        summary?: unknown;
       };
 
       const sanitizedLeads: LeadRecord[] = Array.isArray(data.leads)
@@ -202,6 +335,12 @@ const LeadsPage = () => {
 
       setAvailableStatuses([...baseStatuses, ...unknownStatuses]);
       setLeads(sanitizedLeads);
+      const summaryData = parseLeadSummary(data.summary);
+      const computedSummary = computeSummaryFromLeads(sanitizedLeads);
+      const base = summaryData
+        ? mergeSummaries(summaryData, computedSummary)
+        : computedSummary;
+      setServerSummary(base);
     } catch (error) {
       if (error instanceof UnauthorizedError) {
         return;
@@ -258,9 +397,14 @@ const LeadsPage = () => {
       }
 
       const updatedLead = (await response.json()) as LeadRecord;
-      setLeads((previous) =>
-        previous.map((lead) => (lead.id === leadId ? { ...lead, ...updatedLead } : lead)),
-      );
+      let nextLeads: LeadRecord[] = [];
+      setLeads((previous) => {
+        nextLeads = previous.map((lead) =>
+          lead.id === leadId ? { ...lead, ...updatedLead } : lead,
+        );
+        return nextLeads;
+      });
+      setServerSummary(computeSummaryFromLeads(nextLeads));
       return updatedLead;
     },
     [],
@@ -386,6 +530,71 @@ const LeadsPage = () => {
       setHighlightedLeadId(null);
     }
   }, [highlightedLeadId, selectedLeadId]);
+
+  const leadSummary = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const lead of leads) {
+      counts.set(lead.status, (counts.get(lead.status) ?? 0) + 1);
+    }
+
+    if (serverSummary) {
+      for (const item of serverSummary.byStatus) {
+        const current = counts.get(item.status) ?? 0;
+        counts.set(item.status, Math.max(current, item.count));
+      }
+    }
+
+    const total = serverSummary
+      ? Math.max(serverSummary.total, leads.length)
+      : leads.length;
+
+    let lastUpdatedAt: Date | null = null;
+    for (const lead of leads) {
+      const updatedAt = new Date(lead.updatedAt);
+      if (!Number.isNaN(updatedAt.getTime())) {
+        if (!lastUpdatedAt || updatedAt > lastUpdatedAt) {
+          lastUpdatedAt = updatedAt;
+        }
+      }
+    }
+
+    const availableValues = new Set(
+      availableStatuses.map((status) => status.value),
+    );
+
+    const baseCards = availableStatuses.map((status) => {
+      const meta = getStatusMeta(status.value);
+      const accent =
+        statusCardAccents[status.value as LeadStatus] ?? defaultStatusAccent;
+      return {
+        status: status.value,
+        label: meta.label,
+        description: meta.description,
+        count: counts.get(status.value) ?? 0,
+        accent,
+      };
+    });
+
+    const extraCards = Array.from(counts.entries())
+      .filter(([status]) => !availableValues.has(status))
+      .map(([status, count]) => {
+        const meta = getStatusMeta(status);
+        return {
+          status,
+          label: meta.label,
+          description: meta.description,
+          count,
+          accent: statusCardAccents[status as LeadStatus] ?? defaultStatusAccent,
+        };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label, "es"));
+
+    return {
+      total,
+      cards: [...baseCards, ...extraCards],
+      lastUpdatedAt,
+    };
+  }, [availableStatuses, leads, serverSummary]);
 
   const hasActiveFilters = Boolean(
     statusFilter !== "all" || searchTerm.trim().length > 0,
@@ -615,6 +824,122 @@ const LeadsPage = () => {
           </div>
         }
       />
+
+      <section>
+        {loading ? (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            {Array.from({ length: Math.max(availableStatuses.length + 1, 3) }).map(
+              (_, index) => (
+                <Skeleton
+                  key={`summary-skeleton-${index}`}
+                  className="h-[196px] w-full rounded-2xl"
+                />
+              ),
+            )}
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm md:col-span-2 xl:col-span-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gray-500">
+                Panorama general
+              </p>
+              <div className="mt-3 flex flex-wrap items-baseline gap-3">
+                <span className="text-4xl font-semibold text-gray-900">
+                  {leadSummary.total}
+                </span>
+                <span className="text-sm text-gray-500">leads registrados</span>
+              </div>
+              {leadSummary.lastUpdatedAt ? (
+                <p className="mt-4 text-xs text-gray-500">
+                  Última actualización: {" "}
+                  {dateFormatter.format(leadSummary.lastUpdatedAt)}
+                </p>
+              ) : (
+                <p className="mt-4 text-xs text-gray-500">
+                  Aún no registraste leads.
+                </p>
+              )}
+              <p className="mt-3 text-sm text-gray-600">
+                Gestioná el estado de cada oportunidad y coordiná el seguimiento con tu equipo comercial.
+              </p>
+            </div>
+            {leadSummary.cards.map((card) => {
+              const percentage =
+                leadSummary.total > 0
+                  ? Math.round((card.count / leadSummary.total) * 100)
+                  : 0;
+              return (
+                <div
+                  key={card.status}
+                  className={cn(
+                    "rounded-2xl border p-5 shadow-sm transition",
+                    card.accent.container,
+                  )}
+                >
+                  <p
+                    className={cn(
+                      "text-xs font-semibold uppercase tracking-[0.28em]",
+                      card.accent.label,
+                    )}
+                  >
+                    {card.label}
+                  </p>
+                  <div className="mt-3 flex flex-wrap items-baseline gap-2">
+                    <span
+                      className={cn(
+                        "text-3xl font-semibold",
+                        card.accent.value,
+                      )}
+                    >
+                      {card.count}
+                    </span>
+                    <span className={cn("text-sm", card.accent.muted)}>leads</span>
+                  </div>
+                  {leadSummary.total > 0 ? (
+                    <p
+                      className={cn(
+                        "mt-2 text-xs font-medium",
+                        card.accent.label,
+                      )}
+                    >
+                      {percentage}% del total
+                    </p>
+                  ) : (
+                    <p className={cn("mt-2 text-xs", card.accent.muted)}>
+                      Aún sin registros
+                    </p>
+                  )}
+                  <div
+                    className={cn(
+                      "mt-3 h-2 w-full overflow-hidden rounded-full",
+                      card.accent.track,
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "h-full rounded-full transition-all",
+                        card.accent.progress,
+                      )}
+                      style={{ width: `${leadSummary.total > 0 ? percentage : 0}%` }}
+                      aria-hidden
+                    />
+                  </div>
+                  {card.description ? (
+                    <p
+                      className={cn(
+                        "mt-3 text-xs leading-relaxed",
+                        card.accent.muted,
+                      )}
+                    >
+                      {card.description}
+                    </p>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
         <div className="grid gap-4 md:grid-cols-[2fr,1fr,auto] md:items-center">
