@@ -20,6 +20,16 @@ import {
 import prisma from "@/lib/prisma";
 import type { SendMessageResult } from "@/lib/meta";
 
+export class FlowSendMessageError extends Error {
+  status?: number;
+
+  constructor(message: string, status?: number) {
+    super(message);
+    this.name = "FlowSendMessageError";
+    this.status = status;
+  }
+}
+
 // Infer types from Zod schemas
 type TriggerData = z.infer<typeof TriggerDataSchema>;
 type MessageData = z.infer<typeof MessageDataSchema>;
@@ -558,9 +568,14 @@ export async function executeFlow(
               session.contact.phone,
               sendResult?.error ?? "",
             );
-          } else {
-            recordOutbound("text", { text });
+            const message =
+              sendResult?.error?.trim().length
+                ? sendResult.error
+                : "Failed to send WhatsApp text message";
+            throw new FlowSendMessageError(message, sendResult?.status);
           }
+
+          recordOutbound("text", { text });
           break;
         }
 
@@ -583,9 +598,14 @@ export async function executeFlow(
               session.contact.phone,
               sendResult?.error ?? "",
             );
-          } else {
-            recordOutbound("options", { text, options });
+            const message =
+              sendResult?.error?.trim().length
+                ? sendResult.error
+                : "Failed to send WhatsApp options message";
+            throw new FlowSendMessageError(message, sendResult?.status);
           }
+
+          recordOutbound("options", { text, options });
           await updateSession({ status: "Paused", context });
           return; // wait for user input
         }
@@ -667,9 +687,14 @@ export async function executeFlow(
               session.contact.phone,
               sendResult?.error ?? "",
             );
-          } else {
-            recordOutbound("media", mediaPayload);
+            const message =
+              sendResult?.error?.trim().length
+                ? sendResult.error
+                : "Failed to send WhatsApp media message";
+            throw new FlowSendMessageError(message, sendResult?.status);
           }
+
+          recordOutbound("media", mediaPayload);
           break;
         }
 
@@ -731,5 +756,6 @@ export async function executeFlow(
   } catch (err) {
     console.error("Flow execution error:", err);
     await updateSession({ status: "Errored", context });
+    throw err;
   }
 }
