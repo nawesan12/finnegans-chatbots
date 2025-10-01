@@ -49,17 +49,35 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const statusFilter = searchParams.get("status")?.trim();
 
-    const leads = await prisma.lead.findMany({
-      where:
-        statusFilter && leadStatuses.some((status) => status.value === statusFilter)
-          ? { status: statusFilter }
-          : undefined,
-      orderBy: { createdAt: "desc" },
-    });
+    const whereClause =
+      statusFilter && leadStatuses.some((status) => status.value === statusFilter)
+        ? { status: statusFilter }
+        : undefined;
+
+    const [leads, groupedCounts] = await prisma.$transaction([
+      prisma.lead.findMany({
+        where: whereClause,
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.lead.groupBy({
+        by: ["status"],
+        where: whereClause,
+        _count: { _all: true },
+      }),
+    ]);
+
+    const totalLeads = groupedCounts.reduce((total, group) => total + group._count._all, 0);
 
     return NextResponse.json({
       leads,
       statuses: leadStatuses,
+      summary: {
+        total: totalLeads,
+        byStatus: groupedCounts.map((group) => ({
+          status: group.status,
+          count: group._count._all,
+        })),
+      },
     });
   } catch (error) {
     console.error("Failed to fetch leads", error);
