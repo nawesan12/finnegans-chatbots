@@ -21,11 +21,12 @@ export async function GET(request: Request) {
         flows: [],
         contacts: [],
         broadcasts: [],
+        leads: [],
       },
     });
   }
 
-  const [flows, contacts, broadcasts] = await Promise.all([
+  const [flows, contacts, broadcasts, leads] = await Promise.all([
     prisma.flow.findMany({
       where: {
         userId: auth.userId,
@@ -79,6 +80,26 @@ export async function GET(request: Request) {
       orderBy: { updatedAt: "desc" },
       take: MAX_RESULTS_PER_SECTION,
     }),
+    prisma.lead.findMany({
+      where: {
+        OR: [
+          { name: { contains: query, mode: "insensitive" } },
+          { email: { contains: query, mode: "insensitive" } },
+          { company: { contains: query, mode: "insensitive" } },
+          { message: { contains: query, mode: "insensitive" } },
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        company: true,
+        status: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+      take: MAX_RESULTS_PER_SECTION,
+    }),
   ]);
 
   return NextResponse.json({
@@ -87,6 +108,7 @@ export async function GET(request: Request) {
       flows,
       contacts,
       broadcasts,
+      leads,
     },
   });
 }

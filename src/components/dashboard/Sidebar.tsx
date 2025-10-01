@@ -11,6 +11,7 @@ import {
   CircleHelp,
   Megaphone,
   MessageSquare,
+  NotebookPen,
   Settings,
   Users,
   ChevronLeft,
@@ -262,6 +263,13 @@ const Sidebar = ({
             href: "/dashboard/broadcasts",
             description: "Programaciones y campañas",
             badge: { label: "Nuevo", variant: "outline" },
+          },
+          {
+            id: "leads",
+            icon: NotebookPen,
+            label: "Leads",
+            href: "/dashboard/leads",
+            description: "Seguimiento de oportunidades",
           },
           {
             id: "logs",
