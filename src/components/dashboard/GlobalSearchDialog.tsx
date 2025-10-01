@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { authenticatedFetch } from "@/lib/api-client";
 import { leadStatuses } from "@/lib/leads";
+import { cn } from "@/lib/utils";
 
 interface SearchResultItem {
   id: string;
@@ -77,7 +79,7 @@ const SECTION_CONFIG: SectionConfigMap = {
     icon: Workflow,
     emptyState: "No encontramos flujos que coincidan todavía.",
     toItem: (flow: SearchResponse["results"]["flows"][number]): SearchResultItem => ({
-      id: flow.id,
+      id: `flow-${flow.id}`,
       href: `/dashboard/flows/${flow.id}`,
       title: flow.name,
       subtitle: flow.trigger ? `Trigger: ${flow.trigger}` : "Sin trigger configurado",
@@ -89,7 +91,7 @@ const SECTION_CONFIG: SectionConfigMap = {
     icon: Users,
     emptyState: "Aún no hay contactos que coincidan.",
     toItem: (contact: SearchResponse["results"]["contacts"][number]): SearchResultItem => ({
-      id: contact.id,
+      id: `contact-${contact.id}`,
       href: `/dashboard/contacts/${contact.id}`,
       title: contact.name ? contact.name : contact.phone,
       subtitle: contact.name ? contact.phone : "Sin nombre registrado",
@@ -100,7 +102,7 @@ const SECTION_CONFIG: SectionConfigMap = {
     icon: Megaphone,
     emptyState: "No hay campañas que coincidan con tu búsqueda.",
     toItem: (broadcast: SearchResponse["results"]["broadcasts"][number]): SearchResultItem => ({
-      id: broadcast.id,
+      id: `broadcast-${broadcast.id}`,
       href: `/dashboard/broadcasts?highlight=${broadcast.id}`,
       title: broadcast.title ?? "Campaña sin título",
       subtitle: `${broadcast.totalRecipients} destinatario${broadcast.totalRecipients === 1 ? "" : "s"}`,
@@ -117,7 +119,7 @@ const SECTION_CONFIG: SectionConfigMap = {
         lead.status;
 
       return {
-        id: lead.id,
+        id: `lead-${lead.id}`,
         href: `/dashboard/leads?highlight=${lead.id}`,
         title: lead.name || lead.email,
         subtitle: lead.company ?? lead.email,
@@ -168,6 +170,7 @@ const GlobalSearchDialog = ({
   const [isSearching, setIsSearching] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [results, setResults] = useState<SearchResponse["results"] | null>(null);
+  const [activeItemId, setActiveItemId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -175,6 +178,7 @@ const GlobalSearchDialog = ({
       setDebouncedQuery("");
       setResults(null);
       setErrorMessage(null);
+      setActiveItemId(null);
       return;
     }
 
@@ -277,6 +281,74 @@ const GlobalSearchDialog = ({
     ];
   }, [results]);
 
+  const interactiveItems = useMemo(() => {
+    if (isSearching) {
+      return [];
+    }
+
+    if (!hasTypedQuery) {
+      return QUICK_LINKS;
+    }
+
+    if (!sections) {
+      return [];
+    }
+
+    return sections.flatMap((section) => section.items);
+  }, [hasTypedQuery, isSearching, sections]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    if (interactiveItems.length === 0) {
+      setActiveItemId(null);
+      return;
+    }
+
+    setActiveItemId((previous) => {
+      if (previous && interactiveItems.some((item) => item.id === previous)) {
+        return previous;
+      }
+      return interactiveItems[0].id;
+    });
+  }, [interactiveItems, open]);
+
+  const activeItem = useMemo(
+    () => interactiveItems.find((item) => item.id === activeItemId) ?? null,
+    [activeItemId, interactiveItems],
+  );
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      if (interactiveItems.length === 0) {
+        return;
+      }
+
+      event.preventDefault();
+      const direction = event.key === "ArrowDown" ? 1 : -1;
+      const currentIndex = activeItem
+        ? interactiveItems.findIndex((item) => item.id === activeItem.id)
+        : -1;
+      const nextIndex =
+        currentIndex === -1
+          ? direction === 1
+            ? 0
+            : interactiveItems.length - 1
+          : (currentIndex + direction + interactiveItems.length) %
+            interactiveItems.length;
+
+      setActiveItemId(interactiveItems[nextIndex].id);
+      return;
+    }
+
+    if (event.key === "Enter" && activeItem) {
+      event.preventDefault();
+      handleNavigate(activeItem.href);
+    }
+  };
+
   const handleNavigate = (href: string) => {
     onOpenChange(false);
     router.push(href);
@@ -292,6 +364,7 @@ const GlobalSearchDialog = ({
               ref={inputRef}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={handleKeyDown}
               placeholder="Busca flujos, contactos, leads o campañas (⌘K)"
               className="h-12 rounded-xl border-[#04102D]/15 bg-white pl-11 text-sm text-[#04102D]"
             />
@@ -317,7 +390,13 @@ const GlobalSearchDialog = ({
                     key={item.id}
                     type="button"
                     onClick={() => handleNavigate(item.href)}
-                    className="rounded-xl border border-[#04102D]/10 bg-[#04102D]/5 p-4 text-left transition hover:border-[#4BC3FE]/40 hover:bg-[#4BC3FE]/10"
+                    onMouseEnter={() => setActiveItemId(item.id)}
+                    className={cn(
+                      "rounded-xl border border-[#04102D]/10 bg-[#04102D]/5 p-4 text-left transition hover:border-[#4BC3FE]/40 hover:bg-[#4BC3FE]/10",
+                      activeItemId === item.id &&
+                        "border-[#4BC3FE]/60 bg-[#4BC3FE]/15 shadow-sm",
+                    )}
+                    aria-current={activeItemId === item.id ? "true" : undefined}
                   >
                     <p className="text-sm font-semibold text-[#04102D]">{item.title}</p>
                     <p className="text-xs text-[#04102D]/60">{item.subtitle}</p>
@@ -369,7 +448,13 @@ const GlobalSearchDialog = ({
                             <button
                               type="button"
                               onClick={() => handleNavigate(item.href)}
-                              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-[#4BC3FE]/10"
+                              onMouseEnter={() => setActiveItemId(item.id)}
+                              className={cn(
+                                "flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-[#4BC3FE]/10",
+                                activeItemId === item.id &&
+                                  "bg-[#4BC3FE]/10",
+                              )}
+                              aria-current={activeItemId === item.id ? "true" : undefined}
                             >
                               <div>
                                 <p className="text-sm font-semibold text-[#04102D]">{item.title}</p>
