@@ -17,7 +17,7 @@ const importContactSchema = z.object({
       return trimmed.length ? trimmed : null;
     }),
   phone: z
-    .string({ required_error: "Phone number is required" })
+    .string({ message: "Phone number is required" })
     .min(1, "Phone number is required")
     .transform((value) => value.trim()),
   tags: z
