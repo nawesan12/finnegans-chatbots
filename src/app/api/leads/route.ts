@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { leadFormSchema } from "@/lib/validations/lead";
+import { getAuthPayload } from "@/lib/auth";
+import { leadStatuses } from "@/lib/leads";
 
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 5;
@@ -35,6 +37,37 @@ function registerRequest(key: string) {
     return;
   }
   entry.count += 1;
+}
+
+export async function GET(request: Request) {
+  const auth = getAuthPayload(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const { searchParams } = new URL(request.url);
+    const statusFilter = searchParams.get("status")?.trim();
+
+    const leads = await prisma.lead.findMany({
+      where:
+        statusFilter && leadStatuses.some((status) => status.value === statusFilter)
+          ? { status: statusFilter }
+          : undefined,
+      orderBy: { createdAt: "desc" },
+    });
+
+    return NextResponse.json({
+      leads,
+      statuses: leadStatuses,
+    });
+  } catch (error) {
+    console.error("Failed to fetch leads", error);
+    return NextResponse.json(
+      { error: "No pudimos obtener los leads." },
+      { status: 500 },
+    );
+  }
 }
 
 export async function POST(request: Request) {

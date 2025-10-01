@@ -154,6 +154,7 @@ model Lead {
   phone     String?
   message   String
   status    String   @default("new")
+  notes     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

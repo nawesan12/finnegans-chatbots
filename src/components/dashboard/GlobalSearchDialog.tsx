@@ -7,9 +7,18 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { ArrowUpRight, Loader2, Search, Users, Workflow, Megaphone } from "lucide-react";
+import {
+  ArrowUpRight,
+  Loader2,
+  Megaphone,
+  NotebookPen,
+  Search,
+  Users,
+  Workflow,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { authenticatedFetch } from "@/lib/api-client";
+import { leadStatuses } from "@/lib/leads";
 
 interface SearchResultItem {
   id: string;
@@ -41,6 +50,14 @@ interface SearchResponse {
       status: string;
       totalRecipients: number;
       updatedAt: string;
+    }>;
+    leads: Array<{
+      id: string;
+      name: string;
+      email: string;
+      company: string | null;
+      status: string;
+      createdAt: string;
     }>;
   };
 }
@@ -90,6 +107,24 @@ const SECTION_CONFIG: SectionConfigMap = {
       meta: broadcast.status,
     }),
   },
+  leads: {
+    label: "Leads",
+    icon: NotebookPen,
+    emptyState: "No encontramos leads que coincidan todavía.",
+    toItem: (lead: SearchResponse["results"]["leads"][number]): SearchResultItem => {
+      const statusLabel =
+        leadStatuses.find((status) => status.value === lead.status)?.label ??
+        lead.status;
+
+      return {
+        id: lead.id,
+        href: `/dashboard/leads?highlight=${lead.id}`,
+        title: lead.name || lead.email,
+        subtitle: lead.company ?? lead.email,
+        meta: statusLabel,
+      };
+    },
+  },
 };
 
 const QUICK_LINKS: SearchResultItem[] = [
@@ -110,6 +145,12 @@ const QUICK_LINKS: SearchResultItem[] = [
     href: "/dashboard/broadcasts",
     title: "Campañas masivas",
     subtitle: "Envía mensajes programados y plantillas",
+  },
+  {
+    id: "quick-leads",
+    href: "/dashboard/leads",
+    title: "Ver leads",
+    subtitle: "Revisa y asigna oportunidades entrantes",
   },
 ];
 
@@ -228,6 +269,11 @@ const GlobalSearchDialog = ({
         config: SECTION_CONFIG.broadcasts,
         items: results.broadcasts.map(SECTION_CONFIG.broadcasts.toItem),
       },
+      {
+        key: "leads" as const,
+        config: SECTION_CONFIG.leads,
+        items: results.leads.map(SECTION_CONFIG.leads.toItem),
+      },
     ];
   }, [results]);
 
@@ -246,7 +292,7 @@ const GlobalSearchDialog = ({
               ref={inputRef}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Busca flujos, contactos o campañas (⌘K)"
+              placeholder="Busca flujos, contactos, leads o campañas (⌘K)"
               className="h-12 rounded-xl border-[#04102D]/15 bg-white pl-11 text-sm text-[#04102D]"
             />
             {isSearching ? (
