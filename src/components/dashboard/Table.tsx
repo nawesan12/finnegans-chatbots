@@ -31,6 +31,10 @@ type TableProps<T> = {
   emptyState?: TableEmptyState;
   getRowKey?: (row: T, index: number) => string | number;
   className?: string;
+  getRowProps?: (
+    row: T,
+    index: number,
+  ) => React.HTMLAttributes<HTMLTableRowElement>;
 };
 
 const alignmentClassNames: Record<Alignment, string> = {
@@ -45,6 +49,7 @@ function Table<T extends Record<PropertyKey, unknown>>({
   emptyState,
   getRowKey,
   className,
+  getRowProps,
 }: TableProps<T>) {
   if (!data || data.length === 0) {
     const EmptyIcon = emptyState?.icon ?? Inbox;
@@ -99,11 +104,15 @@ function Table<T extends Record<PropertyKey, unknown>>({
           {data.map((row, index) => {
             const rowKey = getRowKey?.(row, index) ??
               ((row as { id?: string | number }).id ?? index);
+            const providedRowProps = getRowProps?.(row, index) ?? {};
+            const { className: providedClassName, ...restRowProps } =
+              providedRowProps;
             return (
               <motion.tr
                 key={String(rowKey)}
                 variants={itemVariants}
-                className="hover:bg-gray-50"
+                className={cn("hover:bg-gray-50", providedClassName)}
+                {...restRowProps}
               >
                 {columns.map((column) => {
                   const alignment = alignmentClassNames[column.align ?? "left"];

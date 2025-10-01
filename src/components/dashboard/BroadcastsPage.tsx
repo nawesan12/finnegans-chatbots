@@ -45,7 +45,8 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { cn } from "@/lib/utils";
 
 interface ContactTag {
   tag: { id: string; name: string };
@@ -156,6 +157,7 @@ const BroadcastsPage = () => {
   const hasHydrated = useAuthStore((state) => state.hasHydrated);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const [contacts, setContacts] = useState<ContactItem[]>([]);
   const [broadcasts, setBroadcasts] = useState<BroadcastItem[]>([]);
   const [loadingContacts, setLoadingContacts] = useState(false);
@@ -175,6 +177,9 @@ const BroadcastsPage = () => {
   const [selectedFlowId, setSelectedFlowId] = useState<string>("");
   const [previewCopied, setPreviewCopied] = useState(false);
   const composerRef = useRef<HTMLDivElement | null>(null);
+  const [highlightedBroadcastId, setHighlightedBroadcastId] = useState<
+    string | null
+  >(null);
 
   const messageTooLong = message.length > MESSAGE_CHARACTER_LIMIT;
 
@@ -298,6 +303,21 @@ const BroadcastsPage = () => {
   ]);
 
   useEffect(() => {
+    const highlight = searchParams.get("highlight");
+    if (!highlight) {
+      return;
+    }
+
+    setHighlightedBroadcastId(highlight);
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("highlight");
+    const nextQuery = params.toString();
+    const nextUrl = nextQuery ? `${pathname}?${nextQuery}` : pathname;
+    router.replace(nextUrl, { scroll: false });
+  }, [pathname, router, searchParams]);
+
+  useEffect(() => {
     if (!flows.length) {
       setSelectedFlowId("");
       return;
@@ -319,6 +339,51 @@ const BroadcastsPage = () => {
       return flows[0]?.id ?? "";
     });
   }, [flows, searchParams]);
+
+  useEffect(() => {
+    if (!highlightedBroadcastId) {
+      return;
+    }
+
+    const match = broadcasts.find(
+      (broadcast) => broadcast.id === highlightedBroadcastId,
+    );
+
+    if (!match) {
+      return;
+    }
+
+    setSelectedBroadcastId(highlightedBroadcastId);
+
+    const frame = window.requestAnimationFrame(() => {
+      const element = document.querySelector<HTMLElement>(
+        `[data-broadcast-row="${highlightedBroadcastId}"]`,
+      );
+      element?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+
+    const timeout = window.setTimeout(() => {
+      setHighlightedBroadcastId(null);
+    }, 5000);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timeout);
+    };
+  }, [broadcasts, highlightedBroadcastId]);
+
+  useEffect(() => {
+    if (!highlightedBroadcastId) {
+      return;
+    }
+
+    if (
+      selectedBroadcastId &&
+      selectedBroadcastId !== highlightedBroadcastId
+    ) {
+      setHighlightedBroadcastId(null);
+    }
+  }, [highlightedBroadcastId, selectedBroadcastId]);
 
   useEffect(() => {
     if (!previewCopied) return;
@@ -1425,6 +1490,18 @@ const BroadcastsPage = () => {
                     Crear campaña ahora
                   </Button>
                 ),
+              }}
+              getRowProps={(broadcast) => {
+                const isHighlighted = highlightedBroadcastId === broadcast.id;
+                return {
+                  "data-broadcast-row": broadcast.id,
+                  className: cn(
+                    "focus:outline-none",
+                    isHighlighted &&
+                      "bg-[#e6f6fe] hover:bg-[#dff0fb] ring-2 ring-[#4bc3fe]/60",
+                  ),
+                  tabIndex: isHighlighted ? -1 : undefined,
+                };
               }}
             />
           </div>
