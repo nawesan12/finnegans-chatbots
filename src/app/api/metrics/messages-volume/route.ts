@@ -7,6 +7,7 @@ import {
   normalizeMultiValue,
   resolveDateRange,
 } from "@/lib/dashboard/filters";
+import { isSentLogStatus } from "@/lib/dashboard/statuses";
 
 type ChartPoint = {
   date: string;
@@ -19,8 +20,6 @@ type FiltersResponse = {
   channels: string[];
   statuses: string[];
 };
-
-const SENT_STATUSES = new Set(["Completed", "Sent", "Delivered", "Success"]);
 
 function createDateKey(date: Date): string {
   const normalized = new Date(date);
@@ -58,7 +57,7 @@ function groupLogsByDate(logs: { createdAt: Date; status: string }[]): Record<st
       };
     }
 
-    if (SENT_STATUSES.has(log.status)) {
+    if (isSentLogStatus(log.status)) {
       buckets[key].sent += 1;
     } else {
       buckets[key].received += 1;

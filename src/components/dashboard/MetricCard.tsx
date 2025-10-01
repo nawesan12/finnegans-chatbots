@@ -11,7 +11,7 @@ const MetricCard = ({
 }: {
   title: string;
   value: string | number;
-  change?: string;
+  change?: React.ReactNode;
   icon: React.FC<React.SVGProps<SVGSVGElement>>;
 }) => (
   <motion.div
@@ -21,7 +21,7 @@ const MetricCard = ({
     <div>
       <p className="text-sm font-medium text-gray-500">{title}</p>
       <p className="text-3xl font-bold text-gray-800 mt-1">{value}</p>
-      {change && <p className="text-xs text-gray-400 mt-2">{change}</p>}
+      {change ? <p className="text-xs text-gray-400 mt-2">{change}</p> : null}
     </div>
     <div className="bg-indigo-100 p-3 rounded-full">
       <Icon className="h-6 w-6 text-indigo-600" />
