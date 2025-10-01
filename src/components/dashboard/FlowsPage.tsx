@@ -100,21 +100,45 @@ const FlowsPage = () => {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const updateOpenParam = useCallback(
-    (value: string | null) => {
+  const replaceQuery = useCallback(
+    (updates: Record<string, string | null | undefined>) => {
       if (!pathname) return;
-      const params = new URLSearchParams(searchParams.toString());
-      if (value) {
-        params.set("open", value);
-      } else {
-        params.delete("open");
+      const current = searchParams.toString();
+      const params = new URLSearchParams(current);
+      let changed = false;
+
+      Object.entries(updates).forEach(([key, value]) => {
+        if (value === null || value === undefined || value === "") {
+          if (params.has(key)) {
+            params.delete(key);
+            changed = true;
+          }
+          return;
+        }
+
+        if (params.get(key) !== value) {
+          params.set(key, value);
+          changed = true;
+        }
+      });
+
+      if (!changed) {
+        return;
       }
+
       const query = params.toString();
       router.replace(query ? `${pathname}?${query}` : pathname, {
         scroll: false,
       });
     },
     [pathname, router, searchParams],
+  );
+
+  const updateOpenParam = useCallback(
+    (value: string | null) => {
+      replaceQuery({ open: value ?? null });
+    },
+    [replaceQuery],
   );
 
   const openFlowForEditing = useCallback(
@@ -434,12 +458,51 @@ const FlowsPage = () => {
     });
   }, [flows, statusFilter, searchTerm]);
 
-  const hasActiveFilters =
-    statusFilter !== "all" || Boolean(searchTerm.trim());
+  const handleStatusFilterChange = useCallback(
+    (value: StatusFilter) => {
+      setStatusFilter(value);
+      replaceQuery({ status: value === "all" ? null : value });
+    },
+    [replaceQuery],
+  );
+
+  const handleSearchTermChange = useCallback(
+    (value: string) => {
+      setSearchTerm(value);
+      const normalized = value.trim();
+      replaceQuery({ q: normalized.length ? normalized : null });
+    },
+    [replaceQuery],
+  );
+
+  const handleResetFilters = useCallback(() => {
+    setStatusFilter("all");
+    setSearchTerm("");
+    replaceQuery({ status: null, q: null });
+  }, [replaceQuery]);
 
   const handleCreateNewFlow = () => {
     startNewFlow();
   };
+
+  const hasActiveFilters =
+    statusFilter !== "all" || Boolean(searchTerm.trim());
+
+  useEffect(() => {
+    const statusParam = searchParams.get("status");
+    const normalizedStatus = statusFilters.some(
+      (status) => status.value === statusParam,
+    )
+      ? (statusParam as StatusFilter)
+      : "all";
+
+    setStatusFilter((prev) =>
+      prev === normalizedStatus ? prev : normalizedStatus,
+    );
+
+    const qParam = searchParams.get("q") ?? "";
+    setSearchTerm((prev) => (prev === qParam ? prev : qParam));
+  }, [searchParams]);
 
   const handleSaveFlow = useCallback(
     async (definitionOverride?: FlowData) => {
@@ -987,17 +1050,29 @@ const FlowsPage = () => {
                         statusFilter === status.value ? "default" : "outline"
                       }
                       size="sm"
-                      onClick={() => setStatusFilter(status.value)}
+                      onClick={() => handleStatusFilterChange(status.value)}
                     >
                       {status.label}
                     </Button>
                   ))}
+                  {hasActiveFilters ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleResetFilters}
+                    >
+                      Limpiar filtros
+                    </Button>
+                  ) : null}
                 </div>
                 <div className="relative w-full max-w-sm">
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                   <Input
                     value={searchTerm}
-                    onChange={(event) => setSearchTerm(event.target.value)}
+                    onChange={(event) =>
+                      handleSearchTermChange(event.target.value)
+                    }
                     placeholder="Buscar por nombre, palabra clave o número"
                     className="pl-9"
                   />
@@ -1019,7 +1094,24 @@ const FlowsPage = () => {
                   description: hasActiveFilters
                     ? "Prueba con otros filtros o restablece la búsqueda para ver todos tus flujos."
                     : "Diseña tu primer flujo para automatizar respuestas y continuar las conversaciones de tus campañas.",
-                  action: (
+                  action: hasActiveFilters ? (
+                    <>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleResetFilters}
+                      >
+                        Limpiar filtros
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={handleCreateNewFlow}
+                        className="bg-[#8694ff] text-white hover:bg-indigo-700"
+                      >
+                        <Plus className="mr-2 h-4 w-4" /> Crear flujo
+                      </Button>
+                    </>
+                  ) : (
                     <Button
                       type="button"
                       onClick={handleCreateNewFlow}
