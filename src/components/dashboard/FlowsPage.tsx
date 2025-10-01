@@ -92,13 +92,39 @@ const FlowsPage = () => {
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [duplicatingFlowId, setDuplicatingFlowId] = useState<string | null>(null);
+  const [duplicatingFlowId, setDuplicatingFlowId] = useState<string | null>(
+    null,
+  );
   const [deletingFlowId, setDeletingFlowId] = useState<string | null>(null);
 
   const flowBuilderRef = useRef<FlowBuilderHandle>(null);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  const fetchFlows = useCallback(async () => {
+    if (!user?.id || !token) {
+      setFlows([]);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await authenticatedFetch(`/api/flows`);
+      if (!response.ok) {
+        throw new Error("No se pudieron obtener los flujos");
+      }
+      const data: FlowWithCounts[] = await response.json();
+      setFlows(data);
+    } catch (error) {
+      toast.error(
+        (error as Error)?.message ?? "Error al cargar los flujos disponibles",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [token, user?.id]);
 
   const replaceQuery = useCallback(
     (updates: Record<string, string | null | undefined>) => {
@@ -212,10 +238,7 @@ const FlowsPage = () => {
       return;
     }
 
-    const fallbackCopy = window.prompt(
-      "Copia el enlace manualmente",
-      shareUrl,
-    );
+    const fallbackCopy = window.prompt("Copia el enlace manualmente", shareUrl);
     if (fallbackCopy !== null) {
       toast.message("Enlace disponible para copiar manualmente");
     }
@@ -256,7 +279,8 @@ const FlowsPage = () => {
       } catch (error) {
         console.error("Error duplicating flow:", error);
         toast.error(
-          (error as Error)?.message ?? "Ocurrió un problema al duplicar el flujo",
+          (error as Error)?.message ??
+            "Ocurrió un problema al duplicar el flujo",
         );
       } finally {
         setDuplicatingFlowId(null);
@@ -311,30 +335,6 @@ const FlowsPage = () => {
     },
     [editingFlow?.id, fetchFlows, handleCloseEditing, token],
   );
-
-  const fetchFlows = useCallback(async () => {
-    if (!user?.id || !token) {
-      setFlows([]);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const response = await authenticatedFetch(`/api/flows`);
-      if (!response.ok) {
-        throw new Error("No se pudieron obtener los flujos");
-      }
-      const data: FlowWithCounts[] = await response.json();
-      setFlows(data);
-    } catch (error) {
-      toast.error(
-        (error as Error)?.message ?? "Error al cargar los flujos disponibles",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [token, user?.id]);
 
   useEffect(() => {
     if (!hasHydrated) {
@@ -485,8 +485,7 @@ const FlowsPage = () => {
     startNewFlow();
   };
 
-  const hasActiveFilters =
-    statusFilter !== "all" || Boolean(searchTerm.trim());
+  const hasActiveFilters = statusFilter !== "all" || Boolean(searchTerm.trim());
 
   useEffect(() => {
     const statusParam = searchParams.get("status");
@@ -718,9 +717,7 @@ const FlowsPage = () => {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem
-                  onSelect={() => openFlowForEditing(row)}
-                >
+                <DropdownMenuItem onSelect={() => openFlowForEditing(row)}>
                   <Pencil className="mr-2 h-4 w-4" />
                   Abrir en el editor
                 </DropdownMenuItem>
@@ -737,9 +734,7 @@ const FlowsPage = () => {
                   )}
                   Duplicar flujo
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  onSelect={() => handleCopyShareLink(row)}
-                >
+                <DropdownMenuItem onSelect={() => handleCopyShareLink(row)}>
                   <LinkIcon className="mr-2 h-4 w-4" />
                   Copiar enlace de edición
                 </DropdownMenuItem>
@@ -957,9 +952,7 @@ const FlowsPage = () => {
                   type="button"
                   onClick={() => void handleSaveFlow()}
                   className="bg-[#4bc3fe] text-white hover:bg-indigo-700"
-                  disabled={
-                    isSaving || !editingFlow?.name?.trim()?.length
-                  }
+                  disabled={isSaving || !editingFlow?.name?.trim()?.length}
                 >
                   {isSaving ? (
                     <span className="flex items-center gap-2 text-sm font-medium">

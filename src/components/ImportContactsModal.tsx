@@ -180,8 +180,8 @@ const parseCsvFile = async (file: File): Promise<ParsedContactsResult> => {
 
     seenPhones.add(normalizedPhone);
 
-    const nameValue = nameIndex >= 0 ? cells[nameIndex]?.trim() ?? "" : "";
-    const tagsValue = tagsIndex >= 0 ? cells[tagsIndex] ?? "" : "";
+    const nameValue = nameIndex >= 0 ? (cells[nameIndex]?.trim() ?? "") : "";
+    const tagsValue = tagsIndex >= 0 ? (cells[tagsIndex] ?? "") : "";
 
     contacts.push({
       name: nameValue.length ? nameValue : null,
@@ -205,8 +205,10 @@ const parseJsonFile = async (file: File): Promise<ParsedContactsResult> => {
 
   const entries: unknown[] | null = Array.isArray(payload)
     ? payload
-    : typeof payload === "object" && payload !== null && Array.isArray((payload as { contacts?: unknown }).contacts)
-      ? ((payload as { contacts: unknown[] }).contacts)
+    : typeof payload === "object" &&
+        payload !== null &&
+        Array.isArray((payload as { contacts?: unknown }).contacts)
+      ? (payload as { contacts: unknown[] }).contacts
       : null;
 
   if (!entries) {
@@ -232,7 +234,8 @@ const parseJsonFile = async (file: File): Promise<ParsedContactsResult> => {
       tags?: unknown;
     };
 
-    const phone = typeof candidate.phone === "string" ? candidate.phone.trim() : "";
+    const phone =
+      typeof candidate.phone === "string" ? candidate.phone.trim() : "";
 
     if (!phone) {
       skippedWithoutPhone += 1;
@@ -428,7 +431,7 @@ const ImportContactsModal = ({ isOpen, onClose }: ImportContactsModalProps) => {
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
           onClick={handleClose}
         >
-        <motion.div
+          <motion.div //@ts-expect-error bla
             variants={modalContentVariants}
             initial="hidden"
             animate="visible"
@@ -455,9 +458,7 @@ const ImportContactsModal = ({ isOpen, onClose }: ImportContactsModalProps) => {
               <div
                 {...getRootProps()}
                 className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                  isBusy
-                    ? "cursor-not-allowed opacity-60"
-                    : "cursor-pointer"
+                  isBusy ? "cursor-not-allowed opacity-60" : "cursor-pointer"
                 } ${
                   isDragActive
                     ? "border-indigo-600 bg-indigo-50"
@@ -522,34 +523,46 @@ const ImportContactsModal = ({ isOpen, onClose }: ImportContactsModalProps) => {
                   </p>
                   <ul className="space-y-1">
                     <li>
-                      <span className="font-medium text-gray-900">Total procesado:</span>{" "}
+                      <span className="font-medium text-gray-900">
+                        Total procesado:
+                      </span>{" "}
                       {summary.total}
                     </li>
                     <li>
-                      <span className="font-medium text-gray-900">Importados correctamente:</span>{" "}
+                      <span className="font-medium text-gray-900">
+                        Importados correctamente:
+                      </span>{" "}
                       {summary.imported}
                     </li>
                     {summary.skippedWithoutPhone > 0 && (
                       <li>
-                        <span className="font-medium text-gray-900">Filas sin teléfono:</span>{" "}
+                        <span className="font-medium text-gray-900">
+                          Filas sin teléfono:
+                        </span>{" "}
                         {summary.skippedWithoutPhone}
                       </li>
                     )}
                     {summary.duplicates.inFile.length > 0 && (
                       <li>
-                        <span className="font-medium text-gray-900">Duplicados en el archivo:</span>{" "}
+                        <span className="font-medium text-gray-900">
+                          Duplicados en el archivo:
+                        </span>{" "}
                         {summary.duplicates.inFile.join(", ")}
                       </li>
                     )}
                     {summary.duplicates.existing.length > 0 && (
                       <li>
-                        <span className="font-medium text-gray-900">Duplicados ya existentes:</span>{" "}
+                        <span className="font-medium text-gray-900">
+                          Duplicados ya existentes:
+                        </span>{" "}
                         {summary.duplicates.existing.join(", ")}
                       </li>
                     )}
                     {summary.failures.length > 0 && (
                       <li>
-                        <span className="font-medium text-gray-900">Errores:</span>{" "}
+                        <span className="font-medium text-gray-900">
+                          Errores:
+                        </span>{" "}
                         {summary.failures
                           .map((failure) => failure.phone)
                           .join(", ")}
@@ -587,7 +600,9 @@ const ImportContactsModal = ({ isOpen, onClose }: ImportContactsModalProps) => {
                     <Loader2 className="h-4 w-4 animate-spin" /> Importando
                   </>
                 )}
-                {uploadStatus === "success" && <CheckCircle className="h-5 w-5" />}
+                {uploadStatus === "success" && (
+                  <CheckCircle className="h-5 w-5" />
+                )}
                 {uploadStatus === "error" && !isBusy && "Reintentar"}
               </button>
             </div>
