@@ -39,7 +39,8 @@ const navigationItems = [
   { href: "#soluciones", label: "Soluciones" },
   { href: "#equipo", label: "Equipo" },
   { href: "#implementacion", label: "Implementación" },
-  { href: "#contacto", label: "Recursos" },
+  { href: "#recursos", label: "Recursos" },
+  { href: "#contacto", label: "Contacto" },
 ];
 
 const capabilityItems = [
@@ -87,6 +88,48 @@ const teamHighlights = [
       "Equipo disponible 24/7 para incidentes críticos y monitoreo proactivo.",
     stat: "99%",
     statLabel: "satisfacción NPS",
+  },
+];
+
+const resourceCards = [
+  {
+    title: "Guía para conectar WhatsApp Cloud",
+    description:
+      "Checklist técnico y pasos de gobierno para vincular Finnegans con Meta de forma segura.",
+    href: "https://finnegans.com/recursos/whatsapp-cloud",
+    linkLabel: "Leer guía",
+  },
+  {
+    title: "Playbook de automatización",
+    description:
+      "Casos de uso reales para ventas, soporte y cobranzas con métricas de impacto.",
+    href: "https://finnegans.com/recursos/playbook-automatizacion",
+    linkLabel: "Descargar playbook",
+  },
+  {
+    title: "Webinar on-demand",
+    description:
+      "Demostración de la plataforma y mejores prácticas para equipos regionales.",
+    href: "https://finnegans.com/eventos/webinar-chatbots",
+    linkLabel: "Ver webinar",
+  },
+];
+
+const faqItems = [
+  {
+    question: "¿Cuánto tarda una implementación típica?",
+    answer:
+      "Los casos de uso prioritarios se despliegan en ciclos de 3 a 5 semanas, incluyendo entrenamiento y pruebas con tus equipos.",
+  },
+  {
+    question: "¿Qué requerimientos técnicos necesito?",
+    answer:
+      "Con una cuenta verificada en Meta, acceso a tu CRM y credenciales básicas podemos comenzar. Nuestro equipo se encarga del resto.",
+  },
+  {
+    question: "¿Puedo migrar mis flujos actuales?",
+    answer:
+      "Sí. Importamos plantillas, conectores y configuraciones existentes y los adaptamos a los estándares de Finnegans Chatbots.",
   },
 ];
 
@@ -432,44 +475,146 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="contacto" className="mx-auto w-full max-w-6xl px-6">
-          <div className="flex flex-col items-center gap-10 rounded-3xl bg-[#04102D] px-10 py-16 text-center text-white">
-            <div className="space-y-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/70">
-                Confianza corporativa
+        <section id="recursos" className="bg-[#04102D]/5 py-16">
+          <div className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 lg:flex-row lg:items-start">
+            <div className="max-w-xl space-y-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#04102D]/60">
+                Recursos
               </p>
-              <h2 className="text-3xl font-semibold leading-tight sm:text-4xl">
-                Organizaciones líderes gestionan su voz digital con Finnegans.
+              <h2 className="text-3xl font-semibold leading-tight text-[#04102D]">
+                Capacita a tus equipos y acelera la adopción de Finnegans.
               </h2>
-              <p className="text-lg text-white/75">
-                Sumate a la red de empresas que priorizan la seguridad, el
-                compliance y la calidad en cada interacción con clientes.
+              <p className="text-lg text-[#04102D]/70">
+                Documentación, plantillas y sesiones bajo demanda diseñadas para que tu operación converse con clientes en días, no en meses.
               </p>
             </div>
-            <div className="flex flex-wrap items-center justify-center gap-6 text-sm font-semibold text-white/80">
-              {trustLogos.map((logo) => (
-                <span
-                  key={logo}
-                  className="rounded-full border border-white/20 px-5 py-2"
+            <div className="grid flex-1 gap-6 sm:grid-cols-2">
+              {resourceCards.map((card) => (
+                <div
+                  key={card.title}
+                  className="flex h-full flex-col justify-between gap-4 rounded-3xl border border-[#04102D]/10 bg-white p-6 shadow-sm"
                 >
-                  {logo}
-                </span>
+                  <div className="space-y-3">
+                    <p className="text-lg font-semibold text-[#04102D]">{card.title}</p>
+                    <p className="text-sm text-[#04102D]/70">{card.description}</p>
+                  </div>
+                  <Button
+                    asChild
+                    variant="ghost"
+                    className="justify-start border border-transparent px-0 text-sm font-semibold text-[#4BC3FE] hover:bg-[#4BC3FE]/10"
+                  >
+                    <a href={card.href} target="_blank" rel="noreferrer">
+                      {card.linkLabel}
+                      <ArrowRight className="ml-2 inline h-4 w-4" />
+                    </a>
+                  </Button>
+                </div>
               ))}
             </div>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Button
-                asChild
-                className="h-12 rounded-full bg-[#4BC3FE] px-8 text-base font-semibold text-[#04102D] hover:bg-[#3EB6F1]"
-              >
-                <Link href="/register">Agendar reunión</Link>
-              </Button>
-              <Button
-                asChild
-                variant="ghost"
-                className="h-12 rounded-full border border-white/20 bg-transparent px-8 text-base font-semibold text-white hover:border-white/40 hover:bg-white/10"
-              >
-                <Link href="/login">Explorar dashboard</Link>
-              </Button>
+          </div>
+        </section>
+
+        <section className="mx-auto w-full max-w-6xl px-6">
+          <div className="grid gap-10 rounded-3xl border border-[#04102D]/10 bg-white p-10 shadow-sm lg:grid-cols-[1.2fr,0.8fr]">
+            <div className="space-y-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#04102D]/60">
+                Preguntas frecuentes
+              </p>
+              <h2 className="text-3xl font-semibold leading-tight text-[#04102D]">
+                Todo lo necesario para iniciar con confianza.
+              </h2>
+              <div className="space-y-4">
+                {faqItems.map((item) => (
+                  <div key={item.question} className="space-y-2 rounded-2xl border border-[#04102D]/10 bg-[#04102D]/5 p-5">
+                    <p className="text-base font-semibold text-[#04102D]">{item.question}</p>
+                    <p className="text-sm text-[#04102D]/70">{item.answer}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-6 rounded-3xl border border-[#04102D]/10 bg-[#04102D] p-8 text-white">
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/70">Confianza corporativa</p>
+                <h3 className="text-2xl font-semibold leading-snug">
+                  Organizaciones líderes gestionan su voz digital con Finnegans.
+                </h3>
+                <p className="text-sm text-white/75">
+                  Sumate a la red de empresas que priorizan la seguridad, el compliance y la calidad en cada interacción con clientes.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3 text-xs font-semibold uppercase tracking-[0.28em] text-white/70">
+                {trustLogos.map((logo) => (
+                  <span key={logo} className="rounded-full border border-white/20 px-4 py-2 text-white/80">
+                    {logo}
+                  </span>
+                ))}
+              </div>
+              <div className="space-y-4 rounded-2xl bg-white/5 p-6">
+                <p className="text-sm font-semibold text-white">Contactá a nuestro equipo</p>
+                <div className="space-y-2 text-sm text-white/70">
+                  <p>📞 +54 11 5263-7700</p>
+                  <p>✉️ <a href="mailto:hello@finnegans.com" className="underline decoration-white/40 underline-offset-4">hello@finnegans.com</a></p>
+                  <p>🕒 Lunes a viernes, 9 a 18 h (ART)</p>
+                </div>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <Button
+                    asChild
+                    className="h-11 flex-1 rounded-full bg-[#4BC3FE] px-6 text-sm font-semibold text-[#04102D] hover:bg-[#3EB6F1]"
+                  >
+                    <Link href="/register">Agendar reunión</Link>
+                  </Button>
+                  <Button
+                    asChild
+                    variant="ghost"
+                    className="h-11 flex-1 rounded-full border border-white/30 bg-transparent px-6 text-sm font-semibold text-white hover:border-white/60 hover:bg-white/10"
+                  >
+                    <Link href="/login">Explorar dashboard</Link>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section id="contacto" className="mx-auto w-full max-w-6xl px-6">
+          <div className="mt-12 rounded-3xl border border-[#04102D]/10 bg-white p-10 shadow-sm">
+            <div className="grid gap-8 lg:grid-cols-[0.8fr,1.2fr] lg:items-center">
+              <div className="space-y-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#04102D]/60">
+                  Próximos pasos
+                </p>
+                <h2 className="text-3xl font-semibold leading-tight text-[#04102D]">
+                  Coordinemos una sesión personalizada para tu operación.
+                </h2>
+                <p className="text-lg text-[#04102D]/70">
+                  Nuestro equipo prepara un roadmap a medida con integraciones, responsables y métricas de éxito claras.
+                </p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-3 rounded-2xl border border-[#04102D]/10 bg-[#04102D]/5 p-6">
+                  <p className="text-sm font-semibold text-[#04102D]">1. Agenda</p>
+                  <p className="text-sm text-[#04102D]/70">
+                    Elegí día y horario para un workshop exploratorio junto a tus líderes.
+                  </p>
+                </div>
+                <div className="space-y-3 rounded-2xl border border-[#04102D]/10 bg-[#04102D]/5 p-6">
+                  <p className="text-sm font-semibold text-[#04102D]">2. Diseño</p>
+                  <p className="text-sm text-[#04102D]/70">
+                    Definimos procesos, fuentes de datos y responsabilidades de despliegue.
+                  </p>
+                </div>
+                <div className="space-y-3 rounded-2xl border border-[#04102D]/10 bg-[#04102D]/5 p-6">
+                  <p className="text-sm font-semibold text-[#04102D]">3. Lanzamiento</p>
+                  <p className="text-sm text-[#04102D]/70">
+                    Activamos flujos piloto y medimos resultados para iterar rápidamente.
+                  </p>
+                </div>
+                <div className="space-y-3 rounded-2xl border border-[#04102D]/10 bg-[#04102D]/5 p-6">
+                  <p className="text-sm font-semibold text-[#04102D]">4. Escala</p>
+                  <p className="text-sm text-[#04102D]/70">
+                    Extendemos la solución a nuevas unidades de negocio con gobierno continuo.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </section>
