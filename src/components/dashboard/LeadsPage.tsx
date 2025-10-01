@@ -6,7 +6,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { Loader2, NotebookPen, RefreshCw } from "lucide-react";
+import { Download, Loader2, NotebookPen, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import PageHeader from "@/components/dashboard/PageHeader";
@@ -118,6 +118,7 @@ const LeadsPage = () => {
   const [updatingStatusIds, setUpdatingStatusIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const [isExporting, setIsExporting] = useState(false);
 
   const dateFormatter = useMemo(
     () =>
@@ -317,6 +318,67 @@ const LeadsPage = () => {
     statusFilter !== "all" || searchTerm.trim().length > 0,
   );
 
+  const handleExport = useCallback(() => {
+    if (filteredLeads.length === 0) {
+      toast.info("No hay leads para exportar con los filtros actuales.");
+      return;
+    }
+
+    setIsExporting(true);
+
+    try {
+      const headers = [
+        "Nombre",
+        "Correo",
+        "Empresa",
+        "Teléfono",
+        "Estado",
+        "Mensaje",
+        "Notas",
+        "Recibido",
+        "Actualizado",
+      ];
+
+      const sanitize = (value: string) =>
+        value.replace(/\r?\n|\r/g, " ").replace(/"/g, '""');
+
+      const rows = filteredLeads.map((lead) => [
+        lead.name,
+        lead.email,
+        lead.company ?? "",
+        lead.phone ?? "",
+        getStatusMeta(lead.status).label,
+        lead.message,
+        lead.notes ?? "",
+        dateFormatter.format(new Date(lead.createdAt)),
+        dateFormatter.format(new Date(lead.updatedAt)),
+      ]);
+
+      const csvContent = [headers, ...rows]
+        .map((row) => row.map((cell) => `"${sanitize(cell)}"`).join(","))
+        .join("\r\n");
+
+      const blob = new Blob(["\ufeff" + csvContent], {
+        type: "text/csv;charset=utf-8;",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const timestamp = new Date().toISOString().split("T")[0];
+      link.href = url;
+      link.download = `leads-${timestamp}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success("Exportamos tus leads en CSV.");
+    } catch (error) {
+      console.error("Failed to export leads", error);
+      toast.error("No pudimos exportar los leads. Intenta nuevamente.");
+    } finally {
+      setIsExporting(false);
+    }
+  }, [dateFormatter, filteredLeads]);
+
   const columns = useMemo<TableColumn<LeadRecord>[]>(
     () => [
       {
@@ -465,9 +527,19 @@ const LeadsPage = () => {
         title="Leads"
         description="Centraliza las solicitudes entrantes de la web y define el próximo paso para cada oportunidad."
         actions={
-          <Button variant="outline" size="sm" onClick={() => void fetchLeads()}>
-            <RefreshCw className="mr-2 h-4 w-4" /> Actualizar
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExport}
+              disabled={isExporting}
+            >
+              <Download className="mr-2 h-4 w-4" /> Exportar CSV
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => void fetchLeads()}>
+              <RefreshCw className="mr-2 h-4 w-4" /> Actualizar
+            </Button>
+          </div>
         }
       />
 
