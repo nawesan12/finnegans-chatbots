@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { ContactForm } from "@/components/forms/contact-form";
 import {
   ArrowRight,
   Building2,
@@ -577,44 +578,47 @@ export default function Home() {
         </section>
         <section id="contacto" className="mx-auto w-full max-w-6xl px-6">
           <div className="mt-12 rounded-3xl border border-[#04102D]/10 bg-white p-10 shadow-sm">
-            <div className="grid gap-8 lg:grid-cols-[0.8fr,1.2fr] lg:items-center">
-              <div className="space-y-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#04102D]/60">
-                  Próximos pasos
-                </p>
-                <h2 className="text-3xl font-semibold leading-tight text-[#04102D]">
-                  Coordinemos una sesión personalizada para tu operación.
-                </h2>
-                <p className="text-lg text-[#04102D]/70">
-                  Nuestro equipo prepara un roadmap a medida con integraciones, responsables y métricas de éxito claras.
-                </p>
+            <div className="grid gap-10 lg:grid-cols-[1.05fr,0.95fr] lg:items-start">
+              <div className="space-y-8">
+                <div className="space-y-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#04102D]/60">
+                    Próximos pasos
+                  </p>
+                  <h2 className="text-3xl font-semibold leading-tight text-[#04102D]">
+                    Coordinemos una sesión personalizada para tu operación.
+                  </h2>
+                  <p className="text-lg text-[#04102D]/70">
+                    Nuestro equipo prepara un roadmap a medida con integraciones, responsables y métricas de éxito claras.
+                  </p>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-3 rounded-2xl border border-[#04102D]/10 bg-[#04102D]/5 p-6">
+                    <p className="text-sm font-semibold text-[#04102D]">1. Agenda</p>
+                    <p className="text-sm text-[#04102D]/70">
+                      Elegí día y horario para un workshop exploratorio junto a tus líderes.
+                    </p>
+                  </div>
+                  <div className="space-y-3 rounded-2xl border border-[#04102D]/10 bg-[#04102D]/5 p-6">
+                    <p className="text-sm font-semibold text-[#04102D]">2. Diseño</p>
+                    <p className="text-sm text-[#04102D]/70">
+                      Definimos procesos, fuentes de datos y responsabilidades de despliegue.
+                    </p>
+                  </div>
+                  <div className="space-y-3 rounded-2xl border border-[#04102D]/10 bg-[#04102D]/5 p-6">
+                    <p className="text-sm font-semibold text-[#04102D]">3. Lanzamiento</p>
+                    <p className="text-sm text-[#04102D]/70">
+                      Activamos flujos piloto y medimos resultados para iterar rápidamente.
+                    </p>
+                  </div>
+                  <div className="space-y-3 rounded-2xl border border-[#04102D]/10 bg-[#04102D]/5 p-6">
+                    <p className="text-sm font-semibold text-[#04102D]">4. Escala</p>
+                    <p className="text-sm text-[#04102D]/70">
+                      Extendemos la solución a nuevas unidades de negocio con gobierno continuo.
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-3 rounded-2xl border border-[#04102D]/10 bg-[#04102D]/5 p-6">
-                  <p className="text-sm font-semibold text-[#04102D]">1. Agenda</p>
-                  <p className="text-sm text-[#04102D]/70">
-                    Elegí día y horario para un workshop exploratorio junto a tus líderes.
-                  </p>
-                </div>
-                <div className="space-y-3 rounded-2xl border border-[#04102D]/10 bg-[#04102D]/5 p-6">
-                  <p className="text-sm font-semibold text-[#04102D]">2. Diseño</p>
-                  <p className="text-sm text-[#04102D]/70">
-                    Definimos procesos, fuentes de datos y responsabilidades de despliegue.
-                  </p>
-                </div>
-                <div className="space-y-3 rounded-2xl border border-[#04102D]/10 bg-[#04102D]/5 p-6">
-                  <p className="text-sm font-semibold text-[#04102D]">3. Lanzamiento</p>
-                  <p className="text-sm text-[#04102D]/70">
-                    Activamos flujos piloto y medimos resultados para iterar rápidamente.
-                  </p>
-                </div>
-                <div className="space-y-3 rounded-2xl border border-[#04102D]/10 bg-[#04102D]/5 p-6">
-                  <p className="text-sm font-semibold text-[#04102D]">4. Escala</p>
-                  <p className="text-sm text-[#04102D]/70">
-                    Extendemos la solución a nuevas unidades de negocio con gobierno continuo.
-                  </p>
-                </div>
-              </div>
+              <ContactForm />
             </div>
           </div>
         </section>

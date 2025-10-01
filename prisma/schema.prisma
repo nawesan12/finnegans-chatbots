@@ -21,8 +21,8 @@ model User {
   metaAccessToken   String?
   metaPhoneNumberId String?
 
-  contacts Contact[]
-  flows    Flow[]
+  contacts   Contact[]
+  flows      Flow[]
   broadcasts Broadcast[]
 }
 
@@ -37,9 +37,9 @@ model Contact {
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
-  tags     TagsOnContacts[]
-  logs     Log[]
-  sessions Session[]
+  tags                TagsOnContacts[]
+  logs                Log[]
+  sessions            Session[]
   broadcastRecipients BroadcastRecipient[]
 }
 
@@ -73,8 +73,8 @@ model Flow {
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
-  logs     Log[]
-  sessions Session[]
+  logs       Log[]
+  sessions   Session[]
   broadcasts Broadcast[]
 }
 
@@ -121,27 +121,39 @@ model Broadcast {
   updatedAt       DateTime @updatedAt
 
   userId String
-  user   User @relation(fields: [userId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
 
   flowId String?
-  flow   Flow?  @relation(fields: [flowId], references: [id], onDelete: SetNull)
+  flow   Flow?   @relation(fields: [flowId], references: [id], onDelete: SetNull)
 
   recipients BroadcastRecipient[]
 }
 
 model BroadcastRecipient {
-  id              String   @id @default(cuid())
-  status          String   @default("Pending")
+  id              String    @id @default(cuid())
+  status          String    @default("Pending")
   error           String?
-  messageId       String?  @unique
+  messageId       String?   @unique
   conversationId  String?
   statusUpdatedAt DateTime?
   sentAt          DateTime?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime  @default(now())
 
   broadcastId String
   broadcast   Broadcast @relation(fields: [broadcastId], references: [id])
 
   contactId String
   contact   Contact @relation(fields: [contactId], references: [id])
+}
+
+model Lead {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  company   String?
+  phone     String?
+  message   String
+  status    String   @default("new")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
