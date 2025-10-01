@@ -42,6 +42,8 @@ export async function POST(request: Request) {
     const name = typeof body?.name === "string" ? body.name.trim() : "";
     const phone = typeof body?.phone === "string" ? body.phone.trim() : "";
     const tags = Array.isArray(body?.tags) ? body.tags : [];
+    const rawNotes =
+      typeof body?.notes === "string" ? body.notes.trim() : "";
 
     if (!phone) {
       return NextResponse.json(
@@ -78,6 +80,7 @@ export async function POST(request: Request) {
         name: name || null,
         phone,
         user: { connect: { id: auth.userId } },
+        notes: rawNotes ? rawNotes : null,
         tags:
           tagRelations.length > 0
             ? {

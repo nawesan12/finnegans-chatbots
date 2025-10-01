@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { authenticatedFetch } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/store";
@@ -17,6 +18,7 @@ const AddContactModal = ({ open, onOpenChange, userId }: AddContactModalProps) =
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [tags, setTags] = useState("");
+  const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const token = useAuthStore((state) => state.token);
 
@@ -34,12 +36,13 @@ const AddContactModal = ({ open, onOpenChange, userId }: AddContactModalProps) =
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          name,
-          phone,
+          name: name.trim(),
+          phone: phone.trim(),
           userId,
           tags: tags
             ? tags.split(",").map((t) => ({ name: t.trim() }))
             : [],
+          notes,
         }),
       });
       if (!response.ok) {
@@ -49,6 +52,7 @@ const AddContactModal = ({ open, onOpenChange, userId }: AddContactModalProps) =
       setName("");
       setPhone("");
       setTags("");
+      setNotes("");
       onOpenChange(false);
       window.dispatchEvent(new CustomEvent("contacts:updated"));
     } catch (error) {
@@ -84,12 +88,24 @@ const AddContactModal = ({ open, onOpenChange, userId }: AddContactModalProps) =
             <label className="text-sm font-medium">Etiquetas (separadas por comas)</label>
             <Input value={tags} onChange={(e) => setTags(e.target.value)} />
           </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Notas internas</label>
+            <Textarea
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              placeholder="Agrega contexto para tu equipo (opcional)"
+              rows={4}
+            />
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
-          <Button onClick={handleSubmit} disabled={!name || !phone || submitting}>
+          <Button
+            onClick={handleSubmit}
+            disabled={!name.trim() || !phone.trim() || submitting}
+          >
             {submitting ? "Guardando..." : "Guardar"}
           </Button>
         </DialogFooter>

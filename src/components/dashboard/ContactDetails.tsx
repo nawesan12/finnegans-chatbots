@@ -5,9 +5,12 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { containerVariants, itemVariants } from "@/lib/animations";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { authenticatedFetch } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/store";
+import { Loader2 } from "lucide-react";
 
 interface ContactTag {
   tag: {
@@ -22,6 +25,7 @@ interface Contact {
   phone: string;
   createdAt: string;
   updatedAt: string;
+  notes: string | null;
   tags: ContactTag[];
 }
 
@@ -37,6 +41,8 @@ const formatDate = (dateString: string) =>
 const ContactDetails = ({ contactId }: { contactId: string }) => {
   const [contact, setContact] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(true);
+  const [notesDraft, setNotesDraft] = useState("");
+  const [isSavingNotes, setIsSavingNotes] = useState(false);
   const token = useAuthStore((state) => state.token);
   const hasHydrated = useAuthStore((state) => state.hasHydrated);
 
@@ -60,7 +66,7 @@ const ContactDetails = ({ contactId }: { contactId: string }) => {
         if (!response.ok) {
           throw new Error("No se pudo cargar el contacto");
         }
-        const data = await response.json();
+        const data = (await response.json()) as Contact;
         setContact(data);
       } catch (error) {
         toast.error(
@@ -73,6 +79,67 @@ const ContactDetails = ({ contactId }: { contactId: string }) => {
 
     fetchContact();
   }, [contactId, hasHydrated, token]);
+
+  useEffect(() => {
+    if (contact) {
+      setNotesDraft(contact.notes ?? "");
+      return;
+    }
+    setNotesDraft("");
+  }, [contact]);
+
+  const originalNotes = contact?.notes ?? "";
+  const notesChanged = notesDraft !== originalNotes;
+
+  const handleSaveNotes = async () => {
+    if (!contact) {
+      return;
+    }
+
+    if (!token) {
+      toast.error("No se pudo autenticar la sesión actual");
+      return;
+    }
+
+    try {
+      setIsSavingNotes(true);
+      const response = await authenticatedFetch(`/api/contacts/${contact.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ notes: notesDraft }),
+      });
+
+      if (!response.ok) {
+        let message = "No se pudieron guardar las notas";
+        try {
+          const errorData = await response.json();
+          if (typeof errorData?.error === "string") {
+            message = errorData.error;
+          }
+        } catch (error) {
+          console.error("Failed to parse notes error", error);
+        }
+        throw new Error(message);
+      }
+
+      const updatedContact = (await response.json()) as Contact;
+      setContact(updatedContact);
+      setNotesDraft(updatedContact.notes ?? "");
+      toast.success("Notas actualizadas");
+      window.dispatchEvent(new CustomEvent("contacts:updated"));
+    } catch (error) {
+      console.error(error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudieron guardar las notas",
+      );
+    } finally {
+      setIsSavingNotes(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -103,10 +170,16 @@ const ContactDetails = ({ contactId }: { contactId: string }) => {
               </div>
             </div>
           </div>
-          <div className="space-y-3 rounded-lg bg-white p-6 shadow-md">
-            <Skeleton className="h-4 w-40" />
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-3/4" />
+          <div className="space-y-4 rounded-lg bg-white p-6 shadow-md">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-4 w-24" />
+            </div>
+            <Skeleton className="h-24 w-full" />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <Skeleton className="h-4 w-48" />
+              <Skeleton className="h-10 w-32" />
+            </div>
           </div>
         </div>
       </div>
@@ -194,14 +267,50 @@ const ContactDetails = ({ contactId }: { contactId: string }) => {
           variants={itemVariants}
           className="bg-white rounded-lg shadow-md p-6"
         >
-          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">
-            Información adicional
-          </h3>
-          <p className="text-sm text-gray-500">
-            Utiliza esta sección para almacenar notas o información relevante
-            sobre tus contactos. Próximamente podrás editar estos detalles
-            directamente desde aquí.
-          </p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                Notas internas
+              </h3>
+              <p className="mt-1 text-sm text-gray-500">
+                Comparte contexto con tu equipo y mantén un historial centralizado.
+              </p>
+            </div>
+            <span
+              className={`inline-flex h-7 items-center justify-center rounded-full px-3 text-xs font-semibold ${notesChanged ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}
+            >
+              {notesChanged ? "Cambios sin guardar" : "Sin cambios pendientes"}
+            </span>
+          </div>
+          <Textarea
+            value={notesDraft}
+            onChange={(event) => setNotesDraft(event.target.value)}
+            placeholder="Agrega insights, acuerdos o datos relevantes de este contacto."
+            rows={6}
+            className="mt-4"
+            disabled={isSavingNotes}
+          />
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-gray-400">
+              Última actualización {formatDate(contact.updatedAt)}
+            </p>
+            <Button
+              onClick={() => {
+                void handleSaveNotes();
+              }}
+              disabled={!notesChanged || isSavingNotes}
+              className="sm:w-auto"
+            >
+              {isSavingNotes ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                "Guardar notas"
+              )}
+            </Button>
+          </div>
         </motion.div>
       </motion.div>
     </div>
