@@ -34,6 +34,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { itemVariants } from "@/lib/animations";
+import { cn } from "@/lib/utils";
 
 type HelpArticle = {
   id: string;
@@ -213,6 +214,24 @@ const helpArticles: HelpArticle[] = [
   },
 ];
 
+const helpArticleCategories = Array.from(
+  new Set(helpArticles.map((article) => article.category)),
+);
+
+const indexedHelpArticles = helpArticles.map((article) => ({
+  article,
+  searchText: [
+    article.title,
+    article.description,
+    article.category,
+    ...article.tags,
+    ...article.steps,
+    ...(article.tips ?? []),
+  ]
+    .join(" ")
+    .toLowerCase(),
+}));
+
 const faqs: FaqItem[] = [
   {
     question: "¿Por qué mi webhook devuelve 403 al probarlo manualmente?",
@@ -267,29 +286,74 @@ const supportChannels = [
 
 const HelpCenterPage = () => {
   const [query, setQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
-  const filteredArticles = useMemo(() => {
+  const { filteredArticles, totalMatches, categoryOptions } = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
+    let matchesWithoutCategory = 0;
 
-    if (!normalizedQuery) {
-      return helpArticles;
+    const matchesPerCategory = new Map<string, number>();
+
+    const results = indexedHelpArticles
+      .filter(({ article, searchText }) => {
+        const matchesQuery =
+          !normalizedQuery || searchText.includes(normalizedQuery);
+
+        if (!matchesQuery) {
+          return false;
+        }
+
+        matchesWithoutCategory += 1;
+        matchesPerCategory.set(
+          article.category,
+          (matchesPerCategory.get(article.category) ?? 0) + 1,
+        );
+
+        if (
+          selectedCategory !== "all" &&
+          article.category !== selectedCategory
+        ) {
+          return false;
+        }
+
+        return true;
+      })
+      .map(({ article }) => article);
+
+    const categoryOptions = helpArticleCategories.map((category) => ({
+      category,
+      count: matchesPerCategory.get(category) ?? 0,
+    }));
+
+    return {
+      filteredArticles: results,
+      totalMatches: matchesWithoutCategory,
+      categoryOptions,
+    };
+  }, [query, selectedCategory]);
+
+  const trimmedQuery = query.trim();
+  const hasQuery = trimmedQuery.length > 0;
+  const showingAll = !hasQuery && selectedCategory === "all";
+
+  const resultsSummary = (() => {
+    const total = filteredArticles.length;
+    const pluralized = total === 1 ? "resultado" : "resultados";
+
+    if (showingAll) {
+      return "Accede a tutoriales completos sobre configuración, automatizaciones y operación diaria.";
     }
 
-    return helpArticles.filter((article) => {
-      const haystack = [
-        article.title,
-        article.description,
-        article.category,
-        ...article.tags,
-        ...article.steps,
-        ...(article.tips ?? []),
-      ]
-        .join(" ")
-        .toLowerCase();
+    if (hasQuery && selectedCategory !== "all") {
+      return `Mostrando ${total} ${pluralized} en "${selectedCategory}" para "${trimmedQuery}".`;
+    }
 
-      return haystack.includes(normalizedQuery);
-    });
-  }, [query]);
+    if (hasQuery) {
+      return `Mostrando ${total} ${pluralized} para "${trimmedQuery}".`;
+    }
+
+    return `Mostrando ${total} guía${total === 1 ? "" : "s"} de "${selectedCategory}".`;
+  })();
 
   return (
     <div className="flex flex-col gap-10 pb-12  px-8 md:px-20 py-11">
@@ -339,6 +403,66 @@ const HelpCenterPage = () => {
                   &quot;roles&quot;
                 </span>
               </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategory("all")}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4BC3FE] focus-visible:ring-offset-2",
+                    selectedCategory === "all"
+                      ? "border-[#04102D] bg-[#04102D] text-white shadow-sm"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-[#4BC3FE]/60 hover:text-[#04102D]",
+                  )}
+                  aria-pressed={selectedCategory === "all"}
+                >
+                  Todos
+                  <span
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                      selectedCategory === "all"
+                        ? "bg-white/20 text-white"
+                        : "bg-slate-100 text-slate-600",
+                    )}
+                  >
+                    {totalMatches}
+                  </span>
+                </button>
+                {categoryOptions.map(({ category, count }) => {
+                  const isActive = selectedCategory === category;
+                  const isDisabled = !isActive && count === 0;
+
+                  return (
+                    <button
+                      key={category}
+                      type="button"
+                      onClick={() => setSelectedCategory(category)}
+                      className={cn(
+                        "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4BC3FE] focus-visible:ring-offset-2",
+                        isActive
+                          ? "border-[#04102D] bg-[#04102D] text-white shadow-sm"
+                          : "border-slate-200 bg-white text-slate-600 hover:border-[#4BC3FE]/60 hover:text-[#04102D]",
+                        isDisabled && "cursor-not-allowed opacity-60",
+                      )}
+                      aria-pressed={isActive}
+                      disabled={isDisabled}
+                    >
+                      {category}
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                          isActive
+                            ? "bg-white/20 text-white"
+                            : "bg-slate-100 text-slate-600",
+                        )}
+                      >
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </CardHeader>
           <CardFooter className="flex flex-wrap gap-2 border-t border-slate-100 pt-4">
@@ -436,13 +560,7 @@ const HelpCenterPage = () => {
           <h2 className="text-2xl font-semibold text-slate-900">
             Contenido curado para tu equipo
           </h2>
-          <p className="max-w-3xl text-sm text-slate-600">
-            {filteredArticles.length === helpArticles.length
-              ? "Accede a tutoriales completos sobre configuración, automatizaciones y operación diaria."
-              : `Mostrando ${filteredArticles.length} resultado${
-                  filteredArticles.length === 1 ? "" : "s"
-                } para "${query}".`}
-          </p>
+          <p className="max-w-3xl text-sm text-slate-600">{resultsSummary}</p>
         </div>
         <div className="grid gap-6 xl:grid-cols-2">
           {filteredArticles.length === 0 ? (
@@ -456,15 +574,27 @@ const HelpCenterPage = () => {
                   principales a continuación.
                 </CardDescription>
               </CardHeader>
-              <CardFooter>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setQuery("")}
-                  className="border-slate-200 text-slate-600 hover:text-[#04102D]"
-                >
-                  Limpiar búsqueda
-                </Button>
+              <CardFooter className="flex flex-wrap gap-2">
+                {hasQuery ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setQuery("")}
+                    className="border-slate-200 text-slate-600 hover:text-[#04102D]"
+                  >
+                    Limpiar búsqueda
+                  </Button>
+                ) : null}
+                {selectedCategory !== "all" ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedCategory("all")}
+                    className="border-slate-200 text-slate-600 hover:text-[#04102D]"
+                  >
+                    Quitar categoría
+                  </Button>
+                ) : null}
               </CardFooter>
             </Card>
           ) : (
