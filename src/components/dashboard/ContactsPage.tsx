@@ -52,6 +52,7 @@ export type ContactRow = {
   phone: string;
   updatedAt: string;
   tags?: ContactTagRelation[];
+  notes?: string | null;
 };
 
 const ContactsPage = () => {
@@ -150,8 +151,12 @@ const ContactsPage = () => {
       const tagNames = contact.tags?.map((relation) =>
         relation.tag.name.toLowerCase(),
       );
+      const searchableValues = [name, phone, ...(tagNames ?? [])];
+      if (contact.notes) {
+        searchableValues.push(contact.notes.toLowerCase());
+      }
 
-      return [name, phone, ...(tagNames ?? [])].some((value) =>
+      return searchableValues.some((value) =>
         value.includes(normalizedSearch),
       );
     });
@@ -234,12 +239,19 @@ const ContactsPage = () => {
         key: "name",
         label: "Nombre",
         render: (row: ContactRow) => (
-          <Link
-            href={`/dashboard/contacts/${row.id}`}
-            className="font-medium text-[#8694ff] transition-colors hover:text-indigo-700"
-          >
-            {row.name || "Sin nombre"}
-          </Link>
+          <div className="flex flex-col gap-1">
+            <Link
+              href={`/dashboard/contacts/${row.id}`}
+              className="font-medium text-[#8694ff] transition-colors hover:text-indigo-700"
+            >
+              {row.name || "Sin nombre"}
+            </Link>
+            {row.notes ? (
+              <span className="text-xs font-medium text-amber-600">
+                Notas internas guardadas
+              </span>
+            ) : null}
+          </div>
         ),
       },
       {

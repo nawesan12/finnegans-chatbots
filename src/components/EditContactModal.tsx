@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { authenticatedFetch } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/store";
@@ -28,6 +29,7 @@ const EditContactModal = ({ open, contact, onOpenChange }: EditContactModalProps
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [tags, setTags] = useState("");
+  const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const token = useAuthStore((state) => state.token);
 
@@ -39,6 +41,7 @@ const EditContactModal = ({ open, contact, onOpenChange }: EditContactModalProps
     setPhone(contact?.phone ?? "");
     const tagNames = contact?.tags?.map((relation) => relation.tag.name).join(", ") ?? "";
     setTags(tagNames);
+    setNotes(contact?.notes ?? "");
   }, [contact, open]);
 
   const hasChanges = useMemo(() => {
@@ -49,9 +52,10 @@ const EditContactModal = ({ open, contact, onOpenChange }: EditContactModalProps
     return (
       name !== (contact.name ?? "") ||
       phone !== (contact.phone ?? "") ||
-      tags !== normalizedTags
+      tags !== normalizedTags ||
+      notes !== (contact.notes ?? "")
     );
-  }, [contact, name, phone, tags]);
+  }, [contact, name, notes, phone, tags]);
 
   const handleSubmit = async () => {
     if (!contact) {
@@ -71,11 +75,12 @@ const EditContactModal = ({ open, contact, onOpenChange }: EditContactModalProps
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          name,
-          phone,
+          name: name.trim(),
+          phone: phone.trim(),
           tags: tags
             ? tags.split(",").map((tagName) => ({ name: tagName.trim() })).filter((tag) => tag.name)
             : [],
+          notes,
         }),
       });
 
@@ -129,6 +134,16 @@ const EditContactModal = ({ open, contact, onOpenChange }: EditContactModalProps
               value={tags}
               onChange={(event) => setTags(event.target.value)}
               placeholder="vip, interesados, newsletter"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-contact-notes">Notas internas</Label>
+            <Textarea
+              id="edit-contact-notes"
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              placeholder="Sumá contexto para tus equipos (opcional)"
+              rows={4}
             />
           </div>
         </div>
