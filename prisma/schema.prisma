@@ -16,10 +16,11 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  metaVerifyToken   String?
-  metaAppSecret     String?
-  metaAccessToken   String?
-  metaPhoneNumberId String?
+  metaVerifyToken        String?
+  metaAppSecret          String?
+  metaAccessToken        String?
+  metaPhoneNumberId      String?
+  metaBusinessAccountId  String?
 
   contacts Contact[]
   flows    Flow[]

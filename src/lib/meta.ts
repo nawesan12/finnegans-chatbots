@@ -490,6 +490,43 @@ async function resolveUserForPhoneNumber(phoneNumberId: string) {
   return null;
 }
 
+async function resolveUserForBusinessAccount(businessAccountId: string) {
+  const trimmed = businessAccountId.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const user = await prisma.user.findFirst({
+    where: { metaBusinessAccountId: trimmed },
+  });
+
+  if (user) {
+    return user;
+  }
+
+  const envConfig = getMetaEnvironmentConfig();
+
+  if (
+    envConfig.businessAccountId &&
+    toLcTrim(envConfig.businessAccountId) === toLcTrim(trimmed)
+  ) {
+    const fallbackUser = await prisma.user.findFirst({
+      orderBy: { createdAt: "asc" },
+    });
+
+    if (fallbackUser) {
+      console.warn(
+        "Falling back to the first user for business account ID",
+        trimmed,
+        "based on environment configuration.",
+      );
+      return fallbackUser;
+    }
+  }
+
+  return null;
+}
+
 const LOG_STATUS_MAP: Record<string, string> = {
   Active: "In Progress",
   Paused: "In Progress",
@@ -630,12 +667,31 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
     for (const change of entry.changes ?? []) {
       const val = change?.value;
       const phoneNumberId = val?.metadata?.phone_number_id;
-      if (!phoneNumberId) continue;
+      const businessAccountIdRaw = val?.metadata?.whatsapp_business_account_id;
+      const businessAccountId =
+        typeof businessAccountIdRaw === "string"
+          ? businessAccountIdRaw
+          : null;
+      if (!phoneNumberId && !businessAccountId) continue;
 
       // Resolvemos el “owner” del número
-      const user = await resolveUserForPhoneNumber(phoneNumberId);
+      let user = null as Awaited<
+        ReturnType<typeof resolveUserForPhoneNumber>
+      > | null;
+
+      if (phoneNumberId) {
+        user = await resolveUserForPhoneNumber(phoneNumberId);
+      }
+
+      if (!user && businessAccountId) {
+        user = await resolveUserForBusinessAccount(businessAccountId);
+      }
+
       if (!user) {
-        console.error("User not found for phone number ID:", phoneNumberId);
+        console.error("User not found for provided Meta identifiers:", {
+          phoneNumberId,
+          businessAccountId,
+        });
         continue;
       }
 

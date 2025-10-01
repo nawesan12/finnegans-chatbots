@@ -42,6 +42,7 @@ const EMPTY_SETTINGS = {
   metaAppSecret: "",
   metaAccessToken: "",
   metaPhoneNumberId: "",
+  metaBusinessAccountId: "",
 };
 
 type SettingsState = typeof EMPTY_SETTINGS;
@@ -51,6 +52,7 @@ const normalizeSettings = (input: Partial<SettingsState> | null | undefined) => 
   metaAppSecret: input?.metaAppSecret ?? "",
   metaAccessToken: input?.metaAccessToken ?? "",
   metaPhoneNumberId: input?.metaPhoneNumberId ?? "",
+  metaBusinessAccountId: input?.metaBusinessAccountId ?? "",
 });
 
 const SettingsPage = () => {
@@ -152,8 +154,21 @@ const SettingsPage = () => {
         description: "Identifica el número de WhatsApp que enviará mensajes.",
         isFilled: Boolean(settings.metaPhoneNumberId?.trim()),
       },
+      {
+        key: "metaBusinessAccountId",
+        label: "Business Account ID",
+        description:
+          "Relaciona tu instancia con la cuenta comercial para métricas y validaciones.",
+        isFilled: Boolean(settings.metaBusinessAccountId?.trim()),
+      },
     ],
-    [settings.metaAccessToken, settings.metaAppSecret, settings.metaPhoneNumberId, settings.metaVerifyToken],
+    [
+      settings.metaAccessToken,
+      settings.metaAppSecret,
+      settings.metaBusinessAccountId,
+      settings.metaPhoneNumberId,
+      settings.metaVerifyToken,
+    ],
   );
 
   const completionCount = statusItems.filter((item) => item.isFilled).length;
@@ -491,6 +506,45 @@ const SettingsPage = () => {
                     <p className="text-xs text-gray-500">
                       Identificador único del número de WhatsApp que enviará los
                       mensajes. Puedes consultarlo en el panel de Meta Business.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="metaBusinessAccountId">
+                        Business Account ID
+                      </Label>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          handleCopy(
+                            settings.metaBusinessAccountId,
+                            "Business Account ID",
+                            "metaBusinessAccountId",
+                          )
+                        }
+                      >
+                        <Copy className="size-4" />
+                        {copiedField === "metaBusinessAccountId"
+                          ? "Copiado"
+                          : "Copiar"}
+                      </Button>
+                    </div>
+                    <Input
+                      id="metaBusinessAccountId"
+                      value={settings.metaBusinessAccountId}
+                      onChange={(event) =>
+                        handleChange(
+                          "metaBusinessAccountId",
+                          event.target.value,
+                        )
+                      }
+                      placeholder="ID de la cuenta comercial en Meta"
+                    />
+                    <p className="text-xs text-gray-500">
+                      Ayuda a rastrear métricas de facturación y vincular múltiples
+                      números bajo la misma cuenta comercial.
                     </p>
                   </div>
                 </CardContent>

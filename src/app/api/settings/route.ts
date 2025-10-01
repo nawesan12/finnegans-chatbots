@@ -21,6 +21,7 @@ export async function GET(request: Request) {
       metaAppSecret: true,
       metaAccessToken: true,
       metaPhoneNumberId: true,
+      metaBusinessAccountId: true,
     },
   });
 
@@ -35,6 +36,8 @@ export async function GET(request: Request) {
     metaAppSecret: user.metaAppSecret ?? envConfig.appSecret ?? "",
     metaAccessToken: user.metaAccessToken ?? envConfig.accessToken ?? "",
     metaPhoneNumberId: user.metaPhoneNumberId ?? envConfig.phoneNumberId ?? "",
+    metaBusinessAccountId:
+      user.metaBusinessAccountId ?? envConfig.businessAccountId ?? "",
   });
 }
 
@@ -66,6 +69,10 @@ export async function POST(request: Request) {
     typeof body?.metaPhoneNumberId === "string"
       ? body.metaPhoneNumberId.trim()
       : undefined;
+  const metaBusinessAccountId =
+    typeof body?.metaBusinessAccountId === "string"
+      ? body.metaBusinessAccountId.trim()
+      : undefined;
 
   const updatedUser = await prisma.user.update({
     where: { id: userPayload.userId },
@@ -74,12 +81,14 @@ export async function POST(request: Request) {
       metaAppSecret: metaAppSecret ?? null,
       metaAccessToken: metaAccessToken ?? null,
       metaPhoneNumberId: metaPhoneNumberId ?? null,
+      metaBusinessAccountId: metaBusinessAccountId ?? null,
     },
     select: {
       metaVerifyToken: true,
       metaAppSecret: true,
       metaAccessToken: true,
       metaPhoneNumberId: true,
+      metaBusinessAccountId: true,
     },
   });
 

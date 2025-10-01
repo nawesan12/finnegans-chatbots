@@ -51,6 +51,7 @@ META_BUSINESS_ACCOUNT_ID="waba-id"
    - Que el `META_APP_SECRET` coincida (de lo contrario la firma HMAC fallará y el webhook devolverá 401).
    - Que exista al menos un flujo en estado **Active** con un nodo **Trigger** que coincida con el texto recibido.
    - Los registros del servidor (`Webhook processing error`) para detalles adicionales.
+   - Que hayas cargado el **Business Account ID** en **Dashboard → Settings → WhatsApp Cloud** cuando operas varios números bajo la misma cuenta.
 
 ## 6. Webhook seguro por flujo (opcional)
 

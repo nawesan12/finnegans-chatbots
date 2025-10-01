@@ -22,7 +22,7 @@ META_BUSINESS_ACCOUNT_ID="your-waba-id"
 # - META_BUSINESS_ACCOUNT_ID: ACCOUNT_NUMBER_ID
 ```
 
-The app stores the WhatsApp Business credentials (`metaAppSecret`, `metaAccessToken`, and `metaPhoneNumberId`) per user through the dashboard settings UI. The environment variables above act as a global fallback, which is useful for single-tenant deployments or quick testing without filling the settings UI. If both are provided, the per-user configuration always takes precedence.
+The app stores the WhatsApp Business credentials (`metaAppSecret`, `metaAccessToken`, `metaPhoneNumberId`, and `metaBusinessAccountId`) per user through the dashboard settings UI. The environment variables above act as a global fallback, which is useful for single-tenant deployments or quick testing without filling the settings UI. If both are provided, the per-user configuration always takes precedence.
 
 ## Getting started locally
 
