@@ -62,11 +62,17 @@ export async function GET(request: Request) {
       prisma.lead.groupBy({
         by: ["status"],
         where: whereClause,
+        orderBy: { status: "asc" },
         _count: { _all: true },
       }),
     ]);
 
-    const totalLeads = groupedCounts.reduce((total, group) => total + group._count._all, 0);
+    const totalLeads = groupedCounts.reduce((total, group) => {
+      if (typeof group._count === "object" && group._count) {
+        return total + (group._count._all ?? 0);
+      }
+      return total;
+    }, 0);
 
     return NextResponse.json({
       leads,
@@ -75,7 +81,8 @@ export async function GET(request: Request) {
         total: totalLeads,
         byStatus: groupedCounts.map((group) => ({
           status: group.status,
-          count: group._count._all,
+          count:
+            typeof group._count === "object" && group._count ? group._count._all ?? 0 : 0,
         })),
       },
     });

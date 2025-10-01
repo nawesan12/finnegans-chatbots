@@ -25,16 +25,15 @@ type TableEmptyState = {
   icon?: React.ComponentType<React.SVGProps<SVGSVGElement>>;
 };
 
+type MotionTableRowProps = React.ComponentPropsWithoutRef<typeof motion.tr>;
+
 type TableProps<T> = {
   columns: TableColumn<T>[];
   data: T[];
   emptyState?: TableEmptyState;
   getRowKey?: (row: T, index: number) => string | number;
   className?: string;
-  getRowProps?: (
-    row: T,
-    index: number,
-  ) => React.HTMLAttributes<HTMLTableRowElement>;
+  getRowProps?: (row: T, index: number) => MotionTableRowProps;
 };
 
 const alignmentClassNames: Record<Alignment, string> = {
@@ -104,7 +103,8 @@ function Table<T extends Record<PropertyKey, unknown>>({
           {data.map((row, index) => {
             const rowKey = getRowKey?.(row, index) ??
               ((row as { id?: string | number }).id ?? index);
-            const providedRowProps = getRowProps?.(row, index) ?? {};
+            const providedRowProps =
+              (getRowProps?.(row, index) ?? {}) as MotionTableRowProps;
             const { className: providedClassName, ...restRowProps } =
               providedRowProps;
             return (

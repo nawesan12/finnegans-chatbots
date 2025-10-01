@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getAuthPayload } from "@/lib/auth";
@@ -7,15 +7,15 @@ import { isValidLeadStatus } from "@/lib/leads";
 const MAX_NOTES_LENGTH = 2000;
 
 export async function PATCH(
-  request: Request,
-  { params }: { params: { id: string } },
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> },
 ) {
   const auth = getAuthPayload(request);
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id } = params;
+  const { id } = await context.params;
   if (!id) {
     return NextResponse.json({ error: "Lead ID is required" }, { status: 400 });
   }

@@ -12,12 +12,11 @@ class UnauthorizedError extends Error {
 let redirectScheduled = false;
 
 if (typeof window !== "undefined") {
-  useAuthStore.subscribe(
-    (state) => state.token,
-    () => {
+  useAuthStore.subscribe((state, prevState) => {
+    if (state.token !== prevState.token) {
       redirectScheduled = false;
-    },
-  );
+    }
+  });
 }
 
 function scheduleRedirect() {
