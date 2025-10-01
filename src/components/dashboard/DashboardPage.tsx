@@ -29,9 +29,13 @@ import { useAuthStore } from "@/lib/store";
 
 type DashboardMetrics = {
   totalContacts: number;
+  totalFlows: number;
   activeConversations: number;
   messagesSent: number;
+  messagesReceived: number;
   flowSuccessRate: number;
+  totalSessions: number;
+  completedSessions: number;
 };
 
 type RecentLog = {
@@ -518,34 +522,50 @@ const DashboardPage = () => {
   const metricCards = useMemo(() => {
     const data: DashboardMetrics = metrics ?? {
       totalContacts: 0,
+      totalFlows: 0,
       activeConversations: 0,
       messagesSent: 0,
+      messagesReceived: 0,
       flowSuccessRate: 0,
+      totalSessions: 0,
+      completedSessions: 0,
     };
+
+    const flowsSummary = data.totalFlows
+      ? `${numberFormatter.format(data.totalFlows)} flujos configurados`
+      : "Configura tu primer flujo";
+
+    const sessionsSummary = data.totalSessions
+      ? `${numberFormatter.format(data.totalSessions)} sesiones registradas`
+      : "Sin sesiones registradas";
+
+    const completedSummary = data.completedSessions
+      ? `${numberFormatter.format(data.completedSessions)} completadas`
+      : "Aún sin sesiones completadas";
 
     return [
       {
         title: "Contactos Totales",
         value: numberFormatter.format(data.totalContacts),
-        change: "+5% este mes",
+        change: flowsSummary,
         icon: Users,
       },
       {
         title: "Conversaciones Activas",
         value: numberFormatter.format(data.activeConversations),
-        change: "-2% hoy",
+        change: sessionsSummary,
         icon: MessageSquare,
       },
       {
         title: "Mensajes Enviados",
         value: numberFormatter.format(data.messagesSent),
-        change: "+12% esta semana",
+        change: `Recibidos: ${numberFormatter.format(data.messagesReceived)}`,
         icon: ArrowRight,
       },
       {
         title: "Ratio de Exito",
         value: `${percentageFormatter.format(data.flowSuccessRate)}%`,
-        change: "+1.2% este mes",
+        change: completedSummary,
         icon: Bot,
       },
     ];
