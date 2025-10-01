@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ContactForm } from "@/components/forms/contact-form";
+import { MarketingFooter } from "@/components/marketing/footer";
 import {
   ArrowRight,
   Building2,
@@ -716,6 +717,7 @@ export default function Home() {
           </div>
         </section>
       </main>
+      <MarketingFooter />
     </div>
   );
 }
