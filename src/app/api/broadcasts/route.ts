@@ -4,6 +4,37 @@ import { sendMessage } from "@/lib/meta";
 import prisma from "@/lib/prisma";
 import { getAuthPayload } from "@/lib/auth";
 
+const DEFAULT_CONTACT_NAME_FALLBACK = "Cliente";
+const DEFAULT_FLOW_NAME_FALLBACK = "Flujo activo";
+const DEFAULT_FLOW_KEYWORD_FALLBACK = "palabra clave";
+
+type PlaceholderContext = {
+  contact: { name: string | null; phone: string | null };
+  flow: { name: string | null; trigger: string | null };
+};
+
+function applyBroadcastPlaceholders(
+  template: string,
+  context: PlaceholderContext,
+) {
+  const safeName =
+    context.contact.name?.trim() ||
+    context.contact.phone?.trim() ||
+    DEFAULT_CONTACT_NAME_FALLBACK;
+
+  const replacements: Record<string, string> = {
+    "{{name}}": safeName,
+    "{{phone}}": context.contact.phone ?? "",
+    "{{flow}}": context.flow.name ?? DEFAULT_FLOW_NAME_FALLBACK,
+    "{{keyword}}": context.flow.trigger ?? DEFAULT_FLOW_KEYWORD_FALLBACK,
+  };
+
+  return Object.entries(replacements).reduce((output, [token, value]) => {
+    if (!output.includes(token)) return output;
+    return output.split(token).join(value);
+  }, template);
+}
+
 export async function GET(request: Request) {
   const auth = getAuthPayload(request);
   if (!auth) {
@@ -86,7 +117,7 @@ export async function POST(request: Request) {
 
     const flow = await prisma.flow.findFirst({
       where: { id: flowId, userId: auth.userId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, trigger: true },
     });
 
     if (!flow) {
@@ -232,9 +263,17 @@ export async function POST(request: Request) {
       }
 
       try {
+        const personalizedMessage = applyBroadcastPlaceholders(
+          normalizedMessage,
+          {
+            contact: { name: contact.name, phone: contact.phone },
+            flow,
+          },
+        );
+
         const sendResult = await sendMessage(auth.userId, contact.phone, {
           type: "text",
-          text: normalizedMessage,
+          text: personalizedMessage,
         });
 
         if (sendResult.success) {
