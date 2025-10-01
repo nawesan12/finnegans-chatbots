@@ -34,6 +34,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { leadStatuses, type LeadStatus } from "@/lib/leads";
 import { authenticatedFetch, UnauthorizedError } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/store";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { cn } from "@/lib/utils";
 
 const statusBadgeClasses: Record<LeadStatus, string> = {
   new: "border-sky-200 bg-sky-50 text-sky-800",
@@ -104,6 +106,9 @@ const MAX_NOTES_LENGTH = 2000;
 
 const LeadsPage = () => {
   const hasHydrated = useAuthStore((state) => state.hasHydrated);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
   const [leads, setLeads] = useState<LeadRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -119,6 +124,9 @@ const LeadsPage = () => {
     () => new Set(),
   );
   const [isExporting, setIsExporting] = useState(false);
+  const [highlightedLeadId, setHighlightedLeadId] = useState<string | null>(
+    null,
+  );
 
   const dateFormatter = useMemo(
     () =>
@@ -213,6 +221,21 @@ const LeadsPage = () => {
     }
     void fetchLeads();
   }, [fetchLeads, hasHydrated]);
+
+  useEffect(() => {
+    const highlight = searchParams.get("highlight");
+    if (!highlight) {
+      return;
+    }
+
+    setHighlightedLeadId(highlight);
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("highlight");
+    const nextQuery = params.toString();
+    const nextUrl = nextQuery ? `${pathname}?${nextQuery}` : pathname;
+    router.replace(nextUrl, { scroll: false });
+  }, [pathname, router, searchParams]);
 
   const updateLead = useCallback(
     async (
@@ -313,6 +336,56 @@ const LeadsPage = () => {
       );
     });
   }, [leads, searchTerm, statusFilter]);
+
+  useEffect(() => {
+    if (!highlightedLeadId) {
+      return;
+    }
+
+    if (!leads.some((lead) => lead.id === highlightedLeadId)) {
+      return;
+    }
+
+    const isVisible = filteredLeads.some(
+      (lead) => lead.id === highlightedLeadId,
+    );
+
+    if (!isVisible) {
+      setStatusFilter("all");
+      setSearchTerm("");
+      return;
+    }
+
+    setSelectedLeadId((current) =>
+      current === highlightedLeadId ? current : highlightedLeadId,
+    );
+
+    const frame = window.requestAnimationFrame(() => {
+      const element = document.querySelector<HTMLElement>(
+        `[data-lead-row="${highlightedLeadId}"]`,
+      );
+      element?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+
+    const timeout = window.setTimeout(() => {
+      setHighlightedLeadId(null);
+    }, 5000);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timeout);
+    };
+  }, [filteredLeads, highlightedLeadId, leads]);
+
+  useEffect(() => {
+    if (!highlightedLeadId) {
+      return;
+    }
+
+    if (selectedLeadId && selectedLeadId !== highlightedLeadId) {
+      setHighlightedLeadId(null);
+    }
+  }, [highlightedLeadId, selectedLeadId]);
 
   const hasActiveFilters = Boolean(
     statusFilter !== "all" || searchTerm.trim().length > 0,
@@ -600,6 +673,18 @@ const LeadsPage = () => {
                   Refrescar
                 </Button>
               ),
+            }}
+            getRowProps={(lead) => {
+              const isHighlighted = highlightedLeadId === lead.id;
+              return {
+                "data-lead-row": lead.id,
+                className: cn(
+                  "focus:outline-none",
+                  isHighlighted &&
+                    "bg-[#e6f6fe] hover:bg-[#dff0fb] ring-2 ring-[#4bc3fe]/60",
+                ),
+                tabIndex: isHighlighted ? -1 : undefined,
+              };
             }}
           />
         )}
