@@ -51,9 +51,12 @@ const AddContactModal = ({ open, onOpenChange, userId }: AddContactModalProps) =
       setTags("");
       onOpenChange(false);
       window.dispatchEvent(new CustomEvent("contacts:updated"));
-    } catch (err) {
-      //@ts-expect-error err
-      toast.error(err.message || "Error creating contact");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Error creating contact";
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
