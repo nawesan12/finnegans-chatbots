@@ -256,10 +256,7 @@ const findBestMatchingFlow = (flows: Flow[], context: FlowMatchContext) => {
     if (normalizedTrigger && !isDefaultTrigger) {
       if (keywordCandidates.has(normalizedTrigger)) {
         matchesTrigger = true;
-      } else if (
-        normalizedText &&
-        normalizedText.includes(normalizedTrigger)
-      ) {
+      } else if (normalizedText && normalizedText.includes(normalizedTrigger)) {
         matchesTrigger = true;
       } else if (
         normalizedInteractiveTitle &&
@@ -289,7 +286,10 @@ const findBestMatchingFlow = (flows: Flow[], context: FlowMatchContext) => {
         ? flow.updatedAt.getTime()
         : new Date(flow.updatedAt).getTime();
 
-    if (score > bestScore || (score === bestScore && updatedAt > bestUpdatedAt)) {
+    if (
+      score > bestScore ||
+      (score === bestScore && updatedAt > bestUpdatedAt)
+    ) {
       bestScore = score;
       bestFlow = flow;
       bestUpdatedAt = updatedAt;
@@ -891,11 +891,7 @@ export async function processManualFlowTrigger(
           data: { phone: normalizedPhone },
         });
       } catch (error) {
-        console.error(
-          "Failed to normalize contact phone",
-          contact.id,
-          error,
-        );
+        console.error("Failed to normalize contact phone", contact.id, error);
       }
     }
 
@@ -1028,7 +1024,7 @@ export type SendMessageResult =
       details?: unknown;
     };
 
-const GRAPH_VERSION = "v20.0";
+const GRAPH_VERSION = "v22.0";
 const API_TIMEOUT_MS = 15000;
 
 export async function sendMessage(
