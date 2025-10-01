@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   MessageCircle,
   ShieldCheck,
+  ChevronDown,
 } from "lucide-react";
 
 const featureHighlights = [
@@ -75,6 +76,29 @@ const teamHighlights = [
       "Equipo disponible 24/7 para incidentes críticos y monitoreo proactivo.",
     stat: "99%",
     statLabel: "satisfacción NPS",
+  },
+];
+
+const faqItems = [
+  {
+    question: "¿Cuál es el tiempo promedio de implementación?",
+    answer:
+      "Nuestro equipo despliega los casos de uso prioritarios en ciclos de 4 a 6 semanas, incluyendo integraciones y capacitación.",
+  },
+  {
+    question: "¿Puedo conectar múltiples marcas o unidades de negocio?",
+    answer:
+      "Sí. La plataforma permite aislar flujos, credenciales y reportes por unidad, manteniendo una gobernanza centralizada.",
+  },
+  {
+    question: "¿Cómo se resguarda la seguridad de los datos?",
+    answer:
+      "Contamos con controles RBAC, registros de auditoría y soporte para entornos dedicados que cumplen con normativas corporativas.",
+  },
+  {
+    question: "¿Brindan acompañamiento post-lanzamiento?",
+    answer:
+      "Asignamos consultores que monitorean métricas clave, sugieren mejoras continuas y coordinan sesiones de optimización trimestrales.",
   },
 ];
 
@@ -376,6 +400,38 @@ export default function Home() {
                     </div>
                   ),
                 )}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="faq" className="bg-[#04102D]/5 py-16">
+          <div className="mx-auto w-full max-w-6xl px-6">
+            <div className="grid gap-12 lg:grid-cols-[1fr,1.2fr]">
+              <div className="space-y-6">
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#04102D]/60">
+                  Preguntas frecuentes
+                </p>
+                <h2 className="text-3xl font-semibold leading-tight text-[#04102D]">
+                  Todo lo que necesitás saber para avanzar con Finnegans Chatbots.
+                </h2>
+                <p className="text-lg text-[#04102D]/70">
+                  Respondemos las dudas más comunes de equipos corporativos sobre tiempos, integraciones y soporte continuo.
+                </p>
+              </div>
+              <div className="space-y-4">
+                {faqItems.map((item) => (
+                  <details
+                    key={item.question}
+                    className="group rounded-2xl border border-[#04102D]/10 bg-white p-6 shadow-sm"
+                  >
+                    <summary className="flex cursor-pointer items-center justify-between gap-4 text-left text-base font-semibold text-[#04102D]">
+                      {item.question}
+                      <ChevronDown className="h-5 w-5 flex-shrink-0 text-[#4BC3FE] transition-transform duration-200 group-open:rotate-180" />
+                    </summary>
+                    <p className="pt-4 text-sm text-[#04102D]/70">{item.answer}</p>
+                  </details>
+                ))}
               </div>
             </div>
           </div>
