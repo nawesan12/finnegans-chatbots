@@ -35,6 +35,8 @@ import {
   Lightbulb,
   RefreshCcw,
   ShieldCheck,
+  Loader2,
+  Trash2,
 } from "lucide-react";
 
 const EMPTY_SETTINGS = {
@@ -59,6 +61,7 @@ const SettingsPage = () => {
     useState<SettingsState>(EMPTY_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const token = useAuthStore((state) => state.token);
   const hasHydrated = useAuthStore((state) => state.hasHydrated);
@@ -114,6 +117,42 @@ const SettingsPage = () => {
   const handleReset = () => {
     setSettings(initialSettings);
   };
+
+  const handleClearCredentials = useCallback(async () => {
+    if (!token) {
+      toast.error("No se pudo autenticar la sesión actual");
+      return;
+    }
+
+    try {
+      setIsClearing(true);
+      const response = await authenticatedFetch("/api/settings", {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          "No se pudieron eliminar las credenciales guardadas",
+        );
+      }
+
+      const data = await response.json();
+      const normalized = normalizeSettings(data);
+      setSettings(normalized);
+      setInitialSettings(normalized);
+      setCopiedField(null);
+      toast.success(
+        "Credenciales personales eliminadas. Se aplicarán los valores globales.",
+      );
+    } catch (error) {
+      toast.error(
+        (error as Error)?.message ??
+          "No se pudieron limpiar las credenciales almacenadas",
+      );
+    } finally {
+      setIsClearing(false);
+    }
+  }, [token]);
 
   const isDirty = useMemo(
     () =>
@@ -265,7 +304,7 @@ const SettingsPage = () => {
               type="button"
               variant="outline"
               onClick={() => void fetchSettings()}
-              disabled={loading || isSaving}
+              disabled={loading || isSaving || isClearing}
             >
               <RefreshCcw className="size-4" />
               Recargar datos
@@ -499,13 +538,31 @@ const SettingsPage = () => {
                     type="button"
                     variant="outline"
                     onClick={handleReset}
-                    disabled={!isDirty}
+                    disabled={!isDirty || isSaving || isClearing}
                   >
                     Restablecer
                   </Button>
                   <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={() => void handleClearCredentials()}
+                    disabled={isSaving || isClearing || loading}
+                  >
+                    {isClearing ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin" />
+                        Eliminando credenciales
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="size-4" />
+                        Quitar credenciales guardadas
+                      </>
+                    )}
+                  </Button>
+                  <Button
                     type="submit"
-                    disabled={!canSubmit || isSaving}
+                    disabled={!canSubmit || isSaving || isClearing}
                     className="bg-[#8694ff] text-white hover:bg-indigo-700"
                   >
                     {isSaving ? "Guardando..." : "Guardar cambios"}
