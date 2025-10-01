@@ -6,7 +6,7 @@ import type {
 } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
-import { executeFlow } from "./flow-executor";
+import { executeFlow, FlowSendMessageError } from "./flow-executor";
 
 export type MetaEnvironmentConfig = {
   verifyToken: string | null;
@@ -827,13 +827,16 @@ export async function processManualFlowTrigger(
   options: ManualFlowTriggerOptions,
 ): Promise<ManualFlowTriggerResult> {
   const { flowId } = options;
-  const phone = options.from?.trim();
+  const rawPhone = options.from?.trim() ?? "";
+  const normalizedPhone = normalizePhone(rawPhone);
 
-  if (!phone) {
+  if (!normalizedPhone) {
     return {
       success: false,
       status: 400,
-      error: "Missing contact phone number",
+      error: rawPhone.length
+        ? "Invalid contact phone number"
+        : "Missing contact phone number",
     };
   }
 
@@ -860,28 +863,53 @@ export async function processManualFlowTrigger(
     return { success: false, status: 400, error: "Message text is required" };
   }
 
+  const lookupPhones = [normalizedPhone];
+  if (rawPhone && rawPhone !== normalizedPhone) {
+    lookupPhones.push(rawPhone);
+  }
+
   let contact = await prisma.contact.findFirst({
-    where: { phone, userId: flow.userId },
+    where: {
+      userId: flow.userId,
+      OR: lookupPhones.map((value) => ({ phone: value })),
+    },
   });
 
   if (!contact) {
     contact = await prisma.contact.create({
       data: {
-        phone,
+        phone: normalizedPhone,
         userId: flow.userId,
         ...(options.name ? { name: options.name } : {}),
       },
     });
-  } else if (options.name) {
-    const currentName = contact.name?.trim();
-    if (currentName !== options.name) {
+  } else {
+    if (contact.phone !== normalizedPhone) {
       try {
         contact = await prisma.contact.update({
           where: { id: contact.id },
-          data: { name: options.name },
+          data: { phone: normalizedPhone },
         });
       } catch (error) {
-        console.error("Failed to update contact name", contact.id, error);
+        console.error(
+          "Failed to normalize contact phone",
+          contact.id,
+          error,
+        );
+      }
+    }
+
+    if (options.name) {
+      const currentName = contact.name?.trim();
+      if (currentName !== options.name) {
+        try {
+          contact = await prisma.contact.update({
+            where: { id: contact.id },
+            data: { name: options.name },
+          });
+        } catch (error) {
+          console.error("Failed to update contact name", contact.id, error);
+        }
       }
     }
   }
@@ -962,7 +990,15 @@ export async function processManualFlowTrigger(
     } catch (updateError) {
       console.error("Failed to mark session as errored:", updateError);
     }
-    return { success: false, status: 500, error: "Failed to execute flow" };
+    const statusCode =
+      error instanceof FlowSendMessageError && error.status
+        ? error.status
+        : 500;
+    const errorMessage =
+      error instanceof FlowSendMessageError && error.message
+        ? error.message
+        : "Failed to execute flow";
+    return { success: false, status: statusCode, error: errorMessage };
   } finally {
     try {
       await recordSessionSnapshot(session.id);
@@ -1000,6 +1036,14 @@ export async function sendMessage(
   to: string,
   message: SendMessagePayload,
 ): Promise<SendMessageResult> {
+  const normalizedTo = normalizePhone(to);
+
+  if (!normalizedTo) {
+    const errorMessage = "Invalid destination phone number";
+    console.error(errorMessage, "for user:", userId, "value:", to);
+    return { success: false, status: 400, error: errorMessage };
+  }
+
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { metaAccessToken: true, metaPhoneNumberId: true },
@@ -1029,7 +1073,7 @@ export async function sendMessage(
       body = {
         messaging_product: "whatsapp",
         recipient_type: "individual",
-        to,
+        to: normalizedTo,
         type: "text",
         text: { body: message.text, preview_url: false },
       };
@@ -1046,7 +1090,7 @@ export async function sendMessage(
       body = {
         messaging_product: "whatsapp",
         recipient_type: "individual",
-        to,
+        to: normalizedTo,
         type: mType,
         [mType]: {
           link: message.url,
@@ -1062,7 +1106,7 @@ export async function sendMessage(
       body = {
         messaging_product: "whatsapp",
         recipient_type: "individual",
-        to,
+        to: normalizedTo,
         type: "interactive",
         interactive: {
           type: "button",
