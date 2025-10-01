@@ -50,6 +50,19 @@ const leadStatusMap = new Map(
 
 const DEFAULT_BADGE_CLASS = "border-gray-200 bg-gray-50 text-gray-600";
 
+const searchInputId = "leads-filter-search";
+const statusSelectLabelId = "leads-filter-status";
+const dateFromInputId = "leads-filter-date-from";
+const dateToInputId = "leads-filter-date-to";
+
+type DatePreset = "7d" | "30d" | "90d";
+
+const datePresetOptions: { value: DatePreset; label: string; days: number }[] = [
+  { value: "7d", label: "Últimos 7 días", days: 7 },
+  { value: "30d", label: "Últimos 30 días", days: 30 },
+  { value: "90d", label: "Últimos 90 días", days: 90 },
+];
+
 type StatusAccent = {
   container: string;
   label: string;
@@ -186,6 +199,44 @@ function mergeSummaries(
   };
 }
 
+function parseDateInput(value: string, endOfDay = false) {
+  if (!value) {
+    return null;
+  }
+
+  const [yearStr, monthStr, dayStr] = value.split("-");
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(month) ||
+    !Number.isInteger(day)
+  ) {
+    return null;
+  }
+
+  const date = new Date(
+    year,
+    month - 1,
+    day,
+    endOfDay ? 23 : 0,
+    endOfDay ? 59 : 0,
+    endOfDay ? 59 : 0,
+    endOfDay ? 999 : 0,
+  );
+
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatDateForInput(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function getStatusMeta(status: string) {
   const base = leadStatusMap.get(status as LeadStatus);
   if (base) {
@@ -259,6 +310,9 @@ const LeadsPage = () => {
   const [highlightedLeadId, setHighlightedLeadId] = useState<string | null>(
     null,
   );
+  const [createdFrom, setCreatedFrom] = useState("");
+  const [createdTo, setCreatedTo] = useState("");
+  const [datePreset, setDatePreset] = useState<DatePreset | null>(null);
 
   const dateFormatter = useMemo(
     () =>
@@ -279,6 +333,32 @@ const LeadsPage = () => {
         minute: "2-digit",
       }),
     [],
+  );
+
+  const dateFilter = useMemo(() => {
+    const from = parseDateInput(createdFrom, false);
+    const to = parseDateInput(createdTo, true);
+
+    if (from && to && from > to) {
+      return { from, to, isInvalid: true } as const;
+    }
+
+    return { from, to, isInvalid: false } as const;
+  }, [createdFrom, createdTo]);
+
+  const dateRangeError = dateFilter.isInvalid
+    ? "La fecha inicial no puede ser posterior a la final."
+    : null;
+
+  const hasActiveFilters = useMemo(
+    () =>
+      Boolean(
+        statusFilter !== "all" ||
+          searchTerm.trim().length > 0 ||
+          createdFrom.length > 0 ||
+          createdTo.length > 0,
+      ),
+    [createdFrom, createdTo, searchTerm, statusFilter],
   );
 
   const fetchLeads = useCallback(async () => {
@@ -456,10 +536,26 @@ const LeadsPage = () => {
   }, [selectedLead]);
 
   const filteredLeads = useMemo(() => {
+    if (dateFilter.isInvalid) {
+      return [] as LeadRecord[];
+    }
+
     const normalizedQuery = searchTerm.trim().toLowerCase();
     return leads.filter((lead) => {
       if (statusFilter !== "all" && lead.status !== statusFilter) {
         return false;
+      }
+
+      if (dateFilter.from || dateFilter.to) {
+        const createdAtDate = new Date(lead.createdAt);
+        if (!Number.isNaN(createdAtDate.getTime())) {
+          if (dateFilter.from && createdAtDate < dateFilter.from) {
+            return false;
+          }
+          if (dateFilter.to && createdAtDate > dateFilter.to) {
+            return false;
+          }
+        }
       }
 
       if (!normalizedQuery) {
@@ -479,7 +575,7 @@ const LeadsPage = () => {
         value.toLowerCase().includes(normalizedQuery),
       );
     });
-  }, [leads, searchTerm, statusFilter]);
+  }, [dateFilter, leads, searchTerm, statusFilter]);
 
   useEffect(() => {
     if (!highlightedLeadId) {
@@ -497,6 +593,9 @@ const LeadsPage = () => {
     if (!isVisible) {
       setStatusFilter("all");
       setSearchTerm("");
+      setCreatedFrom("");
+      setCreatedTo("");
+      setDatePreset(null);
       return;
     }
 
@@ -532,24 +631,27 @@ const LeadsPage = () => {
   }, [highlightedLeadId, selectedLeadId]);
 
   const leadSummary = useMemo(() => {
+    const dataset = hasActiveFilters ? filteredLeads : leads;
     const counts = new Map<string, number>();
-    for (const lead of leads) {
+    for (const lead of dataset) {
       counts.set(lead.status, (counts.get(lead.status) ?? 0) + 1);
     }
 
-    if (serverSummary) {
+    if (!hasActiveFilters && serverSummary) {
       for (const item of serverSummary.byStatus) {
         const current = counts.get(item.status) ?? 0;
         counts.set(item.status, Math.max(current, item.count));
       }
     }
 
-    const total = serverSummary
-      ? Math.max(serverSummary.total, leads.length)
-      : leads.length;
+    const total = hasActiveFilters
+      ? dataset.length
+      : serverSummary
+        ? Math.max(serverSummary.total, dataset.length)
+        : dataset.length;
 
     let lastUpdatedAt: Date | null = null;
-    for (const lead of leads) {
+    for (const lead of dataset) {
       const updatedAt = new Date(lead.updatedAt);
       if (!Number.isNaN(updatedAt.getTime())) {
         if (!lastUpdatedAt || updatedAt > lastUpdatedAt) {
@@ -594,11 +696,7 @@ const LeadsPage = () => {
       cards: [...baseCards, ...extraCards],
       lastUpdatedAt,
     };
-  }, [availableStatuses, leads, serverSummary]);
-
-  const hasActiveFilters = Boolean(
-    statusFilter !== "all" || searchTerm.trim().length > 0,
-  );
+  }, [availableStatuses, filteredLeads, hasActiveFilters, leads, serverSummary]);
 
   const handleExport = useCallback(() => {
     if (filteredLeads.length === 0) {
@@ -772,10 +870,43 @@ const LeadsPage = () => {
     [availableStatuses, dateFormatter, handleStatusChange, updatingStatusIds],
   );
 
+  const clearDateFilters = useCallback(() => {
+    setCreatedFrom("");
+    setCreatedTo("");
+    setDatePreset(null);
+  }, []);
+
   const handleClearFilters = () => {
     setSearchTerm("");
     setStatusFilter("all");
+    clearDateFilters();
   };
+
+  const applyDatePreset = useCallback(
+    (preset: DatePreset) => {
+      if (datePreset === preset) {
+        setCreatedFrom("");
+        setCreatedTo("");
+        setDatePreset(null);
+        return;
+      }
+
+      const option = datePresetOptions.find((item) => item.value === preset);
+      if (!option) {
+        return;
+      }
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const start = new Date(today);
+      start.setDate(start.getDate() - (option.days - 1));
+
+      setCreatedFrom(formatDateForInput(start));
+      setCreatedTo(formatDateForInput(today));
+      setDatePreset(preset);
+    },
+    [datePreset],
+  );
 
   const isNotesDirty = useMemo(() => {
     const current = (selectedLead?.notes ?? "").trim();
@@ -943,34 +1074,132 @@ const LeadsPage = () => {
 
       <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
         <div className="grid gap-4 md:grid-cols-[2fr,1fr,auto] md:items-center">
-          <Input
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Buscar por nombre, correo, mensaje o notas"
-            className="h-11"
-          />
-          <Select
-            value={statusFilter}
-            onValueChange={(value) => setStatusFilter(value)}
-          >
-            <SelectTrigger className="h-11 justify-between">
-              <SelectValue placeholder="Todos los estados" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos los estados</SelectItem>
-              {availableStatuses.map((status) => (
-                <SelectItem key={status.value} value={status.value}>
-                  {status.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {hasActiveFilters ? (
-            <Button variant="ghost" onClick={handleClearFilters}>
-              Limpiar filtros
-            </Button>
-          ) : null}
+          <div className="space-y-1">
+            <label
+              className="text-xs font-semibold uppercase tracking-[0.28em] text-gray-500"
+              htmlFor={searchInputId}
+            >
+              Buscar
+            </label>
+            <Input
+              id={searchInputId}
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Buscar por nombre, correo, mensaje o notas"
+              className="h-11"
+            />
+          </div>
+          <div className="space-y-1">
+            <span
+              id={statusSelectLabelId}
+              className="text-xs font-semibold uppercase tracking-[0.28em] text-gray-500"
+            >
+              Estado
+            </span>
+            <Select
+              value={statusFilter}
+              onValueChange={(value) => setStatusFilter(value)}
+            >
+              <SelectTrigger
+                className="h-11 justify-between"
+                aria-labelledby={statusSelectLabelId}
+              >
+                <SelectValue placeholder="Todos los estados" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los estados</SelectItem>
+                {availableStatuses.map((status) => (
+                  <SelectItem key={status.value} value={status.value}>
+                    {status.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <label
+              className="text-xs font-semibold uppercase tracking-[0.28em] text-gray-500"
+              htmlFor={dateFromInputId}
+            >
+              Desde
+            </label>
+            <Input
+              id={dateFromInputId}
+              type="date"
+              value={createdFrom}
+              max={createdTo || undefined}
+              onChange={(event) => {
+                setCreatedFrom(event.target.value);
+                setDatePreset(null);
+              }}
+              className="h-11"
+              aria-invalid={dateFilter.isInvalid}
+            />
+          </div>
+          <div className="space-y-1">
+            <label
+              className="text-xs font-semibold uppercase tracking-[0.28em] text-gray-500"
+              htmlFor={dateToInputId}
+            >
+              Hasta
+            </label>
+            <Input
+              id={dateToInputId}
+              type="date"
+              value={createdTo}
+              min={createdFrom || undefined}
+              onChange={(event) => {
+                setCreatedTo(event.target.value);
+                setDatePreset(null);
+              }}
+              className="h-11"
+              aria-invalid={dateFilter.isInvalid}
+            />
+          </div>
+          <div className="flex items-end">
+            {hasActiveFilters ? (
+              <Button variant="ghost" onClick={handleClearFilters}>
+                Limpiar filtros
+              </Button>
+            ) : null}
+          </div>
         </div>
+
+        <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+          <span className="font-semibold uppercase tracking-[0.28em] text-gray-400">
+            Rangos rápidos
+          </span>
+          {datePresetOptions.map((preset) => (
+            <Button
+              key={preset.value}
+              type="button"
+              variant="outline"
+              size="sm"
+              className={cn(
+                "rounded-full border-dashed border-gray-200 text-xs font-medium text-gray-600 hover:border-gray-300 hover:bg-gray-50",
+                datePreset === preset.value &&
+                  "border-transparent bg-[#04102D] text-white hover:bg-[#04102D]/90",
+              )}
+              onClick={() => applyDatePreset(preset.value)}
+            >
+              {preset.label}
+            </Button>
+          ))}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="rounded-full border-dashed border-gray-200 text-xs font-medium text-gray-600 hover:border-gray-300 hover:bg-gray-50"
+            onClick={clearDateFilters}
+            disabled={!createdFrom && !createdTo}
+          >
+            Todo el histórico
+          </Button>
+        </div>
+
+        {dateRangeError ? (
+          <p className="text-xs font-medium text-red-600">{dateRangeError}</p>
+        ) : null}
 
         {errorMessage ? (
           <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
