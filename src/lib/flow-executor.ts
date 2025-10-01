@@ -128,6 +128,38 @@ type FlowRuntimeContext = {
   endReason?: string;
 };
 
+const DEFAULT_TRIGGER_KEYWORD = "default";
+
+const stripDiacritics = (value: string) =>
+  value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+const normalizeTrigger = (value?: string | null): string | null => {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    return stripDiacritics(trimmed).toLowerCase();
+  } catch {
+    return trimmed.toLowerCase();
+  }
+};
+
+const collectNormalizedParts = (value: string | null): Set<string> => {
+  const result = new Set<string>();
+  if (!value) {
+    return result;
+  }
+
+  result.add(value);
+  for (const part of value.split(/\s+/u)) {
+    if (part) {
+      result.add(part);
+    }
+  }
+
+  return result;
+};
+
 // This function is now stateful and operates on a session
 export async function executeFlow(
   session: Session & {
@@ -506,14 +538,52 @@ export async function executeFlow(
       currentNode = paused;
     }
   } else {
-    // New / active session: match trigger
-    const lc = toLc(messageText ?? "");
-    currentNode = nodes.find(
-      (n) =>
-        n.type === "trigger" && toLc((n.data as TriggerData).keyword) === lc,
+    // New / active session: match trigger with normalized keywords
+    const normalizedInput = normalizeTrigger(messageText ?? null);
+    const inputTokens = collectNormalizedParts(normalizedInput);
+    const triggerNodes = nodes.filter(
+      (node): node is FlowNode => node.type === "trigger",
     );
 
-    if (currentNode) {
+    let matchedTrigger: FlowNode | null = null;
+    let defaultTrigger: FlowNode | null = null;
+
+    for (const triggerNode of triggerNodes) {
+      const keywordRaw = (triggerNode.data as TriggerData)?.keyword ?? null;
+      const normalizedKeyword = normalizeTrigger(keywordRaw);
+
+      if (!normalizedKeyword) {
+        continue;
+      }
+
+      if (normalizedKeyword === DEFAULT_TRIGGER_KEYWORD) {
+        if (!defaultTrigger) {
+          defaultTrigger = triggerNode;
+        }
+        continue;
+      }
+
+      if (
+        normalizedInput &&
+        (normalizedInput === normalizedKeyword ||
+          normalizedInput.includes(normalizedKeyword))
+      ) {
+        matchedTrigger = triggerNode;
+        break;
+      }
+
+      if (inputTokens.has(normalizedKeyword)) {
+        matchedTrigger = triggerNode;
+        break;
+      }
+    }
+
+    if (!matchedTrigger && defaultTrigger) {
+      matchedTrigger = defaultTrigger;
+    }
+
+    if (matchedTrigger) {
+      currentNode = matchedTrigger;
       context.triggerMessage = messageText ?? undefined;
     } else {
       console.log(`No trigger for "${messageText}" in flow ${session.flowId}`);
