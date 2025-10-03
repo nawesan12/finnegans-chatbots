@@ -1,18 +1,12 @@
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 
-import {
-  getMetaEnvironmentConfig,
-  processManualFlowTrigger,
-  processWebhookEvent,
-} from "@/lib/meta";
+import { processManualFlowTrigger, processWebhookEvent } from "@/lib/meta";
 import type { MetaWebhookEvent } from "@/lib/meta";
 import prisma from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const envMetaConfig = getMetaEnvironmentConfig();
 
 async function isVerifyTokenValid(token: string | null, userId?: string) {
   if (!token) {
@@ -23,13 +17,6 @@ async function isVerifyTokenValid(token: string | null, userId?: string) {
 
   if (!trimmedToken) {
     return false;
-  }
-
-  if (
-    envMetaConfig.verifyToken &&
-    trimmedToken === envMetaConfig.verifyToken.trim()
-  ) {
-    return true;
   }
 
   const userWithToken = await prisma.user.findFirst({
@@ -318,13 +305,17 @@ export async function GET(request: NextRequest) {
       return new NextResponse("Missing hub.challenge", { status: 400 });
     }
 
-    // 🚀 Fast path: solo ENV, sin DB
-    const envToken =
-      process.env.META_VERIFY_TOKEN?.trim() ??
-      process.env.WHATSAPP_VERIFY_TOKEN?.trim() ??
-      envMetaConfig.verifyToken?.trim();
+    const trimmedToken = token?.trim();
+    if (!trimmedToken) {
+      return new NextResponse("Forbidden", { status: 403 });
+    }
 
-    if (!envToken || token?.trim() !== envToken) {
+    const userWithToken = await prisma.user.findFirst({
+      where: { metaVerifyToken: trimmedToken },
+      select: { id: true },
+    });
+
+    if (!userWithToken) {
       return new NextResponse("Forbidden", { status: 403 });
     }
 
@@ -383,21 +374,14 @@ export async function POST(request: Request) {
       );
     }
 
+    const trimmedPhoneNumberId = phoneNumberId.trim();
+
     const user = await prisma.user.findFirst({
-      where: { metaPhoneNumberId: phoneNumberId },
+      where: { metaPhoneNumberId: trimmedPhoneNumberId },
       select: { id: true, metaAppSecret: true },
     });
 
-    let appSecret = user?.metaAppSecret ?? null;
-
-    if (
-      !appSecret &&
-      envMetaConfig.phoneNumberId &&
-      envMetaConfig.appSecret &&
-      envMetaConfig.phoneNumberId === phoneNumberId
-    ) {
-      appSecret = envMetaConfig.appSecret;
-    }
+    const appSecret = user?.metaAppSecret?.trim() ?? null;
 
     if (!appSecret) {
       console.error(

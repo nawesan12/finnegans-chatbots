@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { verifyToken } from "@/lib/auth";
 import prisma from "@/lib/prisma";
-import { getMetaEnvironmentConfig } from "@/lib/meta";
 
 const formatSettingsResponse = (input: {
   metaVerifyToken: string | null;
@@ -9,14 +8,11 @@ const formatSettingsResponse = (input: {
   metaAccessToken: string | null;
   metaPhoneNumberId: string | null;
 }) => {
-  const envConfig = getMetaEnvironmentConfig();
-
   return {
-    metaVerifyToken: input.metaVerifyToken ?? envConfig.verifyToken ?? "",
-    metaAppSecret: input.metaAppSecret ?? envConfig.appSecret ?? "",
-    metaAccessToken: input.metaAccessToken ?? envConfig.accessToken ?? "",
-    metaPhoneNumberId:
-      input.metaPhoneNumberId ?? envConfig.phoneNumberId ?? "",
+    metaVerifyToken: input.metaVerifyToken ?? "",
+    metaAppSecret: input.metaAppSecret ?? "",
+    metaAccessToken: input.metaAccessToken ?? "",
+    metaPhoneNumberId: input.metaPhoneNumberId ?? "",
   };
 };
 

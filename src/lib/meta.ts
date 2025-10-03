@@ -8,42 +8,6 @@ import type {
 import prisma from "@/lib/prisma";
 import { executeFlow, FlowSendMessageError } from "./flow-executor";
 
-export type MetaEnvironmentConfig = {
-  verifyToken: string | null;
-  appSecret: string | null;
-  accessToken: string | null;
-  phoneNumberId: string | null;
-  businessAccountId: string | null;
-};
-
-export function getMetaEnvironmentConfig(): MetaEnvironmentConfig {
-  return {
-    verifyToken:
-      process.env.META_VERIFY_TOKEN ??
-      process.env.WHATSAPP_VERIFY_TOKEN ??
-      process.env.VERIFY_TOKEN ??
-      null,
-    appSecret:
-      process.env.META_APP_SECRET ??
-      process.env.WHATSAPP_APP_SECRET ??
-      process.env.APP_SECRET_KEY ??
-      null,
-    accessToken:
-      process.env.META_ACCESS_TOKEN ??
-      process.env.WHATSAPP_KEY ??
-      process.env.ACCESS_TOKEN ??
-      null,
-    phoneNumberId:
-      process.env.META_PHONE_NUMBER_ID ??
-      process.env.WHATSAPP_NUMBER_ID ??
-      null,
-    businessAccountId:
-      process.env.META_BUSINESS_ACCOUNT_ID ??
-      process.env.ACCOUNT_NUMBER_ID ??
-      null,
-  };
-}
-
 type SessionWithRelations = PrismaSession & {
   flow: Flow;
   contact: Contact;
@@ -478,35 +442,17 @@ function indexWhatsappContacts(
 }
 
 async function resolveUserForPhoneNumber(phoneNumberId: string) {
+  const normalizedId = phoneNumberId.trim();
+
+  if (!normalizedId) {
+    return null;
+  }
+
   const user = await prisma.user.findFirst({
-    where: { metaPhoneNumberId: phoneNumberId },
+    where: { metaPhoneNumberId: normalizedId },
   });
 
-  if (user) {
-    return user;
-  }
-
-  const envConfig = getMetaEnvironmentConfig();
-
-  if (
-    envConfig.phoneNumberId &&
-    toLcTrim(envConfig.phoneNumberId) === toLcTrim(phoneNumberId)
-  ) {
-    const fallbackUser = await prisma.user.findFirst({
-      orderBy: { createdAt: "asc" },
-    });
-
-    if (fallbackUser) {
-      console.warn(
-        "Falling back to the first user for phone number ID",
-        phoneNumberId,
-        "based on environment configuration.",
-      );
-      return fallbackUser;
-    }
-  }
-
-  return null;
+  return user ?? null;
 }
 
 const LOG_STATUS_MAP: Record<string, string> = {
@@ -1064,10 +1010,8 @@ export async function sendMessage(
     select: { metaAccessToken: true, metaPhoneNumberId: true },
   });
 
-  const envConfig = getMetaEnvironmentConfig();
-
-  const accessToken = user?.metaAccessToken ?? envConfig.accessToken;
-  const phoneNumberId = user?.metaPhoneNumberId ?? envConfig.phoneNumberId;
+  const accessToken = user?.metaAccessToken?.trim() ?? null;
+  const phoneNumberId = user?.metaPhoneNumberId?.trim() ?? null;
 
   if (!accessToken || !phoneNumberId) {
     const errorMessage = "Missing Meta API credentials";
