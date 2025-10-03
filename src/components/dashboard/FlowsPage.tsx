@@ -1056,7 +1056,7 @@ const FlowsPage = () => {
                     onChange={(event) =>
                       handleSearchTermChange(event.target.value)
                     }
-                    placeholder="Buscar por nombre, palabra clave o número"
+                    placeholder="Buscar por nombre o palabra clave"
                     className="pl-9"
                   />
                 </div>
