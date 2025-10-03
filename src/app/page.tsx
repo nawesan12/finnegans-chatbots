@@ -9,10 +9,15 @@ import {
   ArrowRight,
   Building2,
   CheckCircle2,
+  Cpu,
   LayoutDashboard,
   Menu,
   MessageCircle,
+  PieChart,
+  Server,
   ShieldCheck,
+  Users,
+  Workflow,
   X,
 } from "lucide-react";
 
@@ -38,12 +43,82 @@ const featureHighlights = [
 ];
 
 const navigationItems = [
+  { href: "#plataforma", label: "Plataforma" },
   { href: "#soluciones", label: "Soluciones" },
   { href: "#equipo", label: "Equipo" },
   { href: "#casos", label: "Casos" },
   { href: "#implementacion", label: "Implementación" },
   { href: "#recursos", label: "Recursos" },
   { href: "#contacto", label: "Contacto" },
+];
+
+const platformPillars = [
+  {
+    title: "Automatización guiada",
+    description:
+      "Orquestá bots, agentes y aprobadores en una misma consola con handoffs que conservan el contexto y las decisiones previas.",
+    icon: Workflow,
+    highlights: [
+      "Flujos omnicanal reutilizables",
+      "Intervenciones humanas en un clic",
+      "Plantillas y generadores validados",
+    ],
+  },
+  {
+    title: "Operación centrada en equipos",
+    description:
+      "Dale a líderes y supervisores visibilidad en tiempo real, asignaciones claras y tableros listos para tus rituales de seguimiento.",
+    icon: Users,
+    highlights: [
+      "Dashboards de performance en vivo",
+      "Alertas proactivas en canales internos",
+      "Playbooks colaborativos por segmento",
+    ],
+  },
+  {
+    title: "Insights accionables",
+    description:
+      "Combiná datos conversacionales con CRM, ERP y backoffice para detectar oportunidades, riesgos y tendencias.",
+    icon: PieChart,
+    highlights: [
+      "Modelos de clasificación custom",
+      "Reportes exportables y API",
+      "Monitoreo de calidad asistido por IA",
+    ],
+  },
+  {
+    title: "Gobierno y cumplimiento",
+    description:
+      "Controlá accesos, políticas y retenciones con auditoría continua y soporte especializado para industrias reguladas.",
+    icon: ShieldCheck,
+    highlights: [
+      "Roles y permisos granulados",
+      "Trail histórico inviolable",
+      "Soporte ejecutivo 24/7",
+    ],
+  },
+];
+
+const reliabilityHighlights = [
+  {
+    title: "Disponibilidad garantizada",
+    description:
+      "Infraestructura redundante en múltiples regiones y monitoreo activo para sostener operaciones críticas.",
+    icon: Server,
+  },
+  {
+    title: "Procesos certificados",
+    description:
+      "Playbooks de seguridad alineados a ISO 27001 y prácticas SOX-ready para tus auditorías.",
+    icon: Cpu,
+  },
+];
+
+const governanceTags = [
+  "Single Sign-On",
+  "Retención configurable",
+  "Logs exportables",
+  "Acuerdos SLA dedicados",
 ];
 
 const capabilityItems = [
@@ -348,6 +423,70 @@ export default function Home() {
                   ))}
                 </div>
               </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="plataforma" className="mx-auto w-full max-w-6xl px-6">
+          <div className="grid gap-12 lg:grid-cols-[1.1fr,0.9fr]">
+            <div className="space-y-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#04102D]/60">
+                Plataforma Finnegans
+              </p>
+              <h2 className="text-3xl font-semibold leading-tight text-[#04102D]">
+                Todos los módulos que necesitás para operar conversaciones críticas.
+              </h2>
+              <p className="text-lg text-[#04102D]/70">
+                Nuestra arquitectura combina automatización, visibilidad y gobierno para que tu organización escale sin perder control ni compliance.
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {reliabilityHighlights.map((item) => (
+                  <div
+                    key={item.title}
+                    className="flex flex-col gap-3 rounded-3xl border border-[#04102D]/10 bg-white p-6 shadow-sm"
+                  >
+                    <div className="flex items-center gap-3 text-[#04102D]">
+                      <item.icon className="h-5 w-5 text-[#4BC3FE]" />
+                      <p className="text-sm font-semibold">{item.title}</p>
+                    </div>
+                    <p className="text-sm text-[#04102D]/70">{item.description}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {governanceTags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded-full border border-[#04102D]/10 bg-[#04102D]/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.28em] text-[#04102D]/60"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {platformPillars.map((pillar) => (
+                <div
+                  key={pillar.title}
+                  className="flex h-full flex-col gap-4 rounded-3xl border border-[#04102D]/10 bg-white p-6 shadow-sm"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#4BC3FE]/20 text-[#04102D]">
+                      <pillar.icon className="h-5 w-5" />
+                    </span>
+                    <p className="text-lg font-semibold text-[#04102D]">{pillar.title}</p>
+                  </div>
+                  <p className="text-sm text-[#04102D]/70">{pillar.description}</p>
+                  <ul className="space-y-2 text-sm text-[#04102D]/70">
+                    {pillar.highlights.map((highlight) => (
+                      <li key={highlight} className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-[#4BC3FE]" />
+                        <span>{highlight}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </div>
           </div>
         </section>
