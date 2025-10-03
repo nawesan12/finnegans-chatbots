@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { containerVariants, itemVariants } from "@/lib/animations";
@@ -10,7 +10,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { authenticatedFetch } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/store";
-import { Loader2 } from "lucide-react";
+import { Loader2, RefreshCcw, Workflow } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 interface ContactTag {
   tag: {
@@ -29,6 +31,24 @@ interface Contact {
   tags: ContactTag[];
 }
 
+type ActivityDirection = "inbound" | "outbound" | "system" | "unknown";
+
+type ContactActivity = {
+  id: string;
+  createdAt: string;
+  status: string | null;
+  direction: ActivityDirection;
+  channel: string | null;
+  flowName: string | null;
+  messagePreview: string | null;
+  metadata: { label: string; value: string }[];
+};
+
+type ActivityResponse = {
+  items: ContactActivity[];
+  nextCursor: string | null;
+};
+
 const formatDate = (dateString: string) =>
   new Date(dateString).toLocaleString(undefined, {
     year: "numeric",
@@ -43,8 +63,52 @@ const ContactDetails = ({ contactId }: { contactId: string }) => {
   const [loading, setLoading] = useState(true);
   const [notesDraft, setNotesDraft] = useState("");
   const [isSavingNotes, setIsSavingNotes] = useState(false);
+  const [activity, setActivity] = useState<ContactActivity[]>([]);
+  const [activityLoading, setActivityLoading] = useState(true);
+  const [activityError, setActivityError] = useState<string | null>(null);
+  const [activityCursor, setActivityCursor] = useState<string | null>(null);
+  const [isRefreshingActivity, setIsRefreshingActivity] = useState(false);
+  const [isLoadingMoreActivity, setIsLoadingMoreActivity] = useState(false);
   const token = useAuthStore((state) => state.token);
   const hasHydrated = useAuthStore((state) => state.hasHydrated);
+
+  const activityDateFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat("es-AR", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }),
+    [],
+  );
+
+  const directionStyles: Record<
+    ActivityDirection,
+    { label: string; badge: string; dot: string }
+  > = useMemo(
+    () => ({
+      inbound: {
+        label: "Entrante",
+        badge: "border-emerald-200 bg-emerald-50 text-emerald-700",
+        dot: "bg-emerald-500",
+      },
+      outbound: {
+        label: "Saliente",
+        badge: "border-indigo-200 bg-indigo-50 text-indigo-700",
+        dot: "bg-indigo-500",
+      },
+      system: {
+        label: "Automático",
+        badge: "border-slate-200 bg-slate-50 text-slate-600",
+        dot: "bg-slate-400",
+      },
+      unknown: {
+        label: "Sin clasificar",
+        badge: "border-slate-200 bg-white text-slate-500",
+        dot: "bg-slate-300",
+      },
+    }),
+    [],
+  );
 
   useEffect(() => {
     if (!hasHydrated) {
@@ -90,6 +154,97 @@ const ContactDetails = ({ contactId }: { contactId: string }) => {
 
   const originalNotes = contact?.notes ?? "";
   const notesChanged = notesDraft !== originalNotes;
+
+  const parseErrorMessage = useCallback(async (response: Response) => {
+    try {
+      const data = await response.json();
+      if (typeof data?.error === "string") {
+        return data.error;
+      }
+    } catch (error) {
+      console.error("Failed to parse response error", error);
+    }
+    return null;
+  }, []);
+
+  const fetchActivity = useCallback(
+    async ({ mode, cursor }: { mode: "initial" | "refresh" | "append"; cursor?: string | null }) => {
+      if (!token) {
+        setActivity([]);
+        setActivityCursor(null);
+        setActivityError(null);
+        setActivityLoading(false);
+        setIsRefreshingActivity(false);
+        setIsLoadingMoreActivity(false);
+        return;
+      }
+
+      if (mode === "initial") {
+        setActivityLoading(true);
+        setActivityError(null);
+      } else if (mode === "refresh") {
+        setIsRefreshingActivity(true);
+        setActivityError(null);
+      } else {
+        setIsLoadingMoreActivity(true);
+      }
+
+      try {
+        const params = new URLSearchParams();
+        params.set("limit", "15");
+        if (cursor) {
+          params.set("cursor", cursor);
+        }
+
+        const response = await authenticatedFetch(
+          `/api/contacts/${contactId}/activity${params.size ? `?${params.toString()}` : ""}`,
+        );
+
+        if (!response.ok) {
+          const message =
+            (await parseErrorMessage(response)) ??
+            "No se pudo cargar la actividad reciente.";
+          throw new Error(message);
+        }
+
+        const data = (await response.json()) as ActivityResponse;
+        setActivity((previous) =>
+          mode === "append" ? [...previous, ...data.items] : data.items,
+        );
+        setActivityCursor(data.nextCursor ?? null);
+        setActivityError(null);
+      } catch (error) {
+        const message =
+          (error as Error)?.message ?? "No se pudo cargar la actividad reciente.";
+        if (mode === "append") {
+          toast.error(message);
+        } else {
+          setActivityError(message);
+          toast.error(message);
+        }
+      } finally {
+        if (mode === "initial") {
+          setActivityLoading(false);
+        } else if (mode === "refresh") {
+          setIsRefreshingActivity(false);
+        } else {
+          setIsLoadingMoreActivity(false);
+        }
+      }
+    },
+    [contactId, parseErrorMessage, token],
+  );
+
+  useEffect(() => {
+    if (!hasHydrated) {
+      return;
+    }
+
+    setActivity([]);
+    setActivityCursor(null);
+
+    void fetchActivity({ mode: "initial" });
+  }, [fetchActivity, hasHydrated]);
 
   const handleSaveNotes = async () => {
     if (!contact) {
@@ -139,6 +294,17 @@ const ContactDetails = ({ contactId }: { contactId: string }) => {
     } finally {
       setIsSavingNotes(false);
     }
+  };
+
+  const handleRefreshActivity = () => {
+    void fetchActivity({ mode: "refresh" });
+  };
+
+  const handleLoadMoreActivity = () => {
+    if (!activityCursor) {
+      return;
+    }
+    void fetchActivity({ mode: "append", cursor: activityCursor });
   };
 
   if (loading) {
@@ -311,6 +477,160 @@ const ContactDetails = ({ contactId }: { contactId: string }) => {
               )}
             </Button>
           </div>
+        </motion.div>
+        <motion.div
+          variants={itemVariants}
+          className="bg-white rounded-lg shadow-md p-6"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                Actividad reciente
+              </h3>
+              <p className="mt-1 text-sm text-gray-500">
+                Revisa los últimos eventos registrados para este contacto.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefreshActivity}
+              disabled={isRefreshingActivity || activityLoading}
+              className="self-start"
+            >
+              {isRefreshingActivity ? (
+                <>
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                  Actualizando
+                </>
+              ) : (
+                <>
+                  <RefreshCcw className="mr-2 h-3.5 w-3.5" />
+                  Actualizar
+                </>
+              )}
+            </Button>
+          </div>
+
+          {activityLoading ? (
+            <div className="mt-6 space-y-4">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div key={`activity-skeleton-${index}`} className="space-y-3">
+                  <Skeleton className="h-3 w-24" />
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-16 w-full" />
+                </div>
+              ))}
+            </div>
+          ) : activityError ? (
+            <div className="mt-4 rounded-md border border-red-100 bg-red-50 p-4 text-sm text-red-700">
+              <p className="font-medium">{activityError}</p>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-3"
+                onClick={handleRefreshActivity}
+              >
+                Volver a intentar
+              </Button>
+            </div>
+          ) : activity.length === 0 ? (
+            <p className="mt-4 text-sm text-gray-500">
+              Aún no registramos actividad para este contacto.
+            </p>
+          ) : (
+            <div className="mt-6 space-y-6">
+              <ul className="space-y-6">
+                {activity.map((item) => {
+                  const directionStyle = directionStyles[item.direction] ?? directionStyles.unknown;
+                  const eventDate = activityDateFormatter.format(new Date(item.createdAt));
+
+                  return (
+                    <li key={item.id} className="relative pl-6">
+                      <span className="absolute left-0 top-2 flex h-full w-px justify-center">
+                        <span className="h-full w-px bg-slate-200" />
+                      </span>
+                      <span
+                        className={cn(
+                          "absolute left-[1px] top-1.5 inline-flex h-3 w-3 items-center justify-center rounded-full",
+                          directionStyle.dot,
+                        )}
+                      />
+                      <div className="rounded-lg border border-slate-100 bg-slate-50/60 p-4">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge
+                              variant="outline"
+                              className={cn("text-xs font-medium", directionStyle.badge)}
+                            >
+                              {directionStyle.label}
+                            </Badge>
+                            {item.channel ? (
+                              <Badge
+                                variant="outline"
+                                className="border-slate-200 bg-white text-xs font-medium uppercase tracking-wide text-slate-600"
+                              >
+                                {item.channel}
+                              </Badge>
+                            ) : null}
+                            {item.status ? (
+                              <Badge
+                                variant="outline"
+                                className="border-slate-200 bg-white text-xs font-medium text-slate-600"
+                              >
+                                {item.status}
+                              </Badge>
+                            ) : null}
+                          </div>
+                          <span className="text-xs text-gray-500">{eventDate}</span>
+                        </div>
+                        <p className="mt-3 text-sm leading-relaxed text-gray-700">
+                          {item.messagePreview ?? "Sin contenido para mostrar."}
+                        </p>
+                        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                          {item.flowName ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 font-medium text-slate-600">
+                              <Workflow className="h-3 w-3" />
+                              {item.flowName}
+                            </span>
+                          ) : null}
+                          {item.metadata.map((meta) => (
+                            <Badge
+                              key={`${item.id}-${meta.label}-${meta.value}`}
+                              variant="outline"
+                              className="border-slate-200 bg-white font-normal text-slate-600"
+                            >
+                              <span className="mr-1 font-medium text-slate-500">{meta.label}:</span>
+                              {meta.value}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+              {activityCursor ? (
+                <div className="flex justify-center">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleLoadMoreActivity}
+                    disabled={isLoadingMoreActivity}
+                  >
+                    {isLoadingMoreActivity ? (
+                      <>
+                        <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                        Cargando
+                      </>
+                    ) : (
+                      "Ver más actividad"
+                    )}
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          )}
         </motion.div>
       </motion.div>
     </div>
