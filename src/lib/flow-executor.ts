@@ -203,7 +203,12 @@ export async function executeFlow(
   // Context bag
   const context: FlowRuntimeContext =
     (session.context as FlowRuntimeContext | null) ?? {};
-  const toLc = (s?: string) => (s ?? "").trim().toLowerCase();
+  const toLc = (s?: string | null) => (s ?? "").trim().toLowerCase();
+  const toLcUnderscore = (value: string | null | undefined) => {
+    const normalized = toLc(value);
+    if (!normalized) return "opt";
+    return normalized.replace(/\s+/g, "_");
+  };
   const nowIso = () => new Date().toISOString();
   const HISTORY_LIMIT = 50;
 
@@ -504,9 +509,26 @@ export async function executeFlow(
       const normalizedOptions = Array.isArray(optionsData.options)
         ? optionsData.options
         : [];
-      const idx = normalizedOptions.findIndex(
-        (opt) => toLc(opt) === toLc(messageText ?? ""),
-      );
+
+      const interactiveId = inboundPayload?.interactiveId
+        ? toLc(inboundPayload.interactiveId)
+        : null;
+
+      let idx = -1;
+      if (interactiveId) {
+        idx = normalizedOptions.findIndex((opt, optionIndex) => {
+          const optionId = toLcUnderscore(opt);
+          if (interactiveId === optionId) return true;
+          // Fallback: buttons created before id normalisation may use opt-{index}
+          return interactiveId === `opt-${optionIndex}`;
+        });
+      }
+
+      if (idx === -1) {
+        idx = normalizedOptions.findIndex(
+          (opt) => toLc(opt) === toLc(messageText ?? ""),
+        );
+      }
 
       const matchedOption =
         idx !== -1 ? normalizedOptions[idx] ?? null : null;
