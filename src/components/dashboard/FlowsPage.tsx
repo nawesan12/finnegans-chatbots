@@ -31,6 +31,7 @@ import FlowBuilder, {
   FlowBuilderHandle,
   FlowData,
 } from "@/components/flow-builder";
+import { emptyFlowDefinition, sanitizeFlowDefinition } from "@/lib/flow-schema";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useAuthStore } from "@/lib/store";
@@ -61,7 +62,6 @@ type FlowWithCounts = {
   name: string;
   trigger: string;
   status: FlowStatus;
-  phoneNumber?: string | null;
   userId: string;
   createdAt: string;
   updatedAt: string;
@@ -80,6 +80,14 @@ const statusFilters: { value: StatusFilter; label: string }[] = [
   { value: "Draft", label: "Borradores" },
   { value: "Inactive", label: "Inactivos" },
 ];
+
+const normalizeFlowDefinition = (definition?: FlowData | null) =>
+  sanitizeFlowDefinition(definition ?? emptyFlowDefinition);
+
+const mapFlowResponse = (flow: FlowWithCounts): FlowWithCounts => ({
+  ...flow,
+  definition: normalizeFlowDefinition(flow.definition),
+});
 
 const FlowsPage = () => {
   const { user } = useAuthStore();
@@ -116,7 +124,7 @@ const FlowsPage = () => {
         throw new Error("No se pudieron obtener los flujos");
       }
       const data: FlowWithCounts[] = await response.json();
-      setFlows(data);
+      setFlows(data.map(mapFlowResponse));
     } catch (error) {
       toast.error(
         (error as Error)?.message ?? "Error al cargar los flujos disponibles",
@@ -169,10 +177,8 @@ const FlowsPage = () => {
 
   const openFlowForEditing = useCallback(
     (flow: FlowWithCounts, options?: { skipUrl?: boolean }) => {
-      setEditingFlow({
-        ...flow,
-        phoneNumber: flow.phoneNumber ?? "",
-      });
+      const normalizedFlow = mapFlowResponse(flow);
+      setEditingFlow(normalizedFlow);
       if (!options?.skipUrl) {
         updateOpenParam(flow.id);
       }
@@ -193,7 +199,6 @@ const FlowsPage = () => {
         definition: null,
         status: "Draft",
         trigger: "default",
-        phoneNumber: "",
         userId: user.id,
       });
 
@@ -253,6 +258,7 @@ const FlowsPage = () => {
 
       try {
         setDuplicatingFlowId(flow.id);
+        const sanitizedDefinition = normalizeFlowDefinition(flow.definition);
         const response = await fetch(`/api/flows`, {
           method: "POST",
           headers: {
@@ -263,8 +269,7 @@ const FlowsPage = () => {
             name: `${flow.name} (copia)`,
             trigger: flow.trigger,
             status: "Draft",
-            definition: flow.definition,
-            phoneNumber: flow.phoneNumber ?? null,
+            definition: sanitizedDefinition,
           }),
         });
 
@@ -451,10 +456,7 @@ const FlowsPage = () => {
 
       const nameMatch = flow.name.toLowerCase().includes(term);
       const triggerMatch = flow.trigger?.toLowerCase().includes(term) ?? false;
-      const phoneMatch =
-        flow.phoneNumber?.toLowerCase().includes(term) ?? false;
-
-      return nameMatch || triggerMatch || phoneMatch;
+      return nameMatch || triggerMatch;
     });
   }, [flows, statusFilter, searchTerm]);
 
@@ -520,12 +522,13 @@ const FlowsPage = () => {
         return false;
       }
 
-      const flowData =
+      const flowDataRaw =
         definitionOverride ?? flowBuilderRef.current?.getFlowData();
-      if (!flowData) {
+      if (!flowDataRaw) {
         toast.error("No pudimos leer el flujo a guardar");
         return false;
       }
+      const flowData = sanitizeFlowDefinition(flowDataRaw);
 
       try {
         setIsSaving(true);
@@ -539,7 +542,6 @@ const FlowsPage = () => {
             "default",
         ).trim();
         const normalizedTrigger = keyword.length ? keyword : "default";
-        const normalizedPhone = editingFlow.phoneNumber?.trim() || null;
         const isNewFlow = !editingFlow.id;
 
         const url = isNewFlow ? "/api/flows" : `/api/flows/${editingFlow.id}`;
@@ -555,7 +557,6 @@ const FlowsPage = () => {
             trigger: normalizedTrigger,
             status: editingFlow.status ?? "Draft",
             definition: flowData,
-            phoneNumber: normalizedPhone,
           }),
         });
 
@@ -566,7 +567,8 @@ const FlowsPage = () => {
         }
 
         const updatedFlow: FlowWithCounts = await response.json();
-        openFlowForEditing(updatedFlow);
+        const normalizedFlow = mapFlowResponse(updatedFlow);
+        openFlowForEditing(normalizedFlow);
         toast.success(
           `Flujo ${isNewFlow ? "creado" : "actualizado"} correctamente`,
         );
@@ -591,6 +593,7 @@ const FlowsPage = () => {
 
       try {
         setUpdatingStatusId(flowId);
+        const sanitizedDefinition = normalizeFlowDefinition(flow.definition);
         const response = await authenticatedFetch(`/api/flows/${flowId}`, {
           method: "PUT",
           headers: {
@@ -600,8 +603,7 @@ const FlowsPage = () => {
             name: flow.name,
             trigger: flow.trigger,
             status: nextStatus,
-            definition: flow.definition,
-            phoneNumber: flow.phoneNumber ?? null,
+            definition: sanitizedDefinition,
           }),
         });
 
@@ -609,11 +611,16 @@ const FlowsPage = () => {
           throw new Error("No se pudo actualizar el estado del flujo");
         }
 
-        const updated = await response.json();
+        const updated: FlowWithCounts = await response.json();
+        const normalizedUpdated = mapFlowResponse(updated);
         setFlows((prev) =>
           prev.map((item) =>
             item.id === flowId
-              ? { ...item, ...updated, _count: item._count }
+              ? {
+                  ...item,
+                  ...normalizedUpdated,
+                  _count: normalizedUpdated._count ?? item._count,
+                }
               : item,
           ),
         );
@@ -646,11 +653,6 @@ const FlowsPage = () => {
             </p>
           </div>
         ),
-      },
-      {
-        key: "phoneNumber",
-        label: "Número de teléfono",
-        render: (row: FlowWithCounts) => row.phoneNumber || "Sin asignar",
       },
       { key: "trigger", label: "Palabra clave" },
       {
@@ -928,18 +930,6 @@ const FlowsPage = () => {
                     <SelectItem value="Inactive">Inactivo</SelectItem>
                   </SelectContent>
                 </Select>
-                <Input
-                  placeholder="Número de WhatsApp"
-                  value={editingFlow?.phoneNumber ?? ""}
-                  onChange={(event) =>
-                    setEditingFlow((current) =>
-                      current
-                        ? { ...current, phoneNumber: event.target.value }
-                        : current,
-                    )
-                  }
-                  className="w-full sm:w-56"
-                />
                 <Button
                   type="button"
                   variant="outline"
