@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   BarChart,
   Bar,
@@ -11,7 +11,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { motion } from "framer-motion";
-import { MessageSquare, Users, ArrowRight, Bot } from "lucide-react";
+import { MessageSquare, Users, ArrowRight, Bot, RefreshCw } from "lucide-react";
 import { containerVariants, itemVariants } from "@/lib/animations";
 import MetricCard from "@/components/dashboard/MetricCard";
 import FilterMultiSelect from "@/components/dashboard/FilterMultiSelect";
@@ -26,6 +26,7 @@ import {
 import { toast } from "sonner";
 import { authenticatedFetch } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/store";
+import { Button } from "@/components/ui/button";
 
 type DashboardMetrics = {
   totalContacts: number;
@@ -130,6 +131,22 @@ const DashboardPage = () => {
   const [insights, setInsights] = useState<DashboardInsights | null>(null);
   const [insightsLoading, setInsightsLoading] = useState(true);
   const [insightsError, setInsightsError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const isMountedRef = useRef(true);
+  const hasLoadedSummaryRef = useRef(false);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    hasLoadedSummaryRef.current = false;
+  }, [token]);
 
   const numberFormatter = useMemo(
     () =>
@@ -143,6 +160,15 @@ const DashboardPage = () => {
     () =>
       new Intl.NumberFormat("es-AR", {
         maximumFractionDigits: 1,
+      }),
+    [],
+  );
+
+  const lastUpdatedFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat("es-AR", {
+        dateStyle: "medium",
+        timeStyle: "short",
       }),
     [],
   );
@@ -200,6 +226,10 @@ const DashboardPage = () => {
     [availableStatuses],
   );
 
+  const lastUpdatedLabel = lastUpdated
+    ? lastUpdatedFormatter.format(lastUpdated)
+    : null;
+
   const statusBreakdownWithPercentage: StatusBreakdownWithPercentage[] =
     useMemo(() => {
       if (!insights?.statusBreakdown?.length) {
@@ -238,199 +268,251 @@ const DashboardPage = () => {
     (entry) => entry.count > 0,
   );
 
-  useEffect(() => {
-    if (!hasHydrated) {
-      return;
-    }
-
+  const fetchDashboardSummary = useCallback(async () => {
     if (!token) {
+      if (!isMountedRef.current) {
+        return;
+      }
       setMetrics(null);
       setRecentLogs([]);
       setLoading(false);
+      setLastUpdated(null);
+      hasLoadedSummaryRef.current = false;
       return;
     }
 
-    let isMounted = true;
+    if (!hasLoadedSummaryRef.current) {
+      setLoading(true);
+    }
 
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const [metricsRes, logsRes] = await Promise.all([
-          authenticatedFetch("/api/metrics"),
-          authenticatedFetch("/api/logs?limit=4"),
-        ]);
+    try {
+      const [metricsRes, logsRes] = await Promise.all([
+        authenticatedFetch("/api/metrics"),
+        authenticatedFetch("/api/logs?limit=4"),
+      ]);
 
-        if (!metricsRes.ok) {
-          throw new Error(
-            await parseErrorMessage(
-              metricsRes,
-              "No se pudieron obtener las métricas del panel",
-            ),
-          );
-        }
-
-        if (!logsRes.ok) {
-          throw new Error(
-            await parseErrorMessage(
-              logsRes,
-              "No se pudo obtener la actividad reciente",
-            ),
-          );
-        }
-
-        const metricsData: DashboardMetrics = await metricsRes.json();
-        const logsData: RecentLog[] = await logsRes.json();
-
-        if (!isMounted) {
-          return;
-        }
-
-        setMetrics(metricsData);
-        setRecentLogs(logsData);
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Error al cargar la información del panel";
-        toast.error(message);
-        if (isMounted) {
-          setMetrics(null);
-          setRecentLogs([]);
-        }
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
+      if (!metricsRes.ok) {
+        throw new Error(
+          await parseErrorMessage(
+            metricsRes,
+            "No se pudieron obtener las métricas del panel",
+          ),
+        );
       }
-    };
 
-    fetchData();
+      if (!logsRes.ok) {
+        throw new Error(
+          await parseErrorMessage(
+            logsRes,
+            "No se pudo obtener la actividad reciente",
+          ),
+        );
+      }
 
-    return () => {
-      isMounted = false;
-    };
-  }, [hasHydrated, token]);
+      const metricsData: DashboardMetrics = await metricsRes.json();
+      const logsData: RecentLog[] = await logsRes.json();
 
-  useEffect(() => {
-    if (!hasHydrated) {
-      return;
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      setMetrics(metricsData);
+      setRecentLogs(logsData);
+      setLastUpdated(new Date());
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Error al cargar la información del panel";
+      toast.error(message);
+      if (!isMountedRef.current) {
+        return;
+      }
+      setMetrics(null);
+      setRecentLogs([]);
+    } finally {
+      if (isMountedRef.current) {
+        setLoading(false);
+        hasLoadedSummaryRef.current = true;
+      }
     }
+  }, [token]);
 
+  const fetchChartData = useCallback(async () => {
     if (!token) {
+      if (!isMountedRef.current) {
+        return;
+      }
       setMessageVolumeData([]);
       setAvailableFlows([]);
       setAvailableChannels([]);
       setAvailableStatuses([]);
       setChartError(null);
       setChartLoading(false);
-      setInsights(null);
-      setInsightsError(null);
       return;
     }
 
-    let isMounted = true;
+    setChartLoading(true);
+    setChartError(null);
 
-    const fetchChartData = async () => {
-      try {
-        setChartLoading(true);
-        setChartError(null);
-
-        const params = new URLSearchParams({ range: selectedRange });
-        if (selectedChannels.length) {
-          params.set("channel", selectedChannels.join(","));
-        }
-        if (selectedFlows.length) {
-          params.set("flowId", selectedFlows.join(","));
-        }
-        if (selectedStatuses.length) {
-          params.set("status", selectedStatuses.join(","));
-        }
-
-        const response = await authenticatedFetch(
-          `/api/metrics/messages-volume?${params.toString()}`,
-        );
-
-        if (!response.ok) {
-          throw new Error(
-            await parseErrorMessage(
-              response,
-              "No se pudo obtener el volumen de mensajes",
-            ),
-          );
-        }
-
-        const data: {
-          data: MessageVolumePoint[];
-          filters: {
-            flows: FlowFilterOption[];
-            channels: string[];
-            statuses: string[];
-          };
-        } = await response.json();
-
-        if (!isMounted) {
-          return;
-        }
-
-        setMessageVolumeData(data.data);
-        setAvailableFlows(data.filters.flows);
-        setAvailableChannels(data.filters.channels);
-        setAvailableStatuses(data.filters.statuses);
-
-        setSelectedFlows((previous) => {
-          if (!previous.length) {
-            return previous;
-          }
-          const validIds = new Set(data.filters.flows.map((flow) => flow.id));
-          const filtered = previous.filter((flowId) => validIds.has(flowId));
-          return filtered.length === previous.length ? previous : filtered;
-        });
-
-        setSelectedChannels((previous) => {
-          if (!previous.length) {
-            return previous;
-          }
-          const validChannels = new Set(data.filters.channels);
-          const filtered = previous.filter((channel) =>
-            validChannels.has(channel),
-          );
-          return filtered.length === previous.length ? previous : filtered;
-        });
-
-        setSelectedStatuses((previous) => {
-          if (!previous.length) {
-            return previous;
-          }
-          const validStatuses = new Set(data.filters.statuses);
-          const filtered = previous.filter((status) =>
-            validStatuses.has(status),
-          );
-          return filtered.length === previous.length ? previous : filtered;
-        });
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Error al cargar el volumen de mensajes";
-        if (isMounted) {
-          setChartError(message);
-          setMessageVolumeData([]);
-        }
-        toast.error(message);
-      } finally {
-        if (isMounted) {
-          setChartLoading(false);
-        }
+    try {
+      const params = new URLSearchParams({ range: selectedRange });
+      if (selectedChannels.length) {
+        params.set("channel", selectedChannels.join(","));
       }
-    };
+      if (selectedFlows.length) {
+        params.set("flowId", selectedFlows.join(","));
+      }
+      if (selectedStatuses.length) {
+        params.set("status", selectedStatuses.join(","));
+      }
 
-    fetchChartData();
+      const response = await authenticatedFetch(
+        `/api/metrics/messages-volume?${params.toString()}`,
+      );
 
-    return () => {
-      isMounted = false;
-    };
+      if (!response.ok) {
+        throw new Error(
+          await parseErrorMessage(
+            response,
+            "No se pudo obtener el volumen de mensajes",
+          ),
+        );
+      }
+
+      const data: {
+        data: MessageVolumePoint[];
+        filters: {
+          flows: FlowFilterOption[];
+          channels: string[];
+          statuses: string[];
+        };
+      } = await response.json();
+
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      setMessageVolumeData(data.data);
+      setAvailableFlows(data.filters.flows);
+      setAvailableChannels(data.filters.channels);
+      setAvailableStatuses(data.filters.statuses);
+
+      setSelectedFlows((previous) => {
+        if (!previous.length) {
+          return previous;
+        }
+        const validIds = new Set(data.filters.flows.map((flow) => flow.id));
+        const filtered = previous.filter((flowId) => validIds.has(flowId));
+        return filtered.length === previous.length ? previous : filtered;
+      });
+
+      setSelectedChannels((previous) => {
+        if (!previous.length) {
+          return previous;
+        }
+        const validChannels = new Set(data.filters.channels);
+        const filtered = previous.filter((channel) =>
+          validChannels.has(channel),
+        );
+        return filtered.length === previous.length ? previous : filtered;
+      });
+
+      setSelectedStatuses((previous) => {
+        if (!previous.length) {
+          return previous;
+        }
+        const validStatuses = new Set(data.filters.statuses);
+        const filtered = previous.filter((status) =>
+          validStatuses.has(status),
+        );
+        return filtered.length === previous.length ? previous : filtered;
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Error al cargar el volumen de mensajes";
+      if (isMountedRef.current) {
+        setChartError(message);
+        setMessageVolumeData([]);
+      }
+      toast.error(message);
+    } finally {
+      if (isMountedRef.current) {
+        setChartLoading(false);
+      }
+    }
   }, [
-    hasHydrated,
+    selectedChannels,
+    selectedFlows,
+    selectedRange,
+    selectedStatuses,
+    token,
+  ]);
+
+  const fetchInsights = useCallback(async () => {
+    if (!token) {
+      if (!isMountedRef.current) {
+        return;
+      }
+      setInsights(null);
+      setInsightsError(null);
+      setInsightsLoading(false);
+      return;
+    }
+
+    setInsightsLoading(true);
+    setInsightsError(null);
+
+    try {
+      const params = new URLSearchParams({ range: selectedRange });
+      if (selectedChannels.length) {
+        params.set("channel", selectedChannels.join(","));
+      }
+      if (selectedFlows.length) {
+        params.set("flowId", selectedFlows.join(","));
+      }
+      if (selectedStatuses.length) {
+        params.set("status", selectedStatuses.join(","));
+      }
+
+      const response = await authenticatedFetch(
+        `/api/metrics/dashboard-insights?${params.toString()}`,
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          await parseErrorMessage(
+            response,
+            "No se pudieron obtener los insights del panel",
+          ),
+        );
+      }
+
+      const payload: DashboardInsights = await response.json();
+
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      setInsights(payload);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Error al cargar los insights del panel";
+      if (isMountedRef.current) {
+        setInsightsError(message);
+        setInsights(null);
+      }
+      toast.error(message);
+    } finally {
+      if (isMountedRef.current) {
+        setInsightsLoading(false);
+      }
+    }
+  }, [
     selectedChannels,
     selectedFlows,
     selectedRange,
@@ -443,79 +525,39 @@ const DashboardPage = () => {
       return;
     }
 
-    if (!token) {
-      setInsights(null);
-      setInsightsError(null);
-      setInsightsLoading(false);
+    void fetchDashboardSummary();
+  }, [fetchDashboardSummary, hasHydrated]);
+
+  useEffect(() => {
+    if (!hasHydrated) {
       return;
     }
 
-    let isMounted = true;
+    void fetchChartData();
+    void fetchInsights();
+  }, [fetchChartData, fetchInsights, hasHydrated]);
 
-    const fetchInsights = async () => {
-      try {
-        setInsightsLoading(true);
-        setInsightsError(null);
+  const handleRefresh = useCallback(async () => {
+    if (isRefreshing || !hasHydrated || !token) {
+      return;
+    }
 
-        const params = new URLSearchParams({ range: selectedRange });
-        if (selectedChannels.length) {
-          params.set("channel", selectedChannels.join(","));
-        }
-        if (selectedFlows.length) {
-          params.set("flowId", selectedFlows.join(","));
-        }
-        if (selectedStatuses.length) {
-          params.set("status", selectedStatuses.join(","));
-        }
-
-        const response = await authenticatedFetch(
-          `/api/metrics/dashboard-insights?${params.toString()}`,
-        );
-
-        if (!response.ok) {
-          throw new Error(
-            await parseErrorMessage(
-              response,
-              "No se pudieron obtener los insights del panel",
-            ),
-          );
-        }
-
-        const payload: DashboardInsights = await response.json();
-
-        if (!isMounted) {
-          return;
-        }
-
-        setInsights(payload);
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Error al cargar los insights del panel";
-        if (isMounted) {
-          setInsightsError(message);
-          setInsights(null);
-        }
-        toast.error(message);
-      } finally {
-        if (isMounted) {
-          setInsightsLoading(false);
-        }
-      }
-    };
-
-    fetchInsights();
-
-    return () => {
-      isMounted = false;
-    };
+    setIsRefreshing(true);
+    try {
+      await Promise.allSettled([
+        fetchDashboardSummary(),
+        fetchChartData(),
+        fetchInsights(),
+      ]);
+    } finally {
+      setIsRefreshing(false);
+    }
   }, [
+    fetchChartData,
+    fetchDashboardSummary,
+    fetchInsights,
     hasHydrated,
-    selectedChannels,
-    selectedFlows,
-    selectedRange,
-    selectedStatuses,
+    isRefreshing,
     token,
   ]);
 
@@ -571,7 +613,9 @@ const DashboardPage = () => {
     ];
   }, [metrics, numberFormatter, percentageFormatter]);
 
-  if (loading) {
+  const showInitialLoading = loading && !hasLoadedSummaryRef.current;
+
+  if (showInitialLoading) {
     return (
       <div className="p-6 space-y-6">
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
@@ -640,7 +684,7 @@ const DashboardPage = () => {
           variants={itemVariants}
           className="rounded-lg bg-white p-5 shadow-md"
         >
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <h3 className="font-semibold text-gray-800">Filtros del panel</h3>
               <p className="text-sm text-gray-500">
@@ -648,43 +692,62 @@ const DashboardPage = () => {
                 real.
               </p>
             </div>
-            <div className="flex flex-wrap gap-3">
-              <Select value={selectedRange} onValueChange={setSelectedRange}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Rango de fechas" />
-                </SelectTrigger>
-                <SelectContent>
-                  {dateRangeOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FilterMultiSelect
-                label="Canales"
-                options={channelOptions}
-                selectedValues={selectedChannels}
-                onSelectionChange={setSelectedChannels}
-                disabled={!channelOptions.length}
-                className="min-w-[160px]"
-              />
-              <FilterMultiSelect
-                label="Flujos"
-                options={flowOptions}
-                selectedValues={selectedFlows}
-                onSelectionChange={setSelectedFlows}
-                disabled={!flowOptions.length}
-                className="min-w-[220px]"
-              />
-              <FilterMultiSelect
-                label="Estados"
-                options={statusOptions}
-                selectedValues={selectedStatuses}
-                onSelectionChange={setSelectedStatuses}
-                disabled={!statusOptions.length}
-                className="min-w-[180px]"
-              />
+            <div className="flex w-full flex-col gap-2 lg:w-auto">
+              <div className="flex flex-wrap items-center gap-3">
+                <Select value={selectedRange} onValueChange={setSelectedRange}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Rango de fechas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {dateRangeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FilterMultiSelect
+                  label="Canales"
+                  options={channelOptions}
+                  selectedValues={selectedChannels}
+                  onSelectionChange={setSelectedChannels}
+                  disabled={!channelOptions.length}
+                  className="min-w-[160px]"
+                />
+                <FilterMultiSelect
+                  label="Flujos"
+                  options={flowOptions}
+                  selectedValues={selectedFlows}
+                  onSelectionChange={setSelectedFlows}
+                  disabled={!flowOptions.length}
+                  className="min-w-[220px]"
+                />
+                <FilterMultiSelect
+                  label="Estados"
+                  options={statusOptions}
+                  selectedValues={selectedStatuses}
+                  onSelectionChange={setSelectedStatuses}
+                  disabled={!statusOptions.length}
+                  className="min-w-[180px]"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleRefresh()}
+                  disabled={isRefreshing || !token || !hasHydrated}
+                  className="flex items-center gap-2"
+                >
+                  <RefreshCw
+                    className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+                  />
+                  Actualizar datos
+                </Button>
+              </div>
+              {lastUpdatedLabel ? (
+                <p className="text-xs text-gray-500 lg:text-right">
+                  Última actualización: {lastUpdatedLabel}
+                </p>
+              ) : null}
             </div>
           </div>
         </motion.div>
