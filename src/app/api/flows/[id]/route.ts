@@ -10,7 +10,6 @@ const FlowUpdateSchema = z.object({
   trigger: z.string().optional(),
   status: z.string().optional(),
   definition: z.unknown().optional(),
-  phoneNumber: z.string().optional().nullable(),
 });
 
 export async function GET(
@@ -63,7 +62,7 @@ export async function PUT(
       );
     }
 
-    const { name, trigger, status, definition, phoneNumber } = parsed.data;
+    const { name, trigger, status, definition } = parsed.data;
     const trimmedName = name.trim();
 
     if (!trimmedName) {
@@ -77,9 +76,6 @@ export async function PUT(
     const definitionJson = sanitizedDefinition as unknown as Prisma.JsonObject;
     const normalizedTrigger = trigger?.trim() || "default";
     const normalizedStatus = status?.trim() || "Draft";
-    const normalizedPhone =
-      phoneNumber && phoneNumber.trim().length ? phoneNumber.trim() : null;
-
     const existingFlow = await prisma.flow.findFirst({
       where: { id: params.id, userId: auth.userId },
       select: { id: true },
@@ -96,7 +92,7 @@ export async function PUT(
         trigger: normalizedTrigger,
         status: normalizedStatus,
         definition: definitionJson,
-        phoneNumber: normalizedPhone,
+        phoneNumber: null,
         updatedAt: new Date(),
       },
       include: {

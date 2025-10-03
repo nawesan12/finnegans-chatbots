@@ -91,7 +91,6 @@ interface FlowOption {
   name: string;
   status?: string | null;
   trigger?: string | null;
-  phoneNumber?: string | null;
   userId: string;
   updatedAt?: string;
   _count?: {
@@ -999,11 +998,14 @@ const BroadcastsPage = () => {
                         </div>
                         <div className="rounded-md border border-gray-200 bg-white p-3">
                           <p className="text-xs uppercase tracking-wide text-gray-500">
-                            Número asignado
+                            Enrutamiento de número
                           </p>
                           <p className="mt-1 flex items-center gap-2 font-medium text-gray-800">
                             <Phone className="h-4 w-4 text-[#4bc3fe]" />
-                            {selectedFlow.phoneNumber || "Sin número"}
+                            Usa el número principal de la cuenta
+                          </p>
+                          <p className="mt-1 text-xs text-gray-500">
+                            Puedes cambiarlo desde Ajustes &gt; Canal de WhatsApp.
                           </p>
                         </div>
                         <div className="rounded-md border border-gray-200 bg-white p-3">

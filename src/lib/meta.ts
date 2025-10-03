@@ -249,8 +249,9 @@ const findBestMatchingFlow = (flows: Flow[], context: FlowMatchContext) => {
     const normalizedTrigger = normalizeTrigger(flow.trigger);
     const isDefaultTrigger = normalizedTrigger === DEFAULT_TRIGGER;
     const normalizedFlowPhone = normalizePhone(flow.phoneNumber);
-    const matchesPhone =
-      normalizedFlowPhone && context.phoneCandidates.has(normalizedFlowPhone);
+    const matchesPhone = normalizedFlowPhone
+      ? context.phoneCandidates.has(normalizedFlowPhone)
+      : true;
 
     let matchesTrigger = false;
     if (normalizedTrigger && !isDefaultTrigger) {
