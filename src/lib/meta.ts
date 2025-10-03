@@ -192,6 +192,17 @@ const normalizeTrigger = (value?: string | null): string | null => {
   }
 };
 
+const isWhatsappChannel = (channel?: string | null): boolean => {
+  if (channel === null || channel === undefined) {
+    return true;
+  }
+  const trimmed = channel.trim();
+  if (!trimmed) {
+    return true;
+  }
+  return trimmed.toLowerCase() === "whatsapp";
+};
+
 const normalizePhone = (value?: string | null): string | null => {
   if (!value) return null;
   const digits = value.replace(/[^0-9]/g, "");
@@ -710,13 +721,22 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
           orderBy: { updatedAt: "desc" },
         })) as SessionWithRelations | null;
 
-        let flow = existingSession?.flow ?? null;
+        let session: SessionWithRelations | null =
+          existingSession &&
+          isWhatsappChannel(existingSession.flow?.channel ?? null)
+            ? existingSession
+            : null;
+
+        let flow = session?.flow ?? null;
 
         if (!flow) {
-          const availableFlows = await prisma.flow.findMany({
+          const availableFlowsRaw = await prisma.flow.findMany({
             where: { userId: user.id, status: "Active" },
             orderBy: { updatedAt: "desc" },
           });
+          const availableFlows = availableFlowsRaw.filter((candidate) =>
+            isWhatsappChannel(candidate.channel ?? null),
+          );
 
           const interactiveTitle =
             msg.interactive?.button_reply?.title ??
@@ -739,8 +759,6 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
           console.error("No flow available for user:", user.id);
           continue;
         }
-
-        let session: SessionWithRelations | null = existingSession;
 
         if (!session || session.flowId !== flow.id) {
           session = (await prisma.session.findUnique({
@@ -847,6 +865,14 @@ export async function processManualFlowTrigger(
 
   if (!flow) {
     return { success: false, status: 404, error: "Flow not found" };
+  }
+
+  if (!isWhatsappChannel(flow.channel ?? null)) {
+    return {
+      success: false,
+      status: 409,
+      error: "Flow is not configured for WhatsApp",
+    };
   }
 
   if (flow.status !== "Active") {
