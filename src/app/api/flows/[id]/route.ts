@@ -92,7 +92,6 @@ export async function PUT(
         trigger: normalizedTrigger,
         status: normalizedStatus,
         definition: definitionJson,
-        phoneNumber: null,
         updatedAt: new Date(),
       },
       include: {

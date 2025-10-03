@@ -88,7 +88,6 @@ export async function POST(request: Request) {
         trigger: normalizedTrigger,
         status: normalizedStatus,
         definition: definitionJson,
-        phoneNumber: null,
         user: { connect: { id: auth.userId } },
       },
       include: {

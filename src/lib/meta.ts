@@ -213,7 +213,6 @@ type FlowMatchContext = {
   fullText: string | null;
   interactiveTitle: string | null;
   interactiveId: string | null;
-  phoneCandidates: Set<string>;
 };
 
 const collectKeywordCandidates = (
@@ -259,10 +258,6 @@ const findBestMatchingFlow = (flows: Flow[], context: FlowMatchContext) => {
   for (const flow of flows) {
     const normalizedTrigger = normalizeTrigger(flow.trigger);
     const isDefaultTrigger = normalizedTrigger === DEFAULT_TRIGGER;
-    const normalizedFlowPhone = normalizePhone(flow.phoneNumber);
-    const matchesPhone = normalizedFlowPhone
-      ? context.phoneCandidates.has(normalizedFlowPhone)
-      : true;
 
     let matchesTrigger = false;
     if (normalizedTrigger && !isDefaultTrigger) {
@@ -284,10 +279,22 @@ const findBestMatchingFlow = (flows: Flow[], context: FlowMatchContext) => {
     }
 
     let score = 0;
-    if (matchesTrigger) score += 6;
-    if (matchesPhone) score += 3;
+    if (matchesTrigger) {
+      score += 6;
+      if (normalizedTrigger && normalizedText === normalizedTrigger) {
+        score += 2;
+      }
+      if (
+        normalizedTrigger &&
+        normalizedInteractiveTitle === normalizedTrigger
+      ) {
+        score += 1;
+      }
+      if (normalizedTrigger && normalizedInteractiveId === normalizedTrigger) {
+        score += 1;
+      }
+    }
     if (!matchesTrigger && isDefaultTrigger) score += 1;
-    if (matchesTrigger && matchesPhone) score += 2;
 
     if (score <= 0) {
       continue;
@@ -673,20 +680,6 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
         const contactProfile = contactIndex.get(from);
         const contactName = contactProfile?.name ?? null;
 
-        const phoneCandidates = new Set<string>();
-        const addPhoneCandidate = (value: unknown) => {
-          if (typeof value !== "string") return;
-          const normalized = normalizePhone(value);
-          if (normalized) {
-            phoneCandidates.add(normalized);
-          }
-        };
-
-        addPhoneCandidate(val?.metadata?.display_phone_number);
-        addPhoneCandidate(val?.metadata?.wa_id);
-        addPhoneCandidate(phoneNumberId);
-        addPhoneCandidate(user.metaPhoneNumberId);
-
         // Contacto: upsert seguro para ese usuario
         let contact = await prisma.contact.findFirst({
           where: { phone: from, userId: user.id },
@@ -752,7 +745,6 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
             fullText: text,
             interactiveTitle,
             interactiveId,
-            phoneCandidates,
           });
         }
 
