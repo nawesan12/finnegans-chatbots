@@ -5,6 +5,8 @@ import {
   useEffect,
   useMemo,
   useState,
+  type ChangeEvent,
+  type FormEvent,
 } from "react";
 import { Download, Loader2, NotebookPen, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -32,6 +34,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { leadStatuses, type LeadStatus } from "@/lib/leads";
+import { leadManagementSchema } from "@/lib/validations/lead";
 import { authenticatedFetch, UnauthorizedError } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/store";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -284,6 +287,28 @@ type LeadSummaryResponse = {
   byStatus: { status: string; count: number }[];
 };
 
+type LeadCreationValues = {
+  name: string;
+  email: string;
+  company: string;
+  phone: string;
+  message: string;
+  status: LeadStatus;
+  notes: string;
+};
+
+type LeadCreationErrors = Partial<Record<keyof LeadCreationValues, string>>;
+
+const createLeadInitialValues = (): LeadCreationValues => ({
+  name: "",
+  email: "",
+  company: "",
+  phone: "",
+  message: "",
+  status: leadStatuses[0]?.value ?? "new",
+  notes: "",
+});
+
 const LeadsPage = () => {
   const hasHydrated = useAuthStore((state) => state.hasHydrated);
   const router = useRouter();
@@ -313,6 +338,12 @@ const LeadsPage = () => {
   const [createdFrom, setCreatedFrom] = useState("");
   const [createdTo, setCreatedTo] = useState("");
   const [datePreset, setDatePreset] = useState<DatePreset | null>(null);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [createValues, setCreateValues] = useState<LeadCreationValues>(
+    () => createLeadInitialValues(),
+  );
+  const [createErrors, setCreateErrors] = useState<LeadCreationErrors>({});
+  const [isCreatingLead, setIsCreatingLead] = useState(false);
 
   const dateFormatter = useMemo(
     () =>
@@ -349,6 +380,13 @@ const LeadsPage = () => {
   const dateRangeError = dateFilter.isInvalid
     ? "La fecha inicial no puede ser posterior a la final."
     : null;
+
+  useEffect(() => {
+    if (!isCreateDialogOpen) {
+      setCreateValues(createLeadInitialValues());
+      setCreateErrors({});
+    }
+  }, [isCreateDialogOpen]);
 
   const hasActiveFilters = useMemo(
     () =>
@@ -792,6 +830,108 @@ const LeadsPage = () => {
     statusFilter,
   ]);
 
+  const updateCreateField = useCallback(
+    (field: keyof LeadCreationValues) =>
+      (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        const value = event.target.value;
+        setCreateValues((prev) => ({ ...prev, [field]: value }));
+        setCreateErrors((prev) => ({ ...prev, [field]: undefined }));
+      },
+    [],
+  );
+
+  const handleCreateStatusChange = useCallback((value: string) => {
+    if (!isSelectableStatus(value)) {
+      return;
+    }
+    setCreateValues((prev) => ({ ...prev, status: value }));
+    setCreateErrors((prev) => ({ ...prev, status: undefined }));
+  }, []);
+
+  const handleCreateLeadSubmit = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      if (isCreatingLead) {
+        return;
+      }
+
+      const payload = {
+        name: createValues.name.trim(),
+        email: createValues.email.trim(),
+        company: createValues.company.trim()
+          ? createValues.company.trim()
+          : undefined,
+        phone: createValues.phone.trim()
+          ? createValues.phone.trim()
+          : undefined,
+        message: createValues.message.trim(),
+        status: createValues.status,
+        notes: createValues.notes.trim()
+          ? createValues.notes.trim()
+          : undefined,
+      };
+
+      const validation = leadManagementSchema.safeParse(payload);
+      if (!validation.success) {
+        const fieldErrors: LeadCreationErrors = {};
+        for (const issue of validation.error.issues) {
+          const pathKey = issue.path[0];
+          if (typeof pathKey === "string" && !(pathKey in fieldErrors)) {
+            fieldErrors[pathKey as keyof LeadCreationValues] = issue.message;
+          }
+        }
+        setCreateErrors(fieldErrors);
+        return;
+      }
+
+      setCreateErrors({});
+      setIsCreatingLead(true);
+
+      try {
+        const response = await authenticatedFetch("/api/leads", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(validation.data),
+        });
+
+        if (!response.ok) {
+          const message =
+            (await parseErrorMessage(response)) ??
+            "No se pudo crear el lead.";
+          throw new Error(message);
+        }
+
+        const data = (await response.json()) as LeadRecord;
+        const normalizedLead: LeadRecord = {
+          ...data,
+          company: data.company ?? null,
+          phone: data.phone ?? null,
+          notes: data.notes ?? null,
+        };
+        const updatedLeads = [normalizedLead, ...leads];
+        setLeads(updatedLeads);
+        setServerSummary(computeSummaryFromLeads(updatedLeads));
+        setHighlightedLeadId(normalizedLead.id);
+        toast.success("Lead registrado correctamente.");
+        setIsCreateDialogOpen(false);
+      } catch (error) {
+        console.error("Failed to create lead", error);
+        if (error instanceof UnauthorizedError) {
+          return;
+        }
+        toast.error(
+          (error as Error)?.message ??
+            "No pudimos crear el lead. Intenta nuevamente.",
+        );
+      } finally {
+        setIsCreatingLead(false);
+      }
+    },
+    [createValues, isCreatingLead, leads],
+  );
+
   const columns = useMemo<TableColumn<LeadRecord>[]>(
     () => [
       {
@@ -974,6 +1114,13 @@ const LeadsPage = () => {
         description="Centraliza las solicitudes entrantes de la web y define el próximo paso para cada oportunidad."
         actions={
           <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={() => setIsCreateDialogOpen(true)}
+              className="bg-[#04102D] text-white hover:bg-[#04102D]/90"
+            >
+              <NotebookPen className="mr-2 h-4 w-4" /> Nuevo lead
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -1278,6 +1425,211 @@ const LeadsPage = () => {
           />
         )}
       </div>
+
+      <Dialog
+        open={isCreateDialogOpen}
+        onOpenChange={setIsCreateDialogOpen}
+      >
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Registrar nuevo lead</DialogTitle>
+            <DialogDescription>
+              Capturá oportunidades provenientes de eventos, reuniones o
+              llamadas y documentá el siguiente paso.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateLeadSubmit} className="space-y-5">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2 text-left">
+                <label
+                  className="text-sm font-medium text-gray-700"
+                  htmlFor="create-lead-name"
+                >
+                  Nombre y apellido
+                </label>
+                <Input
+                  id="create-lead-name"
+                  value={createValues.name}
+                  onChange={updateCreateField("name")}
+                  placeholder="Ej. María González"
+                  required
+                  disabled={isCreatingLead}
+                  aria-invalid={Boolean(createErrors.name)}
+                />
+                {createErrors.name ? (
+                  <p className="text-xs text-red-600">{createErrors.name}</p>
+                ) : null}
+              </div>
+              <div className="space-y-2 text-left">
+                <label
+                  className="text-sm font-medium text-gray-700"
+                  htmlFor="create-lead-email"
+                >
+                  Correo electrónico
+                </label>
+                <Input
+                  id="create-lead-email"
+                  type="email"
+                  value={createValues.email}
+                  onChange={updateCreateField("email")}
+                  placeholder="correo@empresa.com"
+                  required
+                  disabled={isCreatingLead}
+                  aria-invalid={Boolean(createErrors.email)}
+                />
+                {createErrors.email ? (
+                  <p className="text-xs text-red-600">{createErrors.email}</p>
+                ) : null}
+              </div>
+              <div className="space-y-2 text-left">
+                <label
+                  className="text-sm font-medium text-gray-700"
+                  htmlFor="create-lead-company"
+                >
+                  Empresa
+                </label>
+                <Input
+                  id="create-lead-company"
+                  value={createValues.company}
+                  onChange={updateCreateField("company")}
+                  placeholder="Finnegans"
+                  disabled={isCreatingLead}
+                  aria-invalid={Boolean(createErrors.company)}
+                />
+                {createErrors.company ? (
+                  <p className="text-xs text-red-600">
+                    {createErrors.company}
+                  </p>
+                ) : null}
+              </div>
+              <div className="space-y-2 text-left">
+                <label
+                  className="text-sm font-medium text-gray-700"
+                  htmlFor="create-lead-phone"
+                >
+                  Teléfono
+                </label>
+                <Input
+                  id="create-lead-phone"
+                  value={createValues.phone}
+                  onChange={updateCreateField("phone")}
+                  placeholder="+54 11 5263-7700"
+                  disabled={isCreatingLead}
+                  aria-invalid={Boolean(createErrors.phone)}
+                />
+                {createErrors.phone ? (
+                  <p className="text-xs text-red-600">{createErrors.phone}</p>
+                ) : null}
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2 text-left">
+                <span className="text-sm font-medium text-gray-700">
+                  Estado inicial
+                </span>
+                <Select
+                  value={createValues.status}
+                  onValueChange={handleCreateStatusChange}
+                  disabled={isCreatingLead}
+                >
+                  <SelectTrigger
+                    className="justify-between"
+                    aria-invalid={Boolean(createErrors.status)}
+                  >
+                    <SelectValue placeholder="Selecciona un estado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {leadStatuses.map((status) => (
+                      <SelectItem key={status.value} value={status.value}>
+                        {status.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {createErrors.status ? (
+                  <p className="text-xs text-red-600">
+                    {createErrors.status}
+                  </p>
+                ) : null}
+              </div>
+              <div className="space-y-2 text-left sm:col-span-2">
+                <label
+                  className="text-sm font-medium text-gray-700"
+                  htmlFor="create-lead-message"
+                >
+                  Mensaje recibido
+                </label>
+                <Textarea
+                  id="create-lead-message"
+                  value={createValues.message}
+                  onChange={updateCreateField("message")}
+                  placeholder="Resume la necesidad o consulta del cliente"
+                  required
+                  disabled={isCreatingLead}
+                  aria-invalid={Boolean(createErrors.message)}
+                  maxLength={1000}
+                  className="min-h-[120px]"
+                />
+                {createErrors.message ? (
+                  <p className="text-xs text-red-600">
+                    {createErrors.message}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+            <div className="space-y-2 text-left">
+              <div className="flex items-center justify-between">
+                <label
+                  className="text-sm font-medium text-gray-700"
+                  htmlFor="create-lead-notes"
+                >
+                  Notas internas
+                </label>
+                <span className="text-xs text-gray-400">
+                  {createValues.notes.trim().length}/{MAX_NOTES_LENGTH}
+                </span>
+              </div>
+              <Textarea
+                id="create-lead-notes"
+                value={createValues.notes}
+                onChange={updateCreateField("notes")}
+                placeholder="Agregá contexto adicional, próximos pasos o responsables."
+                disabled={isCreatingLead}
+                aria-invalid={Boolean(createErrors.notes)}
+                maxLength={MAX_NOTES_LENGTH}
+                className="min-h-[100px]"
+              />
+              {createErrors.notes ? (
+                <p className="text-xs text-red-600">{createErrors.notes}</p>
+              ) : null}
+            </div>
+            <DialogFooter className="gap-2 sm:justify-between">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setIsCreateDialogOpen(false)}
+                disabled={isCreatingLead}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                className="min-w-[160px]"
+                disabled={isCreatingLead}
+              >
+                {isCreatingLead ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  "Crear lead"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={Boolean(selectedLead)}

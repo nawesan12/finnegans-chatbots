@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { leadFormSchema } from "@/lib/validations/lead";
+import {
+  leadFormSchema,
+  leadManagementSchema,
+  type LeadManagementValues,
+} from "@/lib/validations/lead";
 import { getAuthPayload } from "@/lib/auth";
 import { leadStatuses } from "@/lib/leads";
 
@@ -96,8 +100,11 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const clientKey = getClientKey(request);
-  if (isRateLimited(clientKey)) {
+  const auth = getAuthPayload(request);
+  const isAuthenticated = Boolean(auth);
+
+  const clientKey = isAuthenticated ? null : getClientKey(request);
+  if (clientKey && isRateLimited(clientKey)) {
     return NextResponse.json(
       {
         error:
@@ -118,7 +125,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const sanitized = leadFormSchema.safeParse(payload);
+  const sanitized = (isAuthenticated
+    ? leadManagementSchema
+    : leadFormSchema
+  ).safeParse(payload);
   if (!sanitized.success) {
     const firstIssue = sanitized.error.issues[0];
     return NextResponse.json(
@@ -137,15 +147,34 @@ export async function POST(request: Request) {
         company: leadData.company,
         phone: leadData.phone,
         message: leadData.message,
+        ...(isAuthenticated
+          ? {
+              status: (leadData as LeadManagementValues).status,
+              notes:
+                (leadData as LeadManagementValues).notes !== undefined
+                  ? (leadData as LeadManagementValues).notes ?? null
+                  : undefined,
+            }
+          : {}),
       },
     });
 
-    registerRequest(clientKey);
+    if (clientKey) {
+      registerRequest(clientKey);
+    }
 
     return NextResponse.json(
       {
         id: lead.id,
-        status: "received",
+        status: lead.status,
+        name: lead.name,
+        email: lead.email,
+        company: lead.company,
+        phone: lead.phone,
+        message: lead.message,
+        notes: lead.notes,
+        createdAt: lead.createdAt,
+        updatedAt: lead.updatedAt,
       },
       { status: 201 },
     );

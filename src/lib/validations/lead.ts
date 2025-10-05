@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { leadStatuses, type LeadStatus } from "@/lib/leads";
+
 export const leadFormSchema = z.object({
   name: z
     .string({ message: "Ingresa tu nombre." })
@@ -32,3 +34,22 @@ export const leadFormSchema = z.object({
 });
 
 export type LeadFormValues = z.infer<typeof leadFormSchema>;
+
+const leadStatusValues = leadStatuses.map((status) => status.value) as [
+  LeadStatus,
+  ...LeadStatus[],
+];
+
+export const leadManagementSchema = leadFormSchema.extend({
+  status: z
+    .enum(leadStatusValues)
+    .default(leadStatuses[0].value),
+  notes: z
+    .string()
+    .trim()
+    .max(2000, "Las notas son demasiado extensas.")
+    .optional()
+    .transform((value) => (value ? value : undefined)),
+});
+
+export type LeadManagementValues = z.infer<typeof leadManagementSchema>;
