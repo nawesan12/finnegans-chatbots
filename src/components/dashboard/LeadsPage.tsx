@@ -530,10 +530,13 @@ const LeadsPage = () => {
       );
       const unknownFocusAreas = sanitizedLeads
         .map((lead) => lead.focusArea)
-        .filter(
-          (focusArea): focusArea is string =>
-            Boolean(focusArea) && !baseFocusAreaValues.has(focusArea),
-        )
+        .filter((focusArea): focusArea is string => {
+          if (typeof focusArea !== "string" || focusArea.trim() === "") {
+            return false;
+          }
+
+          return !baseFocusAreaValues.has(focusArea);
+        })
         .filter((focusArea, index, array) => array.indexOf(focusArea) === index)
         .map((focusArea) => ({
           value: focusArea,
@@ -797,6 +800,13 @@ const LeadsPage = () => {
     [updateLead],
   );
 
+  const selectedLead = useMemo(() => {
+    if (!selectedLeadId) {
+      return null;
+    }
+    return leads.find((lead) => lead.id === selectedLeadId) ?? null;
+  }, [leads, selectedLeadId]);
+
   const handleFocusAreaChangeDialog = useCallback(
     async (value: string) => {
       if (!selectedLead) {
@@ -837,13 +847,6 @@ const LeadsPage = () => {
     },
     [selectedLead, updateLead],
   );
-
-  const selectedLead = useMemo(() => {
-    if (!selectedLeadId) {
-      return null;
-    }
-    return leads.find((lead) => lead.id === selectedLeadId) ?? null;
-  }, [leads, selectedLeadId]);
 
   const leadPendingDeletion = useMemo(() => {
     if (!leadIdPendingDeletion) {

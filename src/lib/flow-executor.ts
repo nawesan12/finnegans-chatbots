@@ -54,7 +54,20 @@ type SendMessage = (
   message:
     | { type: "text"; text: string }
     | { type: "media"; mediaType: string; url: string; caption?: string }
-    | { type: "options"; text: string; options: string[] },
+    | { type: "options"; text: string; options: string[] }
+    | {
+        type: "flow";
+        flow: {
+          name: string;
+          id: string;
+          token: string;
+          version?: string;
+          header?: string;
+          body: string;
+          footer?: string;
+          cta?: string;
+        };
+      },
 ) => Promise<SendMessageResult>;
 
 type IncomingMessageMeta = {
@@ -163,7 +176,14 @@ const collectNormalizedParts = (value: string | null): Set<string> => {
 // This function is now stateful and operates on a session
 export async function executeFlow(
   session: Session & {
-    flow: { definition: unknown; userId: string };
+    flow: {
+      definition: unknown;
+      userId: string;
+      name: string;
+      metaFlowId?: string | null;
+      metaFlowToken?: string | null;
+      metaFlowVersion?: string | null;
+    };
     contact: { phone: string };
   },
   messageText: string | null,
