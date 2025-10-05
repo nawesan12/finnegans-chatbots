@@ -8,8 +8,10 @@ const navigationSections = [
     title: "Producto",
     items: [
       { label: "Soluciones", href: "#soluciones" },
+      { label: "Alianzas", href: "#alianzas" },
       { label: "Equipo", href: "#equipo" },
       { label: "Casos", href: "#casos" },
+      { label: "Testimonios", href: "#testimonios" },
       { label: "Implementación", href: "#implementacion" },
     ],
   },

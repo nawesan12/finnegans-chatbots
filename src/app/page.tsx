@@ -8,14 +8,21 @@ import { MarketingFooter } from "@/components/marketing/footer";
 import {
   ArrowRight,
   Building2,
+  CalendarClock,
   CheckCircle2,
   Cpu,
+  Globe,
+  Handshake,
   LayoutDashboard,
+  Layers,
   Menu,
   MessageCircle,
   PieChart,
+  Quote,
   Server,
   ShieldCheck,
+  Sparkles,
+  Target,
   Users,
   Workflow,
   X,
@@ -45,8 +52,10 @@ const featureHighlights = [
 const navigationItems = [
   { href: "#plataforma", label: "Plataforma" },
   { href: "#soluciones", label: "Soluciones" },
+  { href: "#alianzas", label: "Alianzas" },
   { href: "#equipo", label: "Equipo" },
   { href: "#casos", label: "Casos" },
+  { href: "#testimonios", label: "Testimonios" },
   { href: "#implementacion", label: "Implementación" },
   { href: "#recursos", label: "Recursos" },
   { href: "#contacto", label: "Contacto" },
@@ -174,6 +183,119 @@ const caseStudies = [
     metrics: [
       { label: "Casos priorizados correctamente", value: "97%" },
       { label: "Tiempo de registro", value: "8 min → 2 min" },
+    ],
+  },
+];
+
+const allianceBenefits = [
+  "Mesa estratégica mensual con tus sponsors.",
+  "Acceso anticipado a nuevas integraciones y betas.",
+  "Playbooks regulados compartidos entre industrias.",
+  "Equipo dedicado para escalamientos críticos.",
+];
+
+const alliancePrograms = [
+  {
+    title: "Partners tecnológicos",
+    description:
+      "Integramos CRMs, ERPs y soluciones de data warehousing bajo acuerdos de soporte compartidos.",
+    icon: Layers,
+    stats: [
+      { label: "Integraciones validadas", value: "30+" },
+      { label: "SLA conjunto", value: "99.9%" },
+    ],
+  },
+  {
+    title: "Consultoría Finnegans",
+    description:
+      "Equipo senior para discovery, diseño de journeys y roadmap de automatización continuo.",
+    icon: Sparkles,
+    stats: [
+      { label: "Workshops trimestrales", value: "12" },
+      { label: "Especialistas regionales", value: "15" },
+    ],
+  },
+  {
+    title: "Alianzas industriales",
+    description:
+      "Programas conjuntos con cámaras y asociaciones para compartir playbooks regulados.",
+    icon: Handshake,
+    stats: [
+      { label: "Sectores cubiertos", value: "6" },
+      { label: "Clientes referidos", value: "+40%" },
+    ],
+  },
+  {
+    title: "Expansión regional",
+    description:
+      "Operamos implementaciones multi-país con homologación fiscal y soporte bilingüe.",
+    icon: Globe,
+    stats: [
+      { label: "Países activos", value: "8" },
+      { label: "Tiempo de despliegue", value: "<4 semanas" },
+    ],
+  },
+];
+
+const enablementMilestones = [
+  {
+    title: "Kick-off ejecutivo",
+    timeframe: "Semana 1",
+    description:
+      "Definimos objetivos, equipos responsables y acordamos el plan de adopción con métricas compartidas.",
+  },
+  {
+    title: "Integraciones críticas",
+    timeframe: "Semanas 2-4",
+    description:
+      "Conectamos sistemas clave y configuramos tableros de control para asegurar visibilidad desde el día uno.",
+  },
+  {
+    title: "Go-live supervisado",
+    timeframe: "Semana 5",
+    description:
+      "Activamos flujos piloto, entrenamos a operadores y trazamos alertas proactivas para incidencias.",
+  },
+  {
+    title: "Optimización continua",
+    timeframe: "Semanas 6-12",
+    description:
+      "Analizamos datos reales, iteramos journeys y priorizamos nuevos casos con foco en ROI y compliance.",
+  },
+];
+
+const testimonials = [
+  {
+    quote:
+      "En tres meses consolidamos atención regional y datos de clientes. El equipo de Finnegans fue clave para definir procesos y medir impacto desde el primer día.",
+    name: "Sofía Martínez",
+    role: "Directora de Customer Care",
+    company: "Grupo Sideral",
+    metrics: [
+      { label: "Escalamiento evitado", value: "-62%" },
+      { label: "SLA crítico", value: "95%" },
+    ],
+  },
+  {
+    quote:
+      "Migramos nuestros flujos de cobranza sin perder trazabilidad. La visibilidad de tableros y auditoría simplificó las reuniones ejecutivas.",
+    name: "Federico Ríos",
+    role: "Head de Operaciones",
+    company: "NovaBank",
+    metrics: [
+      { label: "Promesas cumplidas", value: "+47%" },
+      { label: "Costo operativo", value: "-28%" },
+    ],
+  },
+  {
+    quote:
+      "Las automatizaciones nos permiten responder a distribuidores en minutos y coordinar aprobaciones internas sin salir del chat.",
+    name: "Valeria Quiroga",
+    role: "Gerente Comercial",
+    company: "Lumen Retail",
+    metrics: [
+      { label: "Tiempo de respuesta", value: "-70%" },
+      { label: "Ventas asistidas", value: "+3.1x" },
     ],
   },
 ];
@@ -552,6 +674,90 @@ export default function Home() {
           </div>
         </section>
 
+        <section id="alianzas" className="bg-[#04102D]/5 py-16">
+          <div className="mx-auto grid w-full max-w-6xl gap-12 px-6 lg:grid-cols-[1.1fr,0.9fr]">
+            <div className="space-y-8">
+              <div className="space-y-6">
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#04102D]/60">
+                  Ecosistema Finnegans
+                </p>
+                <h2 className="text-3xl font-semibold leading-tight text-[#04102D]">
+                  Acelerá resultados con aliados certificados y un plan de adopción guiado.
+                </h2>
+                <p className="text-lg text-[#04102D]/70">
+                  Colaboramos con partners tecnológicos, consultores y cámaras industriales para mantener tus flujos alineados
+                  a los estándares de tu negocio.
+                </p>
+              </div>
+              <ul className="grid gap-3 text-sm text-[#04102D]/70 sm:grid-cols-2">
+                {allianceBenefits.map((benefit) => (
+                  <li key={benefit} className="flex items-start gap-2">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 text-[#4BC3FE]" />
+                    <span>{benefit}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="space-y-5 rounded-3xl border border-[#04102D]/10 bg-white p-6 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#04102D]/60">
+                      Hoja de ruta 90 días
+                    </p>
+                    <p className="text-lg font-semibold text-[#04102D]">
+                      Acompañamiento ejecutivo continuo
+                    </p>
+                  </div>
+                  <CalendarClock className="h-7 w-7 text-[#4BC3FE]" aria-hidden="true" />
+                </div>
+                <div className="space-y-4">
+                  {enablementMilestones.map((milestone) => (
+                    <div
+                      key={milestone.title}
+                      className="rounded-2xl border border-[#04102D]/10 bg-[#04102D]/5 p-4"
+                    >
+                      <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#04102D]/60">
+                        {milestone.timeframe}
+                      </p>
+                      <p className="text-base font-semibold text-[#04102D]">{milestone.title}</p>
+                      <p className="text-sm text-[#04102D]/70">{milestone.description}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-6 sm:grid-cols-2">
+              {alliancePrograms.map((program) => (
+                <div
+                  key={program.title}
+                  className="flex h-full flex-col gap-5 rounded-3xl border border-[#04102D]/10 bg-white p-6 shadow-sm"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#4BC3FE]/20 text-[#04102D]">
+                        <program.icon className="h-5 w-5" />
+                      </span>
+                      <p className="text-lg font-semibold text-[#04102D]">{program.title}</p>
+                    </div>
+                    <Target className="h-5 w-5 text-[#4BC3FE]" aria-hidden="true" />
+                  </div>
+                  <p className="text-sm text-[#04102D]/70">{program.description}</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {program.stats.map((stat) => (
+                      <div
+                        key={`${program.title}-${stat.label}`}
+                        className="rounded-2xl border border-[#04102D]/10 bg-[#04102D]/5 p-4"
+                      >
+                        <p className="text-2xl font-semibold text-[#04102D]">{stat.value}</p>
+                        <p className="text-xs uppercase tracking-[0.28em] text-[#04102D]/60">{stat.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         <section id="equipo" className="bg-[#04102D]/5 py-16">
           <div className="mx-auto flex w-full max-w-6xl flex-col gap-12 px-6 lg:flex-row lg:items-start">
             <div className="max-w-xl space-y-6">
@@ -661,6 +867,76 @@ export default function Home() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="testimonios" className="relative overflow-hidden bg-[#04102D] py-16 text-white">
+          <div className="absolute inset-0 opacity-60" aria-hidden="true">
+            <div className="absolute -left-24 top-16 h-56 w-56 rounded-full border border-white/15" />
+            <div className="absolute bottom-10 right-0 h-40 w-40 rounded-3xl border border-[#4BC3FE]/30" />
+          </div>
+          <div className="relative mx-auto flex w-full max-w-6xl flex-col gap-12 px-6">
+            <div className="max-w-2xl space-y-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/70">
+                Testimonios
+              </p>
+              <h2 className="text-3xl font-semibold leading-tight">
+                Historias de equipos que ya operan conversaciones críticas con Finnegans.
+              </h2>
+              <p className="text-lg text-white/75">
+                Cada alianza combina procesos, tecnología y acompañamiento. Estas organizaciones ya capturan valor medible en
+                semanas.
+              </p>
+            </div>
+            <div className="grid gap-6 lg:grid-cols-3">
+              {testimonials.map((testimonial) => (
+                <div
+                  key={testimonial.name}
+                  className="flex h-full flex-col gap-5 rounded-3xl border border-white/15 bg-white/5 p-6 backdrop-blur"
+                >
+                  <Quote className="h-6 w-6 text-[#4BC3FE]" aria-hidden="true" />
+                  <p className="flex-1 text-lg italic text-white/80">“{testimonial.quote}”</p>
+                  <div className="space-y-1">
+                    <p className="text-base font-semibold text-white">{testimonial.name}</p>
+                    <p className="text-sm text-white/70">
+                      {testimonial.role} · {testimonial.company}
+                    </p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {testimonial.metrics.map((metric) => (
+                      <div
+                        key={`${testimonial.name}-${metric.label}`}
+                        className="rounded-2xl border border-white/10 bg-white/10 p-4"
+                      >
+                        <p className="text-2xl font-semibold text-white">{metric.value}</p>
+                        <p className="text-xs uppercase tracking-[0.28em] text-white/70">{metric.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-col gap-3 text-sm text-white/70 sm:flex-row sm:items-center sm:justify-between">
+              <p>
+                ¿Querés conocer implementaciones en tu industria? Prepararemos un caso detallado con indicadores y próximos
+                pasos.
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button
+                  asChild
+                  className="h-11 rounded-full bg-white px-6 text-sm font-semibold text-[#04102D] hover:bg-white/90"
+                >
+                  <Link href="/register">Solicitar estudio personalizado</Link>
+                </Button>
+                <Button
+                  asChild
+                  variant="ghost"
+                  className="h-11 rounded-full border border-white/20 bg-transparent px-6 text-sm font-semibold text-white hover:border-white/40 hover:bg-white/10"
+                >
+                  <a href="#casos">Ver más métricas</a>
+                </Button>
+              </div>
             </div>
           </div>
         </section>
