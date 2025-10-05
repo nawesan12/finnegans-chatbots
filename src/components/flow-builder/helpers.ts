@@ -158,22 +158,28 @@ export const getStarterData = <T extends FlowNodeType>(
     condition: {
       expression: "context.input?.toLowerCase?.().includes('ok')",
     },
-    api: {
-      url: "https://api.example.com/resource",
-      method: "POST",
-      headers: {},
-      body: '{"echo":"{{ input }}"}',
-      assignTo: "apiResult",
-    },
-    assign: { key: "name", value: "John" },
-    media: {
-      mediaType: "image",
-      url: "https://placekitten.com/400/300",
-      caption: "A cat",
-    },
-    handoff: { queue: "Default", note: "VIP" },
-    goto: { targetNodeId: "" },
-    end: { reason: "end" },
+  api: {
+    url: "https://api.example.com/resource",
+    method: "POST",
+    headers: {},
+    body: '{"echo":"{{ input }}"}',
+    assignTo: "apiResult",
+  },
+  assign: { key: "name", value: "John" },
+  media: {
+    mediaType: "image",
+    url: "https://placekitten.com/400/300",
+    caption: "A cat",
+  },
+  whatsapp_flow: {
+    header: "Completar información",
+    body: "Abrí el Flow de WhatsApp para continuar con tu solicitud.",
+    footer: "Gracias por tu tiempo",
+    cta: "Abrir Flow",
+  },
+  handoff: { queue: "Default", note: "VIP" },
+  goto: { targetNodeId: "" },
+  end: { reason: "end" },
   };
   return starters[type];
 };

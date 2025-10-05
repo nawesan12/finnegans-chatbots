@@ -4,6 +4,12 @@ import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { getAuthPayload } from "@/lib/auth";
 import { sanitizeFlowDefinition } from "@/lib/flow-schema";
+import {
+  createMetaFlow,
+  deleteMetaFlow,
+  MetaFlowError,
+  updateMetaFlow,
+} from "@/lib/meta-flow";
 
 const FlowUpdateSchema = z.object({
   name: z.string().min(1),
@@ -78,12 +84,24 @@ export async function PUT(
     const normalizedStatus = status?.trim() || "Draft";
     const existingFlow = await prisma.flow.findFirst({
       where: { id: params.id, userId: auth.userId },
-      select: { id: true },
+      select: { id: true, metaFlowId: true },
     });
 
     if (!existingFlow) {
       return NextResponse.json({ error: "Flow not found" }, { status: 404 });
     }
+
+    const remote = existingFlow.metaFlowId
+      ? await updateMetaFlow(auth.userId, existingFlow.metaFlowId, {
+          name: trimmedName,
+          definition: definitionJson,
+          status: normalizedStatus,
+        })
+      : await createMetaFlow(auth.userId, {
+          name: trimmedName,
+          definition: definitionJson,
+          status: normalizedStatus,
+        });
 
     const updatedFlow = await prisma.flow.update({
       where: { id: existingFlow.id },
@@ -93,6 +111,12 @@ export async function PUT(
         status: normalizedStatus,
         definition: definitionJson,
         updatedAt: new Date(),
+        metaFlowId: remote.id,
+        metaFlowToken: remote.token,
+        metaFlowVersion: remote.version,
+        metaFlowRevisionId: remote.revisionId,
+        metaFlowStatus: remote.status,
+        metaFlowMetadata: (remote.raw ?? null) as Prisma.JsonValue,
       },
       include: {
         _count: {
@@ -103,6 +127,12 @@ export async function PUT(
 
     return NextResponse.json(updatedFlow);
   } catch (error) {
+    if (error instanceof MetaFlowError) {
+      return NextResponse.json(
+        { error: error.message, details: error.details ?? null },
+        { status: error.status ?? 502 },
+      );
+    }
     console.error(`Error updating flow ${params.id}:`, error);
     return NextResponse.json(
       { error: "Internal Server Error" },
@@ -124,11 +154,34 @@ export async function DELETE(
   try {
     const flow = await prisma.flow.findFirst({
       where: { id: params.id, userId: auth.userId },
-      select: { id: true },
+      select: { id: true, metaFlowId: true },
     });
 
     if (!flow) {
       return NextResponse.json({ error: "Flow not found" }, { status: 404 });
+    }
+
+    if (flow.metaFlowId) {
+      try {
+        await deleteMetaFlow(auth.userId, flow.metaFlowId);
+      } catch (error) {
+        if (error instanceof MetaFlowError) {
+          if ((error.status ?? 500) === 404) {
+            // Remote flow already gone; proceed with local cleanup.
+            console.warn(
+              `Remote Meta Flow ${flow.metaFlowId} already deleted:`,
+              error.message,
+            );
+          } else {
+            return NextResponse.json(
+              { error: error.message, details: error.details ?? null },
+              { status: error.status ?? 502 },
+            );
+          }
+        } else {
+          throw error;
+        }
+      }
     }
 
     await prisma.$transaction([

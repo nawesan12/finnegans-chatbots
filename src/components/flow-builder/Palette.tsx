@@ -18,6 +18,7 @@ import {
   GitBranch,
   Flag,
   Link2,
+  Workflow,
 } from "lucide-react";
 
 // ---------- Types ----------
@@ -56,6 +57,13 @@ const defaultPalette: PaletteItem[] = [
     label: "Mensaje",
     icon: MessageSquare,
     hint: "Enviar texto (plantillas admitidas)",
+  },
+  {
+    type: "whatsapp_flow",
+    label: "WhatsApp Flow",
+    icon: Workflow,
+    hint: "Invitar a completar un Flow remoto",
+    keywords: ["meta", "flow", "form", "cta"],
   },
   {
     type: "options",

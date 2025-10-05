@@ -4,6 +4,7 @@ import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { getAuthPayload } from "@/lib/auth";
 import { sanitizeFlowDefinition } from "@/lib/flow-schema";
+import { createMetaFlow, MetaFlowError } from "@/lib/meta-flow";
 
 const FlowPayloadSchema = z.object({
   name: z.string().min(1),
@@ -82,12 +83,24 @@ export async function POST(request: Request) {
     const definitionJson = sanitizedDefinition as unknown as Prisma.JsonObject;
     const normalizedTrigger = trigger?.trim() || "default";
     const normalizedStatus = status?.trim() || "Draft";
+    const remote = await createMetaFlow(auth.userId, {
+      name: trimmedName,
+      definition: definitionJson,
+      status: normalizedStatus,
+    });
+
     const newFlow = await prisma.flow.create({
       data: {
         name: trimmedName,
         trigger: normalizedTrigger,
         status: normalizedStatus,
         definition: definitionJson,
+        metaFlowId: remote.id,
+        metaFlowToken: remote.token,
+        metaFlowVersion: remote.version,
+        metaFlowRevisionId: remote.revisionId,
+        metaFlowStatus: remote.status,
+        metaFlowMetadata: (remote.raw ?? null) as Prisma.JsonValue,
         user: { connect: { id: auth.userId } },
       },
       include: {
@@ -102,6 +115,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json(newFlow, { status: 201 });
   } catch (error) {
+    if (error instanceof MetaFlowError) {
+      return NextResponse.json(
+        { error: error.message, details: error.details ?? null },
+        { status: error.status ?? 502 },
+      );
+    }
     console.error("Error creating flow:", error);
     return NextResponse.json(
       { error: "Internal Server Error" },

@@ -11,6 +11,7 @@ import {
   FlowNodeType,
   GoToDataSchema,
   HandoffDataSchema,
+  WhatsAppFlowDataSchema,
   MediaDataSchema,
   MessageDataSchema,
   OptionsDataSchema,
@@ -31,6 +32,7 @@ export {
   AssignVarDataSchema,
   MediaDataSchema,
   HandoffDataSchema,
+  WhatsAppFlowDataSchema,
   EndDataSchema,
   GoToDataSchema,
   flowNodeTypes,
@@ -46,6 +48,7 @@ export type ConditionNodeData = z.infer<typeof ConditionDataSchema>;
 export type ApiNodeData = z.infer<typeof APICallDataSchema>;
 export type AssignNodeData = z.infer<typeof AssignVarDataSchema>;
 export type MediaNodeData = z.infer<typeof MediaDataSchema>;
+export type WhatsAppFlowNodeData = z.infer<typeof WhatsAppFlowDataSchema>;
 export type HandoffNodeData = z.infer<typeof HandoffDataSchema>;
 export type EndNodeData = z.infer<typeof EndDataSchema>;
 export type GoToNodeData = z.infer<typeof GoToDataSchema>;
@@ -59,6 +62,7 @@ export type FlowNodeDataMap = {
   api: ApiNodeData;
   assign: AssignNodeData;
   media: MediaNodeData;
+  whatsapp_flow: WhatsAppFlowNodeData;
   handoff: HandoffNodeData;
   goto: GoToNodeData;
   end: EndNodeData;

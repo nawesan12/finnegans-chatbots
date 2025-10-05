@@ -20,6 +20,7 @@ model User {
   metaAppSecret     String?
   metaAccessToken   String?
   metaPhoneNumberId String?
+  metaBusinessAccountId String?
 
   contacts   Contact[]
   flows      Flow[]
@@ -68,6 +69,13 @@ model Flow {
   channel    String   @default("whatsapp")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  metaFlowId         String?  @unique
+  metaFlowToken      String?
+  metaFlowVersion    String?
+  metaFlowRevisionId String?
+  metaFlowStatus     String?
+  metaFlowMetadata   Json?
 
   userId String
   user   User   @relation(fields: [userId], references: [id])
