@@ -50,6 +50,7 @@ import {
   APICallDataSchema,
   AssignVarDataSchema,
   MediaDataSchema,
+  WhatsAppFlowDataSchema,
   HandoffDataSchema,
   EndDataSchema,
   waTextLimit,
@@ -858,6 +859,9 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
             case "media":
               MediaDataSchema.parse(n.data);
               break;
+            case "whatsapp_flow":
+              WhatsAppFlowDataSchema.parse(n.data);
+              break;
             case "handoff":
               HandoffDataSchema.parse(n.data);
               break;
@@ -1193,19 +1197,21 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
           case "message":
             return "#3b82f6";
           case "options":
-          return "#f59e0b";
-        case "delay":
-          return "#fb923c";
-        case "condition":
-          return "#a855f7";
-        case "api":
-          return "#06b6d4";
-        case "assign":
-          return "#f472b6";
-        case "media":
-          return "#14b8a6";
-        case "handoff":
-          return "#d946ef";
+            return "#f59e0b";
+          case "delay":
+            return "#fb923c";
+          case "condition":
+            return "#a855f7";
+          case "api":
+            return "#06b6d4";
+          case "assign":
+            return "#f472b6";
+          case "media":
+            return "#14b8a6";
+          case "whatsapp_flow":
+            return "#10b981";
+          case "handoff":
+            return "#d946ef";
           case "goto":
             return "#64748b";
           case "end":

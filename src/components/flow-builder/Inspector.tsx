@@ -169,6 +169,17 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
     [sn, updateData],
   );
 
+  const appendFlowBody = useCallback(
+    (textToInsert: string) => {
+      const flowNode = sn && isNodeOfType(sn, "whatsapp_flow") ? sn : null;
+      if (!flowNode) return;
+      const cur = flowNode.data.body ?? "";
+      const next = (cur + (cur ? " " : "") + textToInsert).trim();
+      updateData("body", next);
+    },
+    [sn, updateData],
+  );
+
   if (!sn) {
     return (
       <Card className="h-full">
@@ -185,6 +196,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
   const name = sn.data?.name ?? "";
   const triggerData = isNodeOfType(sn, "trigger") ? sn.data : null;
   const messageData = isNodeOfType(sn, "message") ? sn.data : null;
+  const whatsappFlowData = isNodeOfType(sn, "whatsapp_flow") ? sn.data : null;
   const optionsData = isNodeOfType(sn, "options") ? sn.data : null;
   const delayData = isNodeOfType(sn, "delay") ? sn.data : null;
   const conditionData = isNodeOfType(sn, "condition") ? sn.data : null;
@@ -282,6 +294,65 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
                     Usá variables como {"{{ name }}"}, {"{{ order_id }}"}.
                   </p>
                   <VarHelpers onInsert={appendMessage} />
+                </div>
+              </div>
+            );
+          })()}
+
+        {/* WHATSAPP FLOW */}
+        {whatsappFlowData &&
+          (() => {
+            const body = whatsappFlowData.body ?? "";
+            const limit = 1024;
+            const bodyLen = body.length;
+            const overLimit = bodyLen > limit;
+            return (
+              <div className="space-y-3">
+                <div className="grid gap-2">
+                  <Label>Header (opcional)</Label>
+                  <Input
+                    value={whatsappFlowData.header ?? ""}
+                    onChange={(event) => updateData("header", event.target.value)}
+                    placeholder="Ej: Confirmá tus datos"
+                    maxLength={60}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Mensaje del Flow</Label>
+                    <Badge variant={overLimit ? "destructive" : "secondary"}>
+                      {bodyLen}/{limit}
+                      {overLimit ? " • Excede" : ""}
+                    </Badge>
+                  </div>
+                  <Textarea
+                    className="min-h-[140px]"
+                    value={body}
+                    onChange={(event) => updateData("body", event.target.value)}
+                    placeholder="Te voy a redirigir a un Flow para completar la información."
+                  />
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Podés usar variables como {"{{ name }}"}.</span>
+                    <VarHelpers onInsert={appendFlowBody} />
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Footer (opcional)</Label>
+                  <Input
+                    value={whatsappFlowData.footer ?? ""}
+                    onChange={(event) => updateData("footer", event.target.value)}
+                    placeholder="Ej: Vas a recibir una confirmación"
+                    maxLength={60}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Texto del botón (CTA)</Label>
+                  <Input
+                    value={whatsappFlowData.cta ?? ""}
+                    onChange={(event) => updateData("cta", event.target.value)}
+                    placeholder="Abrir Flow"
+                    maxLength={40}
+                  />
                 </div>
               </div>
             );

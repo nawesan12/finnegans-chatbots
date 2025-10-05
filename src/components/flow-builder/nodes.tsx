@@ -20,6 +20,7 @@ import {
   Trash2,
   Clipboard,
   Hash,
+  Workflow,
 } from "lucide-react";
 import {
   ContextMenu,
@@ -37,6 +38,7 @@ import type {
   ApiNodeData,
   AssignNodeData,
   MediaNodeData,
+  WhatsAppFlowNodeData,
   HandoffNodeData,
   GoToNodeData,
   EndNodeData,
@@ -513,6 +515,63 @@ const MediaNode = memo(function MediaNode({
   );
 });
 
+const WhatsAppFlowNode = memo(function WhatsAppFlowNode({
+  data,
+  selected,
+  onEdit,
+  onDuplicate,
+  onDelete,
+  onCopyWebhook,
+  onCopyId,
+}: NodeProps<WhatsAppFlowNodeData> & NodeCommonHandlers) {
+  const header = data?.header ?? "";
+  const body = data?.body ?? "";
+  const footer = data?.footer ?? "";
+  const cta = data?.cta ?? "";
+  return (
+    <div className="relative">
+      <Shell
+        icon={Workflow}
+        title="WhatsApp Flow"
+        color="border-emerald-300"
+        selected={!!selected}
+        onEdit={onEdit}
+        onDuplicate={onDuplicate}
+        onDelete={onDelete}
+        onCopyWebhook={onCopyWebhook}
+        onCopyId={onCopyId}
+      >
+        <div className="space-y-2 text-sm">
+          {header ? (
+            <div className="text-xs uppercase text-muted-foreground">
+              Header: {header}
+            </div>
+          ) : null}
+          <div
+            className="whitespace-pre-wrap break-words bg-muted/30 p-2 rounded-lg max-h-40 overflow-auto"
+            title={body}
+          >
+            {body || (
+              <span className="text-muted-foreground">
+                Describe la invitación al Flow…
+              </span>
+            )}
+          </div>
+          {footer ? (
+            <div className="text-xs text-muted-foreground">Footer: {footer}</div>
+          ) : null}
+          {cta ? (
+            <div className="text-xs text-muted-foreground">
+              CTA: <Badge variant="outline">{cta}</Badge>
+            </div>
+          ) : null}
+        </div>
+      </Shell>
+      <CommonHandles top bottom />
+    </div>
+  );
+});
+
 const HandoffNode = memo(function HandoffNode({
   data,
   selected,
@@ -623,6 +682,7 @@ export const nodeTypes = {
   api: APICallNode,
   assign: AssignVarNode,
   media: MediaNode,
+  whatsapp_flow: WhatsAppFlowNode,
   handoff: HandoffNode,
   goto: GoToNode,
   end: EndNode,

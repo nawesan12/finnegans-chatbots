@@ -978,7 +978,20 @@ type SendMessagePayload =
       url: string;
       caption?: string;
     }
-  | { type: "options"; text: string; options: string[] };
+  | { type: "options"; text: string; options: string[] }
+  | {
+      type: "flow";
+      flow: {
+        name?: string | null;
+        id: string;
+        token: string;
+        version?: string | null;
+        header?: string | null;
+        body: string;
+        footer?: string | null;
+        cta?: string | null;
+      };
+    };
 
 export type SendMessageResult =
   | { success: true; messageId?: string | null; conversationId?: string | null }
@@ -989,8 +1002,8 @@ export type SendMessageResult =
       details?: unknown;
     };
 
-const GRAPH_VERSION = "v22.0";
-const API_TIMEOUT_MS = 15000;
+export const GRAPH_VERSION = "v22.0";
+export const META_API_TIMEOUT_MS = 15000;
 
 export async function sendMessage(
   userId: string,
@@ -1083,11 +1096,63 @@ export async function sendMessage(
       };
       break;
     }
+
+    case "flow": {
+      const flow = message.flow;
+      const flowId = flow?.id?.trim();
+      const flowToken = flow?.token?.trim();
+      if (!flowId || !flowToken) {
+        return {
+          success: false,
+          status: 400,
+          error: "Missing WhatsApp Flow identifiers",
+        };
+      }
+
+      const flowName = flow?.name?.trim() || "whatsapp_flow";
+      const flowVersion = flow?.version?.trim();
+      const header = flow?.header?.trim();
+      const footer = flow?.footer?.trim();
+      const bodyText = (flow?.body ?? "").trim();
+      const cta = flow?.cta?.trim();
+
+      const interactive: Record<string, unknown> = {
+        type: "flow",
+        flow: {
+          name: flowName,
+          id: flowId,
+          token: flowToken,
+          ...(flowVersion ? { version: flowVersion } : {}),
+        },
+      };
+
+      if (header) {
+        interactive.header = { type: "text", text: header };
+      }
+      if (bodyText) {
+        interactive.body = { text: bodyText };
+      }
+      if (footer) {
+        interactive.footer = { text: footer };
+      }
+      if (cta) {
+        (interactive.flow as Record<string, unknown>).flow_cta = cta;
+      }
+
+      body = {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: normalizedTo,
+        type: "interactive",
+        interactive,
+      };
+      break;
+    }
   }
 
   // Llamada con timeout/abort
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), API_TIMEOUT_MS);
+  const t = setTimeout(() => ctrl.abort(), META_API_TIMEOUT_MS);
   try {
     const res = await fetch(url, {
       method: "POST",

@@ -19,6 +19,13 @@ export const OptionsDataSchema = BaseDataSchema.extend({
   options: z.array(z.string().min(1).max(30)).min(2).max(10),
 });
 
+export const WhatsAppFlowDataSchema = BaseDataSchema.extend({
+  header: z.string().max(60).optional(),
+  body: z.string().min(1).max(1024),
+  footer: z.string().max(60).optional(),
+  cta: z.string().max(40).optional(),
+});
+
 export const DelayDataSchema = BaseDataSchema.extend({
   seconds: z.number().min(1).max(3600).default(1),
 });
@@ -68,6 +75,7 @@ export const flowNodeTypes = [
   "api",
   "assign",
   "media",
+  "whatsapp_flow",
   "handoff",
   "goto",
   "end",

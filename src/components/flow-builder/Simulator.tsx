@@ -314,6 +314,21 @@ export function Simulator({
             addLog({ type: "bot", text: display });
             break;
           }
+          case "whatsapp_flow": {
+            if (!isNodeOfType(current, "whatsapp_flow")) break;
+            const header = tpl(current.data.header, runtimeContext).trim();
+            const body = tpl(current.data.body, runtimeContext).trim();
+            const footer = tpl(current.data.footer, runtimeContext).trim();
+            const cta = tpl(current.data.cta, runtimeContext).trim();
+            const segments = [
+              header ? `🔹 ${header}` : null,
+              body || "(sin mensaje)",
+              footer || null,
+              cta ? `CTA: ${cta}` : null,
+            ].filter(Boolean) as string[];
+            addLog({ type: "bot", text: segments.join("\n") });
+            break;
+          }
           case "assign": {
             if (!isNodeOfType(current, "assign")) break;
             const key = current.data.key;

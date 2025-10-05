@@ -314,7 +314,7 @@ export async function executeFlow(
   };
 
   const recordOutbound = (
-    type: "text" | "media" | "options",
+    type: "text" | "media" | "options" | "flow",
     payload: Record<string, unknown>,
   ) => {
     const ts = nowIso();
@@ -351,6 +351,14 @@ export async function executeFlow(
     const captionValue = payload["caption"];
     if (captionValue !== undefined) {
       historyPayload.caption = captionValue;
+    }
+
+    if (type === "flow") {
+      historyPayload.flow = { ...payload };
+      const flowBody = payload["body"];
+      if (typeof flowBody === "string" && flowBody.trim()) {
+        context.lastBotMessage = flowBody;
+      }
     }
 
     pushHistory({
@@ -787,6 +795,76 @@ export async function executeFlow(
           }
 
           recordOutbound("media", mediaPayload);
+          break;
+        }
+
+        case "whatsapp_flow": {
+          const data = currentNode.data as {
+            header?: string;
+            body?: string;
+            footer?: string;
+            cta?: string;
+          };
+          const headerText = tpl(data.header ?? "").trim();
+          const bodyText = tpl(data.body ?? "");
+          const footerText = tpl(data.footer ?? "").trim();
+          const ctaText = tpl(data.cta ?? "").trim();
+
+          if (!bodyText.trim()) {
+            throw new FlowSendMessageError(
+              "WhatsApp Flow body cannot be empty.",
+              400,
+            );
+          }
+
+          const metaFlowId = session.flow.metaFlowId?.trim() ?? null;
+          const metaFlowToken = session.flow.metaFlowToken?.trim() ?? null;
+          const metaFlowVersion = session.flow.metaFlowVersion?.trim() ?? undefined;
+
+          if (!metaFlowId || !metaFlowToken) {
+            throw new FlowSendMessageError(
+              "Flow is not synchronized with Meta. Save the flow to sync identifiers.",
+              400,
+            );
+          }
+
+          const sendResult = await sendMessage(
+            session.flow.userId,
+            session.contact.phone,
+            {
+              type: "flow",
+              flow: {
+                name: session.flow.name,
+                id: metaFlowId,
+                token: metaFlowToken,
+                version: metaFlowVersion,
+                header: headerText || undefined,
+                body: bodyText,
+                footer: footerText || undefined,
+                cta: ctaText || undefined,
+              },
+            },
+          );
+
+          if (!sendResult?.success) {
+            console.error(
+              "Failed to send WhatsApp Flow message to",
+              session.contact.phone,
+              sendResult?.error ?? "",
+            );
+            const message =
+              sendResult?.error?.trim().length
+                ? sendResult.error
+                : "Failed to send WhatsApp Flow message";
+            throw new FlowSendMessageError(message, sendResult?.status);
+          }
+
+          recordOutbound("flow", {
+            header: headerText,
+            body: bodyText,
+            footer: footerText,
+            cta: ctaText,
+          });
           break;
         }
 
