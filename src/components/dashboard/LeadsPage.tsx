@@ -6,7 +6,14 @@ import {
   useMemo,
   useState,
 } from "react";
-import { Download, Loader2, NotebookPen, RefreshCw } from "lucide-react";
+import {
+  AlertTriangle,
+  Download,
+  Loader2,
+  NotebookPen,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import PageHeader from "@/components/dashboard/PageHeader";
@@ -313,6 +320,10 @@ const LeadsPage = () => {
   const [createdFrom, setCreatedFrom] = useState("");
   const [createdTo, setCreatedTo] = useState("");
   const [datePreset, setDatePreset] = useState<DatePreset | null>(null);
+  const [leadIdPendingDeletion, setLeadIdPendingDeletion] = useState<string | null>(
+    null,
+  );
+  const [isDeletingLead, setIsDeletingLead] = useState(false);
 
   const dateFormatter = useMemo(
     () =>
@@ -526,6 +537,13 @@ const LeadsPage = () => {
     }
     return leads.find((lead) => lead.id === selectedLeadId) ?? null;
   }, [leads, selectedLeadId]);
+
+  const leadPendingDeletion = useMemo(() => {
+    if (!leadIdPendingDeletion) {
+      return null;
+    }
+    return leads.find((lead) => lead.id === leadIdPendingDeletion) ?? null;
+  }, [leadIdPendingDeletion, leads]);
 
   useEffect(() => {
     if (selectedLead) {
@@ -946,6 +964,54 @@ const LeadsPage = () => {
     return current !== notesDraft.trim();
   }, [notesDraft, selectedLead]);
 
+  const handleDeleteLead = useCallback(async () => {
+    if (!leadIdPendingDeletion) {
+      return;
+    }
+
+    setIsDeletingLead(true);
+    const targetId = leadIdPendingDeletion;
+    const leadLabel =
+      leadPendingDeletion?.name?.trim() ||
+      leadPendingDeletion?.email ||
+      "el lead";
+
+    try {
+      const response = await authenticatedFetch(`/api/leads/${targetId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const message =
+          (await parseErrorMessage(response)) ??
+          "No se pudo eliminar el lead.";
+        throw new Error(message);
+      }
+
+      setLeads((previous) => {
+        const next = previous.filter((lead) => lead.id !== targetId);
+        setServerSummary(computeSummaryFromLeads(next));
+        return next;
+      });
+
+      setSelectedLeadId((current) => (current === targetId ? null : current));
+      setHighlightedLeadId((current) =>
+        current === targetId ? null : current,
+      );
+      setLeadIdPendingDeletion(null);
+      toast.success(`Eliminamos ${leadLabel}.`);
+    } catch (error) {
+      if (error instanceof UnauthorizedError) {
+        return;
+      }
+      toast.error(
+        (error as Error)?.message ?? "No se pudo eliminar el lead.",
+      );
+    } finally {
+      setIsDeletingLead(false);
+    }
+  }, [leadIdPendingDeletion, leadPendingDeletion]);
+
   const handleSaveNotes = useCallback(async () => {
     if (!selectedLead) {
       return;
@@ -1356,7 +1422,7 @@ const LeadsPage = () => {
                 </div>
               </div>
 
-              <DialogFooter className="gap-2 sm:justify-between">
+              <DialogFooter className="flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <Button
                   type="button"
                   variant="ghost"
@@ -1364,19 +1430,90 @@ const LeadsPage = () => {
                 >
                   Cerrar
                 </Button>
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={() => setLeadIdPendingDeletion(selectedLead.id)}
+                    disabled={isDeletingLead}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Eliminar lead
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => void handleSaveNotes()}
+                    disabled={!isNotesDirty || savingNotes}
+                    className="min-w-[150px]"
+                  >
+                    {savingNotes ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Guardando...
+                      </>
+                    ) : (
+                      "Guardar cambios"
+                    )}
+                  </Button>
+                </div>
+              </DialogFooter>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={Boolean(leadPendingDeletion)}
+        onOpenChange={(open) => {
+          if (!open && !isDeletingLead) {
+            setLeadIdPendingDeletion(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          {leadPendingDeletion ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Eliminar lead</DialogTitle>
+                <DialogDescription>
+                  ¿Seguro que deseas eliminar
+                  {" "}
+                  <span className="font-semibold">
+                    {leadPendingDeletion.name ?? leadPendingDeletion.email ??
+                      "este lead"}
+                  </span>
+                  ? Esta acción no se puede deshacer.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex items-start gap-3 rounded-lg border border-red-100 bg-red-50 p-3 text-sm text-red-700">
+                <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0" />
+                <p>
+                  Se eliminarán las notas internas y el historial asociado a
+                  este lead. Te recomendamos guardar cualquier información
+                  importante antes de continuar.
+                </p>
+              </div>
+              <DialogFooter className="gap-2 sm:justify-end">
                 <Button
                   type="button"
-                  onClick={() => void handleSaveNotes()}
-                  disabled={!isNotesDirty || savingNotes}
-                  className="min-w-[150px]"
+                  variant="outline"
+                  onClick={() => setLeadIdPendingDeletion(null)}
+                  disabled={isDeletingLead}
                 >
-                  {savingNotes ? (
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={() => void handleDeleteLead()}
+                  disabled={isDeletingLead}
+                >
+                  {isDeletingLead ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Guardando...
+                      Eliminando...
                     </>
                   ) : (
-                    "Guardar cambios"
+                    "Eliminar definitivamente"
                   )}
                 </Button>
               </DialogFooter>

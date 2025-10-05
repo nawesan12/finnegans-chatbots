@@ -106,4 +106,45 @@ export async function PATCH(
   }
 }
 
+export async function DELETE(
+  request: NextRequest,
+  context: { params?: Promise<{ id: string }> },
+) {
+  const auth = getAuthPayload(request);
+  if (!auth) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const params = context.params ? await context.params : undefined;
+  const id = params?.id;
+
+  if (!id) {
+    return NextResponse.json({ error: "Lead ID is required" }, { status: 400 });
+  }
+
+  try {
+    await prisma.lead.delete({
+      where: { id },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2025"
+    ) {
+      return NextResponse.json(
+        { error: "El lead no existe o ya fue eliminado." },
+        { status: 404 },
+      );
+    }
+
+    console.error("Failed to delete lead", error);
+    return NextResponse.json(
+      { error: "No pudimos eliminar el lead." },
+      { status: 500 },
+    );
+  }
+}
+
 export const dynamic = "force-dynamic";
