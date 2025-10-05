@@ -128,10 +128,10 @@ export function ContactForm() {
     >
       <div className="space-y-2 text-left">
         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/70">
-          Agenda tu workshop
+          Agendá tu workshop
         </p>
         <h3 className="text-2xl font-semibold leading-snug">
-          Cuéntanos qué equipos necesitan acompañamiento.
+          Contanos qué equipos necesitan acompañamiento.
         </h3>
         <p className="text-sm text-white/70">
           Respondemos en menos de 24 h hábiles con un plan de trabajo y próximos pasos.
@@ -226,7 +226,7 @@ export function ContactForm() {
               className="h-11 border-white/20 bg-white/5 text-left text-white focus:border-[#4BC3FE] focus:ring-[#4BC3FE]/40"
               aria-invalid={Boolean(errors.focusArea)}
             >
-              <SelectValue placeholder="Selecciona un objetivo" />
+              <SelectValue placeholder="Elegí un objetivo" />
             </SelectTrigger>
             <SelectContent className="bg-[#04102D] text-white">
               {leadFocusAreas.map((area) => (

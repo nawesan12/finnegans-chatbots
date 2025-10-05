@@ -10,16 +10,16 @@ if (focusAreaValues.length === 0) {
 
 export const leadFormSchema = z.object({
   name: z
-    .string({ message: "Ingresa tu nombre." })
+    .string({ message: "Ingresá tu nombre." })
     .trim()
-    .min(1, "Ingresa tu nombre.")
+    .min(1, "Ingresá tu nombre.")
     .max(120, "El nombre es demasiado largo."),
   email: z
     .string({ message: "Necesitamos tu correo." })
     .trim()
     .min(1, "Necesitamos tu correo.")
     .max(180, "El correo es demasiado largo.")
-    .email("Ingresa un correo válido."),
+    .email("Ingresá un correo válido."),
   company: z
     .string()
     .trim()
@@ -38,7 +38,7 @@ export const leadFormSchema = z.object({
     .min(1, "Contanos sobre tu proyecto.")
     .max(1000, "El mensaje es demasiado largo."),
   focusArea: z.enum([focusAreaValues[0], ...focusAreaValues.slice(1)], {
-    message: "Selecciona el objetivo principal de tu proyecto.",
+    message: "Elegí el objetivo principal de tu proyecto.",
   }),
 });
 
