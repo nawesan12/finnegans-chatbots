@@ -23,12 +23,58 @@ export const leadStatuses = [
 
 export type LeadStatus = (typeof leadStatuses)[number]["value"];
 
+export const leadFocusAreas = [
+  {
+    value: "support",
+    label: "Soporte al cliente",
+    description:
+      "Prioriza automatizar y escalar respuestas para solicitudes de clientes.",
+  },
+  {
+    value: "sales",
+    label: "Ventas y prospección",
+    description:
+      "Busca acelerar la generación de oportunidades y cierres comerciales.",
+  },
+  {
+    value: "collections",
+    label: "Cobranzas y pagos",
+    description:
+      "Necesita optimizar recordatorios, negociaciones y recuperación de deudas.",
+  },
+  {
+    value: "operations",
+    label: "Operaciones internas",
+    description:
+      "Quiere coordinar workflows entre equipos y sistemas internos.",
+  },
+  {
+    value: "other",
+    label: "Otro caso",
+    description:
+      "Casos especiales que requieren acompañamiento dedicado para definir alcance.",
+  },
+] as const;
+
+export type LeadFocusArea = (typeof leadFocusAreas)[number]["value"];
+
 const validLeadStatuses = new Set<LeadStatus>(
   leadStatuses.map((status) => status.value),
 );
 
 const leadStatusLabelMap = new Map(
   leadStatuses.map((status) => [status.value, status.label] as const),
+);
+
+const validLeadFocusAreas = new Set<LeadFocusArea>(
+  leadFocusAreas.map((area) => area.value),
+);
+
+const leadFocusAreaLabelMap = new Map(
+  leadFocusAreas.map((area) => [area.value, area.label] as const),
+);
+const leadFocusAreaDescriptionMap = new Map(
+  leadFocusAreas.map((area) => [area.value, area.description] as const),
 );
 
 export function isValidLeadStatus(value: string): value is LeadStatus {
@@ -39,12 +85,37 @@ export function getLeadStatusLabel(status: string): string {
   return leadStatusLabelMap.get(status as LeadStatus) ?? status;
 }
 
+export function isValidLeadFocusArea(
+  value: string,
+): value is LeadFocusArea {
+  return validLeadFocusAreas.has(value as LeadFocusArea);
+}
+
+export function getLeadFocusAreaLabel(focusArea: string | null | undefined) {
+  if (!focusArea) {
+    return "";
+  }
+  return leadFocusAreaLabelMap.get(focusArea as LeadFocusArea) ?? focusArea;
+}
+
+export function getLeadFocusAreaDescription(
+  focusArea: string | null | undefined,
+) {
+  if (!focusArea) {
+    return "";
+  }
+  return (
+    leadFocusAreaDescriptionMap.get(focusArea as LeadFocusArea) ?? focusArea
+  );
+}
+
 type LeadForExport = {
   name: string | null;
   email: string;
   company: string | null;
   phone: string | null;
   status: string;
+  focusArea: string | null;
   message: string;
   notes: string | null;
   createdAt: Date;
@@ -73,6 +144,7 @@ export function formatLeadsAsCsv(
     "Empresa",
     "Teléfono",
     "Estado",
+    "Necesidad principal",
     "Mensaje",
     "Notas",
     "Recibido",
@@ -85,6 +157,7 @@ export function formatLeadsAsCsv(
     lead.company ?? "",
     lead.phone ?? "",
     getLeadStatusLabel(lead.status),
+    getLeadFocusAreaLabel(lead.focusArea),
     lead.message,
     lead.notes ?? "",
     dateFormatter.format(lead.createdAt),

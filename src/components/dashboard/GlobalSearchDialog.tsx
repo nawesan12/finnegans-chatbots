@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { authenticatedFetch } from "@/lib/api-client";
-import { leadStatuses } from "@/lib/leads";
+import { getLeadFocusAreaLabel, leadStatuses } from "@/lib/leads";
 import { cn } from "@/lib/utils";
 
 interface SearchResultItem {
@@ -60,6 +60,7 @@ interface SearchResponse {
       company: string | null;
       status: string;
       createdAt: string;
+      focusArea: string | null;
     }>;
   };
 }
@@ -117,12 +118,16 @@ const SECTION_CONFIG: SectionConfigMap = {
       const statusLabel =
         leadStatuses.find((status) => status.value === lead.status)?.label ??
         lead.status;
+      const focusLabel = getLeadFocusAreaLabel(lead.focusArea);
+      const baseSubtitle = lead.company ?? lead.email;
 
       return {
         id: `lead-${lead.id}`,
         href: `/dashboard/leads?highlight=${lead.id}`,
         title: lead.name || lead.email,
-        subtitle: lead.company ?? lead.email,
+        subtitle: focusLabel
+          ? `${baseSubtitle} • ${focusLabel}`
+          : baseSubtitle,
         meta: statusLabel,
       };
     },

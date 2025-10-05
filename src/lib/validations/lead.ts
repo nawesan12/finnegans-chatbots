@@ -1,5 +1,13 @@
 import { z } from "zod";
 
+import { leadFocusAreas } from "@/lib/leads";
+
+const focusAreaValues = leadFocusAreas.map((area) => area.value);
+
+if (focusAreaValues.length === 0) {
+  throw new Error("leadFocusAreas must contain at least one option");
+}
+
 export const leadFormSchema = z.object({
   name: z
     .string({ message: "Ingresa tu nombre." })
@@ -29,6 +37,9 @@ export const leadFormSchema = z.object({
     .trim()
     .min(1, "Contanos sobre tu proyecto.")
     .max(1000, "El mensaje es demasiado largo."),
+  focusArea: z.enum([focusAreaValues[0], ...focusAreaValues.slice(1)], {
+    message: "Selecciona el objetivo principal de tu proyecto.",
+  }),
 });
 
 export type LeadFormValues = z.infer<typeof leadFormSchema>;

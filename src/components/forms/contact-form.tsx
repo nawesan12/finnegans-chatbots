@@ -4,22 +4,33 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { leadFocusAreas } from "@/lib/leads";
 import { leadFormSchema, type LeadFormValues } from "@/lib/validations/lead";
 import { toast } from "sonner";
 import { Loader2, Send } from "lucide-react";
 
-const initialValues: LeadFormValues = {
+type LeadFormState = Omit<LeadFormValues, "focusArea"> & { focusArea: string };
+
+const initialValues: LeadFormState = {
   name: "",
   email: "",
   company: undefined,
   phone: undefined,
   message: "",
+  focusArea: "",
 };
 
-type FieldErrors = Partial<Record<keyof LeadFormValues, string>>;
+type FieldErrors = Partial<Record<keyof LeadFormState, string>>;
 
 export function ContactForm() {
-  const [values, setValues] = useState(initialValues);
+  const [values, setValues] = useState<LeadFormState>(initialValues);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -36,6 +47,17 @@ export function ContactForm() {
       }));
     };
 
+  const handleFocusAreaChange = (value: string) => {
+    setValues((prev) => ({
+      ...prev,
+      focusArea: value,
+    }));
+    setErrors((prev) => ({
+      ...prev,
+      focusArea: undefined,
+    }));
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (isSubmitting) {
@@ -48,7 +70,8 @@ export function ContactForm() {
       company: values.company ? values.company.trim() : undefined,
       phone: values.phone ? values.phone.trim() : undefined,
       message: values.message.trim(),
-    } satisfies LeadFormValues;
+      focusArea: values.focusArea,
+    };
 
     const validation = leadFormSchema.safeParse(payload);
 
@@ -57,7 +80,7 @@ export function ContactForm() {
       for (const issue of validation.error.issues) {
         const pathKey = issue.path[0];
         if (typeof pathKey === "string" && !(pathKey in fieldErrors)) {
-          fieldErrors[pathKey as keyof LeadFormValues] = issue.message;
+          fieldErrors[pathKey as keyof LeadFormState] = issue.message;
         }
       }
       setErrors(fieldErrors);
@@ -187,6 +210,37 @@ export function ContactForm() {
           />
           {errors.phone ? (
             <p className="text-xs text-[#4BC3FE]">{errors.phone}</p>
+          ) : null}
+        </div>
+        <div className="space-y-2 text-left">
+          <label className="text-sm font-medium text-white" htmlFor="lead-focus">
+            Objetivo principal
+          </label>
+          <Select
+            value={values.focusArea}
+            onValueChange={handleFocusAreaChange}
+            disabled={isSubmitting}
+          >
+            <SelectTrigger
+              id="lead-focus"
+              className="h-11 border-white/20 bg-white/5 text-left text-white focus:border-[#4BC3FE] focus:ring-[#4BC3FE]/40"
+              aria-invalid={Boolean(errors.focusArea)}
+            >
+              <SelectValue placeholder="Selecciona un objetivo" />
+            </SelectTrigger>
+            <SelectContent className="bg-[#04102D] text-white">
+              {leadFocusAreas.map((area) => (
+                <SelectItem key={area.value} value={area.value}>
+                  <div className="space-y-1 text-left">
+                    <p className="text-sm font-medium">{area.label}</p>
+                    <p className="text-xs text-white/70">{area.description}</p>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {errors.focusArea ? (
+            <p className="text-xs text-[#4BC3FE]">{errors.focusArea}</p>
           ) : null}
         </div>
       </div>
