@@ -699,6 +699,11 @@ const LeadsPage = () => {
   }, [availableStatuses, filteredLeads, hasActiveFilters, leads, serverSummary]);
 
   const handleExport = useCallback(async () => {
+    if (dateFilter.isInvalid) {
+      toast.error(dateRangeError ?? "El rango de fechas seleccionado es inválido.");
+      return;
+    }
+
     if (filteredLeads.length === 0) {
       toast.info("No hay leads para exportar con los filtros actuales.");
       return;
@@ -714,6 +719,12 @@ const LeadsPage = () => {
       }
       if (trimmedSearch) {
         params.set("search", trimmedSearch);
+      }
+      if (createdFrom) {
+        params.set("createdFrom", createdFrom);
+      }
+      if (createdTo) {
+        params.set("createdTo", createdTo);
       }
 
       const query = params.size > 0 ? `?${params.toString()}` : "";
@@ -771,7 +782,15 @@ const LeadsPage = () => {
     } finally {
       setIsExporting(false);
     }
-  }, [filteredLeads.length, searchTerm, statusFilter]);
+  }, [
+    createdFrom,
+    createdTo,
+    dateFilter,
+    dateRangeError,
+    filteredLeads.length,
+    searchTerm,
+    statusFilter,
+  ]);
 
   const columns = useMemo<TableColumn<LeadRecord>[]>(
     () => [
