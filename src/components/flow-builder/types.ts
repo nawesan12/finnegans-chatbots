@@ -14,6 +14,7 @@ import {
   WhatsAppFlowDataSchema,
   MediaDataSchema,
   MessageDataSchema,
+  TemplateParameterSchema,
   OptionsDataSchema,
   TriggerDataSchema,
   flowNodeTypes,
@@ -25,6 +26,7 @@ export {
   BaseDataSchema,
   TriggerDataSchema,
   MessageDataSchema,
+  TemplateParameterSchema,
   OptionsDataSchema,
   DelayDataSchema,
   ConditionDataSchema,
@@ -42,6 +44,7 @@ export type { FlowNodeType };
 
 export type TriggerNodeData = z.infer<typeof TriggerDataSchema>;
 export type MessageNodeData = z.infer<typeof MessageDataSchema>;
+export type TemplateParameterData = z.infer<typeof TemplateParameterSchema>;
 export type OptionsNodeData = z.infer<typeof OptionsDataSchema>;
 export type DelayNodeData = z.infer<typeof DelayDataSchema>;
 export type ConditionNodeData = z.infer<typeof ConditionDataSchema>;

@@ -10,9 +10,46 @@ export const TriggerDataSchema = BaseDataSchema.extend({
   keyword: z.string().min(1).max(64),
 });
 
+export const TemplateParameterSchema = z.object({
+  component: z.string().min(1),
+  type: z.literal("text").default("text"),
+  value: z.string().max(1024).default(""),
+  subType: z.string().max(60).optional(),
+  index: z.number().int().min(0).optional(),
+});
+
 export const MessageDataSchema = BaseDataSchema.extend({
-  text: z.string().min(1).max(waTextLimit),
+  text: z.string().max(waTextLimit).default(""),
   useTemplate: z.boolean().default(false),
+  templateName: z.string().max(512).optional(),
+  templateLanguage: z.string().max(24).optional(),
+  templateParameters: z.array(TemplateParameterSchema).default([]),
+}).superRefine((value, ctx) => {
+  if (value.useTemplate) {
+    if (!value.templateName?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Template name is required when using templates",
+        path: ["templateName"],
+      });
+    }
+    if (!value.templateLanguage?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Template language is required when using templates",
+        path: ["templateLanguage"],
+      });
+    }
+  } else {
+    const trimmed = value.text?.trim?.() ?? "";
+    if (!trimmed) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Message text is required",
+        path: ["text"],
+      });
+    }
+  }
 });
 
 export const OptionsDataSchema = BaseDataSchema.extend({

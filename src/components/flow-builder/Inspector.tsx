@@ -1,5 +1,5 @@
 "use client";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -9,8 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
-import { Trash2, Plus, MoveUpRight } from "lucide-react";
-import type { FlowNode } from "./types";
+import { Trash2, Plus, MoveUpRight, Loader2, RefreshCw } from "lucide-react";
+import type { FlowNode, TemplateParameterData } from "./types";
 import { waTextLimit, isNodeOfType } from "./types";
 import {
   Select,
@@ -19,6 +19,8 @@ import {
   SelectItem,
   SelectValue,
 } from "@/components/ui/select";
+import { toast } from "sonner";
+import { authenticatedFetch } from "@/lib/api-client";
 
 type InspectorProps = {
   selectedNode: FlowNode | null;
@@ -26,6 +28,99 @@ type InspectorProps = {
 };
 
 const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
+
+const TEMPLATE_COMPONENT_OPTIONS = [
+  { value: "HEADER", label: "Header" },
+  { value: "BODY", label: "Body" },
+  { value: "FOOTER", label: "Footer" },
+  { value: "BUTTON", label: "Button" },
+] as const;
+
+type MetaTemplateComponentSummary = {
+  type: string;
+  subType?: string | null;
+  index?: number | null;
+  text?: string | null;
+  example?: Record<string, unknown> | null;
+};
+
+type MetaTemplateSummary = {
+  id: string;
+  name: string;
+  language: string;
+  status: string | null;
+  category?: string | null;
+  components: MetaTemplateComponentSummary[];
+};
+
+const normalizeTemplateComponentType = (value?: string | null) =>
+  (value ?? "").toUpperCase();
+
+const extractExampleValues = (example: unknown): string[] => {
+  const values: string[] = [];
+  const visit = (input: unknown) => {
+    if (typeof input === "string") {
+      values.push(input);
+      return;
+    }
+    if (Array.isArray(input)) {
+      input.forEach(visit);
+      return;
+    }
+    if (input && typeof input === "object") {
+      Object.values(input as Record<string, unknown>).forEach(visit);
+    }
+  };
+  visit(example);
+  return values;
+};
+
+const deriveParametersFromTemplate = (
+  template: MetaTemplateSummary,
+): TemplateParameterData[] => {
+  const params: TemplateParameterData[] = [];
+
+  template.components.forEach((component) => {
+    const componentType =
+      normalizeTemplateComponentType(component.type) || "BODY";
+    const subType = component.subType ?? undefined;
+    const index =
+      typeof component.index === "number" && Number.isFinite(component.index)
+        ? component.index
+        : undefined;
+    const exampleValues = extractExampleValues(component.example);
+
+    if (exampleValues.length) {
+      exampleValues.forEach((value) => {
+        params.push({
+          component: componentType,
+          type: "text",
+          subType,
+          index,
+          value,
+        });
+      });
+      return;
+    }
+
+    const text = typeof component.text === "string" ? component.text : "";
+    if (!text) return;
+    const matches = [...text.matchAll(/\{\{\d+\}\}/g)];
+    if (!matches.length) return;
+
+    matches.forEach(() => {
+      params.push({
+        component: componentType,
+        type: "text",
+        subType,
+        index,
+        value: "",
+      });
+    });
+  });
+
+  return params;
+};
 
 const useDebounced = <T,>(value: T, delay = 180) => {
   const [v, setV] = useState(value);
@@ -180,6 +275,174 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
     [sn, updateData],
   );
 
+  const [templates, setTemplates] = useState<MetaTemplateSummary[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [templatesError, setTemplatesError] = useState<string | null>(null);
+  const templatesLoadedRef = useRef(false);
+  const loadingTemplatesRef = useRef(false);
+
+  const loadTemplates = useCallback(
+    async (force = false) => {
+      if (loadingTemplatesRef.current) return;
+      if (templatesLoadedRef.current && !force) return;
+
+      loadingTemplatesRef.current = true;
+      setTemplatesLoading(true);
+      setTemplatesError(null);
+
+      try {
+        const response = await authenticatedFetch("/api/meta/templates");
+        let payload: unknown = null;
+        try {
+          payload = await response.json();
+        } catch {
+          payload = null;
+        }
+
+        if (!response.ok) {
+          const message =
+            (payload &&
+              typeof payload === "object" &&
+              payload !== null &&
+              "error" in payload &&
+              typeof (payload as { error?: unknown }).error === "string"
+              ? ((payload as { error?: string }).error as string)
+              : null) ??
+            "No se pudieron cargar las plantillas de WhatsApp";
+          throw new Error(message);
+        }
+
+        const templatesData = Array.isArray(payload)
+          ? (payload as MetaTemplateSummary[])
+          : [];
+        setTemplates(templatesData);
+        templatesLoadedRef.current = true;
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Error al cargar las plantillas de WhatsApp";
+        setTemplatesError(message);
+        templatesLoadedRef.current = false;
+        toast.error(message);
+      } finally {
+        loadingTemplatesRef.current = false;
+        setTemplatesLoading(false);
+      }
+    },
+    [],
+  );
+
+  const refreshTemplates = useCallback(() => {
+    loadTemplates(true);
+  }, [loadTemplates]);
+
+  const name = sn?.data?.name ?? "";
+  const triggerData = isNodeOfType(sn, "trigger") ? sn?.data : null;
+  const messageData = isNodeOfType(sn, "message") ? sn?.data : null;
+  const whatsappFlowData = isNodeOfType(sn, "whatsapp_flow") ? sn?.data : null;
+  const optionsData = isNodeOfType(sn, "options") ? sn?.data : null;
+  const delayData = isNodeOfType(sn, "delay") ? sn?.data : null;
+  const conditionData = isNodeOfType(sn, "condition") ? sn?.data : null;
+  const apiData = isNodeOfType(sn, "api") ? sn?.data : null;
+  const assignData = isNodeOfType(sn, "assign") ? sn?.data : null;
+  const mediaData = isNodeOfType(sn, "media") ? sn?.data : null;
+  const handoffData = isNodeOfType(sn, "handoff") ? sn?.data : null;
+  const gotoData = isNodeOfType(sn, "goto") ? sn?.data : null;
+  const endData = isNodeOfType(sn, "end") ? sn?.data : null;
+
+  const templateParameters = useMemo(
+    () =>
+      Array.isArray(messageData?.templateParameters)
+        ? (messageData?.templateParameters as TemplateParameterData[])
+        : [],
+    [messageData?.templateParameters],
+  );
+
+  const sortedTemplates = useMemo(
+    () => [...templates].sort((a, b) => a.name.localeCompare(b.name)),
+    [templates],
+  );
+
+  const selectedTemplateId = useMemo(() => {
+    if (!messageData?.templateName || !messageData?.templateLanguage) {
+      return undefined;
+    }
+    const match = sortedTemplates.find(
+      (template) =>
+        template.name === messageData.templateName &&
+        template.language === messageData.templateLanguage,
+    );
+    return match?.id;
+  }, [
+    messageData?.templateLanguage,
+    messageData?.templateName,
+    sortedTemplates,
+  ]);
+
+  const currentTemplate = useMemo(() => {
+    if (!selectedTemplateId) return undefined;
+    return sortedTemplates.find((template) => template.id === selectedTemplateId);
+  }, [selectedTemplateId, sortedTemplates]);
+
+  useEffect(() => {
+    if (messageData?.useTemplate) {
+      loadTemplates();
+    }
+  }, [messageData?.useTemplate, loadTemplates]);
+
+  const addTemplateParameter = useCallback(() => {
+    const next = [...templateParameters, { component: "BODY", type: "text", value: "" }];
+    updateData("templateParameters", next);
+  }, [templateParameters, updateData]);
+
+  const handleTemplateParameterChange = useCallback(
+    (index: number, partial: Partial<TemplateParameterData>) => {
+      const current = [...templateParameters];
+      if (!current[index]) return;
+      current[index] = { ...current[index], ...partial };
+      updateData("templateParameters", current);
+    },
+    [templateParameters, updateData],
+  );
+
+  const appendTemplateParameterValue = useCallback(
+    (index: number, addition: string) => {
+      const current = [...templateParameters];
+      if (!current[index]) return;
+      const trimmed = addition?.trim();
+      if (!trimmed) return;
+      const existing = current[index].value ?? "";
+      const nextValue = existing ? `${existing} ${trimmed}`.trim() : trimmed;
+      current[index] = { ...current[index], value: nextValue };
+      updateData("templateParameters", current);
+    },
+    [templateParameters, updateData],
+  );
+
+  const removeTemplateParameter = useCallback(
+    (index: number) => {
+      const current = [...templateParameters];
+      if (index < 0 || index >= current.length) return;
+      current.splice(index, 1);
+      updateData("templateParameters", current);
+    },
+    [templateParameters, updateData],
+  );
+
+  const handleTemplateSelect = useCallback(
+    (templateId: string) => {
+      if (!templateId || templateId === "__none" || templateId === "__empty")
+        return;
+      const template = sortedTemplates.find((item) => item.id === templateId);
+      if (!template) return;
+      updateData("templateName", template.name);
+      updateData("templateLanguage", template.language);
+      updateData("templateParameters", deriveParametersFromTemplate(template));
+    },
+    [sortedTemplates, updateData],
+  );
+
   if (!sn) {
     return (
       <Card className="h-full">
@@ -192,20 +455,6 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
       </Card>
     );
   }
-
-  const name = sn.data?.name ?? "";
-  const triggerData = isNodeOfType(sn, "trigger") ? sn.data : null;
-  const messageData = isNodeOfType(sn, "message") ? sn.data : null;
-  const whatsappFlowData = isNodeOfType(sn, "whatsapp_flow") ? sn.data : null;
-  const optionsData = isNodeOfType(sn, "options") ? sn.data : null;
-  const delayData = isNodeOfType(sn, "delay") ? sn.data : null;
-  const conditionData = isNodeOfType(sn, "condition") ? sn.data : null;
-  const apiData = isNodeOfType(sn, "api") ? sn.data : null;
-  const assignData = isNodeOfType(sn, "assign") ? sn.data : null;
-  const mediaData = isNodeOfType(sn, "media") ? sn.data : null;
-  const handoffData = isNodeOfType(sn, "handoff") ? sn.data : null;
-  const gotoData = isNodeOfType(sn, "goto") ? sn.data : null;
-  const endData = isNodeOfType(sn, "end") ? sn.data : null;
 
   return (
     <Card className="h-full overflow-auto">
@@ -265,35 +514,288 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
             const textLen = text.length;
             const overLimit = textLen > waTextLimit;
             const remaining = Math.max(0, waTextLimit - textLen);
+            const templateValue = selectedTemplateId ?? "__none";
+            const templateStatus =
+              currentTemplate?.status?.toUpperCase() ?? null;
+            const showStatus =
+              templateStatus && templateStatus !== "APPROVED";
 
             return (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <Label>Use Template</Label>
+                  <Label>Usar plantilla</Label>
                   <Switch
                     checked={!!messageData.useTemplate}
-                    onCheckedChange={(v) => updateData("useTemplate", v)}
+                    onCheckedChange={(v) => {
+                      updateData("useTemplate", v);
+                      if (v) {
+                        loadTemplates();
+                      }
+                    }}
                   />
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <Label>Text</Label>
-                  <Badge variant={overLimit ? "destructive" : "secondary"}>
-                    {textLen}/{waTextLimit}{" "}
-                    {overLimit ? "• Excede" : `• Restan ${remaining}`}
-                  </Badge>
-                </div>
-                <Textarea
-                  className="min-h-[140px]"
-                  value={text}
-                  onChange={(e) => updateData("text", e.target.value)}
-                  placeholder="Hello {{ name }}!"
-                />
-                <div className="flex items-center justify-between">
-                  <p className="text-xs text-muted-foreground">
-                    Usá variables como {"{{ name }}"}, {"{{ order_id }}"}.
-                  </p>
-                  <VarHelpers onInsert={appendMessage} />
+                {messageData.useTemplate ? (
+                  <div className="space-y-3">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                      <Label>Plantilla de WhatsApp</Label>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={refreshTemplates}
+                        disabled={templatesLoading}
+                      >
+                        {templatesLoading ? (
+                          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                        )}
+                        {templatesLoading ? "Actualizando…" : "Actualizar"}
+                      </Button>
+                    </div>
+                    <Select
+                      value={templateValue}
+                      onValueChange={handleTemplateSelect}
+                    >
+                      <SelectTrigger>
+                        <SelectValue
+                          placeholder={
+                            templatesLoading
+                              ? "Cargando plantillas…"
+                              : "Elegí una plantilla aprobada"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none" disabled>
+                          {templatesLoading
+                            ? "Cargando plantillas…"
+                            : "Selecciona una plantilla"}
+                        </SelectItem>
+                        {sortedTemplates.length > 0
+                          ? sortedTemplates.map((template) => {
+                              const status =
+                                template.status?.toUpperCase() ?? "";
+                              const disabled =
+                                status && status !== "APPROVED";
+                              const label = `${template.name} (${template.language})${
+                                status && status !== "APPROVED"
+                                  ? ` • ${status}`
+                                  : ""
+                              }`;
+                              return (
+                                <SelectItem
+                                  key={template.id}
+                                  value={template.id}
+                                  disabled={disabled}
+                                >
+                                  {label}
+                                </SelectItem>
+                              );
+                            })
+                          : !templatesLoading && (
+                              <SelectItem value="__empty" disabled>
+                                No hay plantillas disponibles
+                              </SelectItem>
+                            )}
+                      </SelectContent>
+                    </Select>
+                    {templatesError ? (
+                      <p className="text-xs text-destructive">{templatesError}</p>
+                    ) : null}
+                    <div className="grid gap-2">
+                      <Label>Nombre de la plantilla</Label>
+                      <Input
+                        value={messageData.templateName ?? ""}
+                        onChange={(e) =>
+                          updateData("templateName", e.target.value)
+                        }
+                        placeholder="hello_world"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>Idioma de la plantilla</Label>
+                      <Input
+                        value={messageData.templateLanguage ?? ""}
+                        onChange={(e) =>
+                          updateData("templateLanguage", e.target.value)
+                        }
+                        placeholder="es_AR"
+                      />
+                    </div>
+                    {showStatus ? (
+                      <p className="text-xs text-muted-foreground">
+                        Estado actual: {templateStatus}
+                      </p>
+                    ) : null}
+                    {messageData.templateName &&
+                    !selectedTemplateId &&
+                    !templatesLoading ? (
+                      <p className="text-xs text-muted-foreground">
+                        Usando plantilla personalizada:{" "}
+                        <span className="font-medium">
+                          {messageData.templateName}
+                        </span>{" "}
+                        ({messageData.templateLanguage || "sin idioma"})
+                      </p>
+                    ) : null}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label>Parámetros</Label>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={addTemplateParameter}
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Agregar parámetro
+                        </Button>
+                      </div>
+                      {templateParameters.length ? (
+                        <div className="space-y-2">
+                          {templateParameters.map((param, index) => (
+                            <div
+                              key={`${param.component}-${index}`}
+                              className="space-y-2 rounded-lg border p-3"
+                            >
+                              <div className="flex flex-col gap-2 md:flex-row md:items-start">
+                                <div className="grid w-full gap-2 md:grid-cols-3">
+                                  <div className="space-y-1">
+                                    <Label>Componente</Label>
+                                    <Select
+                                      value={param.component ?? "BODY"}
+                                      onValueChange={(value) =>
+                                        handleTemplateParameterChange(index, {
+                                          component: value,
+                                        })
+                                      }
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="BODY" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {TEMPLATE_COMPONENT_OPTIONS.map(
+                                          (option) => (
+                                            <SelectItem
+                                              key={option.value}
+                                              value={option.value}
+                                            >
+                                              {option.label}
+                                            </SelectItem>
+                                          ),
+                                        )}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label>Subtipo</Label>
+                                    <Input
+                                      value={param.subType ?? ""}
+                                      onChange={(e) =>
+                                        handleTemplateParameterChange(index, {
+                                          subType: e.target.value,
+                                        })
+                                      }
+                                      placeholder={
+                                        (param.component ?? "").toUpperCase() ===
+                                        "BUTTON"
+                                          ? "URL, QUICK_REPLY…"
+                                          : "Opcional"
+                                      }
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label>Índice</Label>
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      value={
+                                        typeof param.index === "number"
+                                          ? param.index
+                                          : ""
+                                      }
+                                      onChange={(e) => {
+                                        const raw = e.target.value;
+                                        handleTemplateParameterChange(index, {
+                                          index:
+                                            raw === ""
+                                              ? undefined
+                                              : Number(raw),
+                                        });
+                                      }}
+                                      placeholder="0"
+                                    />
+                                  </div>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="self-start md:mt-6"
+                                  onClick={() => removeTemplateParameter(index)}
+                                  title="Eliminar parámetro"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                              <div className="space-y-1">
+                                <Label>Valor</Label>
+                                <Textarea
+                                  value={param.value ?? ""}
+                                  onChange={(e) =>
+                                    handleTemplateParameterChange(index, {
+                                      value: e.target.value,
+                                    })
+                                  }
+                                  placeholder="Ej: {{ name }}"
+                                />
+                                <div className="flex justify-end">
+                                  <VarHelpers
+                                    onInsert={(tpl) =>
+                                      appendTemplateParameterValue(index, tpl)
+                                    }
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          No hay parámetros configurados. Usá “Agregar parámetro”
+                          si tu plantilla los requiere.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>
+                      {messageData.useTemplate
+                        ? "Texto (vista previa opcional)"
+                        : "Texto"}
+                    </Label>
+                    <Badge variant={overLimit ? "destructive" : "secondary"}>
+                      {textLen}/{waTextLimit}{" "}
+                      {overLimit ? "• Excede" : `• Restan ${remaining}`}
+                    </Badge>
+                  </div>
+                  <Textarea
+                    className="min-h-[140px]"
+                    value={text}
+                    onChange={(e) => updateData("text", e.target.value)}
+                    placeholder="Hello {{ name }}!"
+                  />
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">
+                      Usá variables como {"{{ name }}"}, {"{{ order_id }}"}.
+                    </p>
+                    <VarHelpers onInsert={appendMessage} />
+                  </div>
                 </div>
               </div>
             );

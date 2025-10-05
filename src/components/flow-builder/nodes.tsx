@@ -259,7 +259,23 @@ const MessageNode = memo(function MessageNode({
         onCopyWebhook={onCopyWebhook}
         onCopyId={onCopyId}
       >
-        {data?.useTemplate ? <Badge variant="outline">Template</Badge> : null}
+        {data?.useTemplate ? (
+          <div className="mb-2 space-y-1">
+            <Badge variant="outline">Template</Badge>
+            <p className="text-xs text-muted-foreground">
+              {data?.templateName ? (
+                <>
+                  {data.templateName}
+                  {data?.templateLanguage
+                    ? ` (${data.templateLanguage})`
+                    : ""}
+                </>
+              ) : (
+                "Sin plantilla seleccionada"
+              )}
+            </p>
+          </div>
+        ) : null}
         <div
           className="whitespace-pre-wrap break-words bg-muted/30 p-2 rounded-lg max-h-40 overflow-auto"
           title={text}

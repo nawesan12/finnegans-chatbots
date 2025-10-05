@@ -13,6 +13,7 @@ import {
   HandoffDataSchema,
   MediaDataSchema,
   MessageDataSchema,
+  TemplateParameterSchema,
   OptionsDataSchema,
   TriggerDataSchema,
   sanitizeFlowDefinition,
@@ -33,6 +34,7 @@ export class FlowSendMessageError extends Error {
 // Infer types from Zod schemas
 type TriggerData = z.infer<typeof TriggerDataSchema>;
 type MessageData = z.infer<typeof MessageDataSchema>;
+type TemplateParameterData = z.infer<typeof TemplateParameterSchema>;
 type OptionsData = z.infer<typeof OptionsDataSchema>;
 type DelayData = z.infer<typeof DelayDataSchema>;
 type ConditionData = z.infer<typeof ConditionDataSchema>;
@@ -171,6 +173,64 @@ const collectNormalizedParts = (value: string | null): Set<string> => {
   }
 
   return result;
+};
+
+type TemplateMessageComponent = {
+  type: string;
+  subType?: string;
+  index?: number;
+  parameters: Array<{ type: "text"; text: string }>;
+};
+
+const normalizeTemplateComponentType = (value?: string | null) => {
+  const base = (value ?? "").trim();
+  if (!base) return "body";
+  return base.toLowerCase();
+};
+
+const buildTemplateMessageComponents = (
+  params: TemplateParameterData[],
+  tplFn: (value?: string) => string,
+): TemplateMessageComponent[] => {
+  const grouped = new Map<string, TemplateMessageComponent>();
+
+  params.forEach((param) => {
+    const type = normalizeTemplateComponentType(param.component);
+    const subType = (param.subType ?? "").trim();
+    const index =
+      typeof param.index === "number" && Number.isFinite(param.index)
+        ? param.index
+        : undefined;
+    const key = `${type}::${subType.toLowerCase()}::${
+      index ?? ""
+    }`;
+
+    if (!grouped.has(key)) {
+      const component: TemplateMessageComponent = {
+        type,
+        parameters: [],
+      };
+      if (subType) {
+        component.subType = subType.toLowerCase();
+      }
+      if (typeof index === "number") {
+        component.index = index;
+      }
+      grouped.set(key, component);
+    }
+
+    const component = grouped.get(key)!;
+    const resolved = tplFn(param.value ?? "");
+    component.parameters.push({ type: "text", text: resolved });
+  });
+
+  return Array.from(grouped.values()).map((component) => ({
+    ...component,
+    parameters: component.parameters.map((parameter) => ({
+      type: parameter.type,
+      text: parameter.text,
+    })),
+  }));
 };
 
 // This function is now stateful and operates on a session
@@ -334,7 +394,7 @@ export async function executeFlow(
   };
 
   const recordOutbound = (
-    type: "text" | "media" | "options" | "flow",
+    type: "text" | "media" | "options" | "flow" | "template",
     payload: Record<string, unknown>,
   ) => {
     const ts = nowIso();
@@ -378,6 +438,26 @@ export async function executeFlow(
       const flowBody = payload["body"];
       if (typeof flowBody === "string" && flowBody.trim()) {
         context.lastBotMessage = flowBody;
+      }
+    }
+
+    if (type === "template") {
+      if (payload["template"]) {
+        historyPayload.template = payload["template"];
+        const templateName =
+          typeof (payload["template"] as { name?: unknown })?.name ===
+          "string"
+            ? ((payload["template"] as { name?: string }).name as string)
+            : null;
+        if (templateName) {
+          context.lastBotMessage = templateName;
+        }
+      }
+      if (payload["parameters"]) {
+        historyPayload.parameters = payload["parameters"];
+      }
+      if (payload["components"]) {
+        historyPayload.components = payload["components"];
       }
     }
 
@@ -673,6 +753,77 @@ export async function executeFlow(
 
         case "message": {
           const data = currentNode.data as MessageData;
+          if (data.useTemplate) {
+            const templateName = data.templateName?.trim();
+            const templateLanguage = data.templateLanguage?.trim();
+            if (!templateName || !templateLanguage) {
+              throw new FlowSendMessageError(
+                "Missing template name or language for WhatsApp template message",
+                400,
+              );
+            }
+
+            const templateParams = Array.isArray(data.templateParameters)
+              ? (data.templateParameters as TemplateParameterData[])
+              : [];
+            const components = buildTemplateMessageComponents(
+              templateParams,
+              tpl,
+            );
+
+            const sendResult = await sendMessage(
+              session.flow.userId,
+              session.contact.phone,
+              {
+                type: "template",
+                template: {
+                  name: templateName,
+                  language: templateLanguage,
+                  ...(components.length ? { components } : {}),
+                },
+              },
+            );
+
+            if (!sendResult?.success) {
+              console.error(
+                "Failed to send template message to",
+                session.contact.phone,
+                sendResult?.error ?? "",
+              );
+              const message =
+                sendResult?.error?.trim().length
+                  ? sendResult.error
+                  : "Failed to send WhatsApp template message";
+              throw new FlowSendMessageError(message, sendResult?.status);
+            }
+
+            recordOutbound("template", {
+              template: {
+                name: templateName,
+                language: templateLanguage,
+              },
+              parameters: templateParams.map((param) => ({
+                component:
+                  typeof param.component === "string" && param.component.trim()
+                    ? param.component.trim().toUpperCase()
+                    : "BODY",
+                subType:
+                  typeof param.subType === "string" && param.subType.trim()
+                    ? param.subType.trim().toUpperCase()
+                    : null,
+                index:
+                  typeof param.index === "number" &&
+                  Number.isFinite(param.index)
+                    ? param.index
+                    : null,
+                value: tpl(param.value ?? ""),
+                raw: param.value ?? "",
+              })),
+              components,
+            });
+            break;
+          }
+
           const text = tpl(data.text);
           const sendResult = await sendMessage(
             session.flow.userId,
