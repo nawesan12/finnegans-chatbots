@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
 import { getAuthPayload } from "@/lib/auth";
-import { formatLeadsAsCsv } from "@/lib/leads";
+import { formatLeadsAsCsv, isValidLeadFocusArea } from "@/lib/leads";
 
 const MAX_SEARCH_LENGTH = 200;
 
@@ -76,6 +76,7 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const statusFilter = searchParams.get("status")?.trim();
+  const focusAreaFilter = searchParams.get("focusArea")?.trim();
   const searchTerm = searchParams.get("search")?.trim();
   const createdFromParam = searchParams.get("createdFrom");
   const createdToParam = searchParams.get("createdTo");
@@ -118,6 +119,16 @@ export async function GET(request: Request) {
 
   if (statusFilter) {
     where.status = statusFilter;
+  }
+
+  if (focusAreaFilter) {
+    if (!isValidLeadFocusArea(focusAreaFilter)) {
+      return NextResponse.json(
+        { error: "La necesidad principal no es válida." },
+        { status: 400 },
+      );
+    }
+    where.focusArea = focusAreaFilter;
   }
 
   if (searchTerm) {

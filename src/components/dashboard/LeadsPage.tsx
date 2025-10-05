@@ -67,6 +67,7 @@ const searchInputId = "leads-filter-search";
 const statusSelectLabelId = "leads-filter-status";
 const dateFromInputId = "leads-filter-date-from";
 const dateToInputId = "leads-filter-date-to";
+const focusAreaSelectLabelId = "leads-filter-focus-area";
 
 type DatePreset = "7d" | "30d" | "90d";
 
@@ -308,6 +309,7 @@ const LeadsPage = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [focusAreaFilter, setFocusAreaFilter] = useState<string>("all");
   const [availableStatuses, setAvailableStatuses] = useState<LeadStatusOption[]>(
     () => [...leadStatuses],
   );
@@ -374,11 +376,12 @@ const LeadsPage = () => {
     () =>
       Boolean(
         statusFilter !== "all" ||
+          focusAreaFilter !== "all" ||
           searchTerm.trim().length > 0 ||
           createdFrom.length > 0 ||
           createdTo.length > 0,
       ),
-    [createdFrom, createdTo, searchTerm, statusFilter],
+    [createdFrom, createdTo, focusAreaFilter, searchTerm, statusFilter],
   );
 
   const fetchLeads = useCallback(async () => {
@@ -613,6 +616,10 @@ const LeadsPage = () => {
         return false;
       }
 
+      if (focusAreaFilter !== "all" && lead.focusArea !== focusAreaFilter) {
+        return false;
+      }
+
       if (dateFilter.from || dateFilter.to) {
         const createdAtDate = new Date(lead.createdAt);
         if (!Number.isNaN(createdAtDate.getTime())) {
@@ -643,7 +650,7 @@ const LeadsPage = () => {
         value.toLowerCase().includes(normalizedQuery),
       );
     });
-  }, [dateFilter, leads, searchTerm, statusFilter]);
+  }, [dateFilter, focusAreaFilter, leads, searchTerm, statusFilter]);
 
   useEffect(() => {
     if (!highlightedLeadId) {
@@ -785,6 +792,9 @@ const LeadsPage = () => {
       if (statusFilter !== "all") {
         params.set("status", statusFilter);
       }
+      if (focusAreaFilter !== "all") {
+        params.set("focusArea", focusAreaFilter);
+      }
       if (trimmedSearch) {
         params.set("search", trimmedSearch);
       }
@@ -856,6 +866,7 @@ const LeadsPage = () => {
     dateFilter,
     dateRangeError,
     filteredLeads.length,
+    focusAreaFilter,
     searchTerm,
     statusFilter,
   ]);
@@ -1001,6 +1012,7 @@ const LeadsPage = () => {
   const handleClearFilters = () => {
     setSearchTerm("");
     setStatusFilter("all");
+    setFocusAreaFilter("all");
     clearDateFilters();
   };
 
@@ -1245,7 +1257,7 @@ const LeadsPage = () => {
       </section>
 
       <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="grid gap-4 md:grid-cols-[2fr,1fr,auto] md:items-center">
+        <div className="grid gap-4 md:grid-cols-[2fr,1fr,auto] lg:grid-cols-[2fr,1fr,1fr,auto] xl:grid-cols-[2fr,1fr,1fr,1fr,auto] md:items-center">
           <div className="space-y-1">
             <label
               className="text-xs font-semibold uppercase tracking-[0.28em] text-gray-500"
@@ -1283,6 +1295,33 @@ const LeadsPage = () => {
                 {availableStatuses.map((status) => (
                   <SelectItem key={status.value} value={status.value}>
                     {status.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <span
+              id={focusAreaSelectLabelId}
+              className="text-xs font-semibold uppercase tracking-[0.28em] text-gray-500"
+            >
+              Necesidad principal
+            </span>
+            <Select
+              value={focusAreaFilter}
+              onValueChange={(value) => setFocusAreaFilter(value)}
+            >
+              <SelectTrigger
+                className="h-11 justify-between"
+                aria-labelledby={focusAreaSelectLabelId}
+              >
+                <SelectValue placeholder="Todas las necesidades" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas las necesidades</SelectItem>
+                {leadFocusAreas.map((area) => (
+                  <SelectItem key={area.value} value={area.value}>
+                    {area.label}
                   </SelectItem>
                 ))}
               </SelectContent>
