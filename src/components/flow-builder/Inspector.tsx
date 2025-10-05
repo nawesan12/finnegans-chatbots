@@ -1,5 +1,11 @@
 "use client";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -281,57 +287,53 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
   const templatesLoadedRef = useRef(false);
   const loadingTemplatesRef = useRef(false);
 
-  const loadTemplates = useCallback(
-    async (force = false) => {
-      if (loadingTemplatesRef.current) return;
-      if (templatesLoadedRef.current && !force) return;
+  const loadTemplates = useCallback(async (force = false) => {
+    if (loadingTemplatesRef.current) return;
+    if (templatesLoadedRef.current && !force) return;
 
-      loadingTemplatesRef.current = true;
-      setTemplatesLoading(true);
-      setTemplatesError(null);
+    loadingTemplatesRef.current = true;
+    setTemplatesLoading(true);
+    setTemplatesError(null);
 
+    try {
+      const response = await authenticatedFetch("/api/meta/templates");
+      let payload: unknown = null;
       try {
-        const response = await authenticatedFetch("/api/meta/templates");
-        let payload: unknown = null;
-        try {
-          payload = await response.json();
-        } catch {
-          payload = null;
-        }
-
-        if (!response.ok) {
-          const message =
-            (payload &&
-              typeof payload === "object" &&
-              payload !== null &&
-              "error" in payload &&
-              typeof (payload as { error?: unknown }).error === "string"
-              ? ((payload as { error?: string }).error as string)
-              : null) ??
-            "No se pudieron cargar las plantillas de WhatsApp";
-          throw new Error(message);
-        }
-
-        const templatesData = Array.isArray(payload)
-          ? (payload as MetaTemplateSummary[])
-          : [];
-        setTemplates(templatesData);
-        templatesLoadedRef.current = true;
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Error al cargar las plantillas de WhatsApp";
-        setTemplatesError(message);
-        templatesLoadedRef.current = false;
-        toast.error(message);
-      } finally {
-        loadingTemplatesRef.current = false;
-        setTemplatesLoading(false);
+        payload = await response.json();
+      } catch {
+        payload = null;
       }
-    },
-    [],
-  );
+
+      if (!response.ok) {
+        const message =
+          (payload &&
+          typeof payload === "object" &&
+          payload !== null &&
+          "error" in payload &&
+          typeof (payload as { error?: unknown }).error === "string"
+            ? ((payload as { error?: string }).error as string)
+            : null) ?? "No se pudieron cargar las plantillas de WhatsApp";
+        throw new Error(message);
+      }
+
+      const templatesData = Array.isArray(payload)
+        ? (payload as MetaTemplateSummary[])
+        : [];
+      setTemplates(templatesData);
+      templatesLoadedRef.current = true;
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Error al cargar las plantillas de WhatsApp";
+      setTemplatesError(message);
+      templatesLoadedRef.current = false;
+      toast.error(message);
+    } finally {
+      loadingTemplatesRef.current = false;
+      setTemplatesLoading(false);
+    }
+  }, []);
 
   const refreshTemplates = useCallback(() => {
     loadTemplates(true);
@@ -382,7 +384,9 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
 
   const currentTemplate = useMemo(() => {
     if (!selectedTemplateId) return undefined;
-    return sortedTemplates.find((template) => template.id === selectedTemplateId);
+    return sortedTemplates.find(
+      (template) => template.id === selectedTemplateId,
+    );
   }, [selectedTemplateId, sortedTemplates]);
 
   useEffect(() => {
@@ -392,7 +396,10 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
   }, [messageData?.useTemplate, loadTemplates]);
 
   const addTemplateParameter = useCallback(() => {
-    const next = [...templateParameters, { component: "BODY", type: "text", value: "" }];
+    const next = [
+      ...templateParameters,
+      { component: "BODY", type: "text", value: "" },
+    ];
     updateData("templateParameters", next);
   }, [templateParameters, updateData]);
 
@@ -517,8 +524,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
             const templateValue = selectedTemplateId ?? "__none";
             const templateStatus =
               currentTemplate?.status?.toUpperCase() ?? null;
-            const showStatus =
-              templateStatus && templateStatus !== "APPROVED";
+            const showStatus = templateStatus && templateStatus !== "APPROVED";
 
             return (
               <div className="space-y-4">
@@ -577,8 +583,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
                           ? sortedTemplates.map((template) => {
                               const status =
                                 template.status?.toUpperCase() ?? "";
-                              const disabled =
-                                status && status !== "APPROVED";
+                              const disabled = status && status !== "APPROVED";
                               const label = `${template.name} (${template.language})${
                                 status && status !== "APPROVED"
                                   ? ` • ${status}`
@@ -588,7 +593,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
                                 <SelectItem
                                   key={template.id}
                                   value={template.id}
-                                  disabled={disabled}
+                                  disabled={Boolean(disabled)}
                                 >
                                   {label}
                                 </SelectItem>
@@ -602,7 +607,9 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
                       </SelectContent>
                     </Select>
                     {templatesError ? (
-                      <p className="text-xs text-destructive">{templatesError}</p>
+                      <p className="text-xs text-destructive">
+                        {templatesError}
+                      </p>
                     ) : null}
                     <div className="grid gap-2">
                       <Label>Nombre de la plantilla</Label>
@@ -699,8 +706,9 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
                                         })
                                       }
                                       placeholder={
-                                        (param.component ?? "").toUpperCase() ===
-                                        "BUTTON"
+                                        (
+                                          param.component ?? ""
+                                        ).toUpperCase() === "BUTTON"
                                           ? "URL, QUICK_REPLY…"
                                           : "Opcional"
                                       }
@@ -764,8 +772,8 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
                         </div>
                       ) : (
                         <p className="text-xs text-muted-foreground">
-                          No hay parámetros configurados. Usá “Agregar parámetro”
-                          si tu plantilla los requiere.
+                          No hay parámetros configurados. Usá “Agregar
+                          parámetro” si tu plantilla los requiere.
                         </p>
                       )}
                     </div>
@@ -814,7 +822,9 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
                   <Label>Header (opcional)</Label>
                   <Input
                     value={whatsappFlowData.header ?? ""}
-                    onChange={(event) => updateData("header", event.target.value)}
+                    onChange={(event) =>
+                      updateData("header", event.target.value)
+                    }
                     placeholder="Ej: Confirmá tus datos"
                     maxLength={60}
                   />
@@ -842,7 +852,9 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
                   <Label>Footer (opcional)</Label>
                   <Input
                     value={whatsappFlowData.footer ?? ""}
-                    onChange={(event) => updateData("footer", event.target.value)}
+                    onChange={(event) =>
+                      updateData("footer", event.target.value)
+                    }
                     placeholder="Ej: Vas a recibir una confirmación"
                     maxLength={60}
                   />
@@ -884,33 +896,32 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
                   <Input
                     value={opt}
                     onChange={(e) => {
-                        const currentOptions = optionsData.options ?? [];
-                        const next = [...currentOptions];
-                        next[i] = e.target.value;
+                      const currentOptions = optionsData.options ?? [];
+                      const next = [...currentOptions];
+                      next[i] = e.target.value;
+                      updateData("options", next);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        const next = [...(optionsData.options ?? []), ""];
                         updateData("options", next);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          const next = [...(optionsData.options ?? []), ""];
-                          updateData("options", next);
-                        }
-                      }}
-                    />
-                    <Button
-                      variant="ghost"
-                      title="Delete option"
-                      onClick={() => {
-                        const currentOptions = optionsData.options ?? [];
-                        const next = [...currentOptions];
-                        next.splice(i, 1);
-                        updateData("options", next);
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))
-              }
+                      }
+                    }}
+                  />
+                  <Button
+                    variant="ghost"
+                    title="Delete option"
+                    onClick={() => {
+                      const currentOptions = optionsData.options ?? [];
+                      const next = [...currentOptions];
+                      next.splice(i, 1);
+                      updateData("options", next);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
 
               {/* pegado masivo: una opción por línea */}
               <Textarea
@@ -944,8 +955,7 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
               onValueChange={([v]) => updateData("seconds", v)}
             />
             <div className="text-xs text-muted-foreground">
-              {delayData.seconds ?? 1}
-              s
+              {delayData.seconds ?? 1}s
             </div>
           </div>
         )}
