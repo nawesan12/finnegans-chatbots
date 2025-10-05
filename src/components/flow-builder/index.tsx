@@ -29,6 +29,7 @@ import type {
   Viewport,
 } from "reactflow";
 import "reactflow/dist/style.css";
+import "./style.css";
 import { toast } from "sonner";
 import { Download, Rocket, Bug } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -1229,8 +1230,8 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
 
     return (
       <>
-        <div className="flex h-screen w-full flex-col bg-slate-50 text-slate-900">
-          <div className="border-b bg-white/90 shadow-sm">
+        <div className="flex h-screen w-full flex-col bg-gradient-to-br from-slate-100 via-sky-50 to-slate-200 text-slate-900">
+          <div className="border-b bg-white/80 shadow-sm backdrop-blur">
             <Topbar
               onNew={handleCreateNew}
               onImport={handleImport}
@@ -1257,114 +1258,143 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
             />
           </div>
 
-          <div className="grid flex-1 grid-cols-12 gap-0 overflow-hidden">
-            {/* Left: Palette */}
-            <div className="col-span-2 min-h-0 overflow-y-auto border-r bg-white/80 p-4 backdrop-blur-sm shadow-inner">
-              <div className="mb-4 flex items-center justify-between">
-                <div className="text-sm font-semibold uppercase tracking-wide text-slate-600">
-                  Nodos
+          <div className="relative flex-1 overflow-hidden">
+            <div className="pointer-events-none absolute inset-0">
+              <div className="absolute inset-x-0 top-0 h-44 bg-gradient-to-b from-sky-200/50 via-sky-100/10 to-transparent" />
+              <div className="absolute -left-32 top-1/3 h-72 w-72 rounded-full bg-sky-300/25 blur-3xl" />
+              <div className="absolute -right-24 bottom-12 h-72 w-72 rounded-full bg-emerald-200/25 blur-3xl" />
+            </div>
+
+            <div className="relative z-[1] grid h-full grid-cols-12 gap-6 px-6 pb-6">
+              {/* Left: Palette */}
+              <div className="col-span-12 flex min-h-0 flex-col lg:col-span-3">
+                <div className="flex h-full flex-col overflow-hidden rounded-[28px] border border-white/60 bg-white/70 shadow-[0_30px_90px_-40px_rgba(15,23,42,0.55)] backdrop-blur">
+                  <div className="flex items-center justify-between px-6 pt-6">
+                    <div className="text-sm font-semibold uppercase tracking-wide text-slate-600">
+                      Nodos
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="sm" variant="outline" className="rounded-full border-white/60 bg-white/70 text-xs shadow-sm">
+                          <Download className="mr-2 h-4 w-4" />
+                          Exportar
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="rounded-2xl border border-slate-200/60 bg-white/95 shadow-xl">
+                        <DropdownMenuItem onClick={handleExport}>
+                          <Download className="mr-2 h-4 w-4" />
+                          Editor JSON
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={exportForWhatsApp}>
+                          <Rocket className="mr-2 h-4 w-4" />
+                          WhatsApp Spec
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                  <div className="flex-1 overflow-y-auto px-6 pb-6">
+                    <Palette onAdd={addNode} />
+                    <Separator className="my-6" />
+                    <div className="rounded-2xl border border-dashed border-slate-200/70 bg-slate-100/70 px-4 py-3 text-xs text-slate-500 shadow-inner">
+                      Consejo: clickeá o arrastrá nodos al lienzo.
+                    </div>
+                  </div>
                 </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button size="sm" variant="outline">
-                      <Download className="mr-2 h-4 w-4" />
-                      Exportar
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start">
-                    <DropdownMenuItem onClick={handleExport}>
-                      <Download className="mr-2 h-4 w-4" />
-                      Editor JSON
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={exportForWhatsApp}>
-                      <Rocket className="mr-2 h-4 w-4" />
-                      WhatsApp Spec
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
               </div>
-              <Palette onAdd={addNode} />
-              <Separator className="my-4" />
-              <div className="rounded-md bg-slate-100/80 p-3 text-xs text-muted-foreground shadow-sm">
-                Consejo: clickeá o arrastrá nodos al lienzo.
+
+              {/* Center: Canvas */}
+              <div className="col-span-12 min-h-0 lg:col-span-6">
+                <div className="relative flex h-full flex-col overflow-hidden rounded-[32px] border border-white/60 bg-white/70 shadow-[0_45px_120px_-50px_rgba(15,23,42,0.7)] backdrop-blur">
+                  <div className="pointer-events-none absolute inset-0">
+                    <div className="absolute inset-x-8 top-0 h-52 rounded-b-[56px] bg-gradient-to-b from-white/70 via-transparent to-transparent" />
+                    <div className="absolute left-10 top-1/3 h-60 w-60 rounded-full bg-sky-200/30 blur-3xl" />
+                    <div className="absolute right-6 bottom-1/4 h-48 w-48 rounded-full bg-emerald-200/30 blur-3xl" />
+                  </div>
+                  <ReactFlow
+                    style={{ width: "100%", height: "100%" }}
+                    className="!bg-transparent"
+                    onInit={handleInit}
+                    nodes={nodes}
+                    edges={edges}
+                    onNodesChange={onNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    onConnect={onConnect}
+                    nodeTypes={memoizedNodeTypes}
+                    onNodeClick={onNodeClick}
+                    onPaneClick={onPaneClick}
+                    onDrop={onDrop}
+                    onDragOver={onDragOver}
+                    onSelectionChange={handleSelectionChange}
+                    onMoveEnd={handleMoveEnd}
+                    defaultEdgeOptions={{
+                      type: "smoothstep",
+                      markerEnd: { type: MarkerType.ArrowClosed },
+                    }}
+                    snapToGrid
+                    snapGrid={[8, 8]}
+                    selectionOnDrag
+                    panOnDrag={[1, 2]}
+                    panOnScroll
+                    zoomOnScroll
+                    zoomOnPinch
+                    panOnScrollSpeed={0.8}
+                    elevateNodesOnSelect
+                    selectionMode={SelectionMode.Partial}
+                    deleteKeyCode={null}
+                  >
+                    <Background
+                      color="#cbd5f5"
+                      variant={BackgroundVariant.Dots}
+                      gap={26}
+                      size={1}
+                    />
+                    <MiniMap
+                      className="!bg-white/80 !backdrop-blur"
+                      pannable
+                      zoomable
+                      maskColor="rgba(15,23,42,0.06)"
+                      nodeColor={miniMapNodeColor}
+                      nodeStrokeColor={miniMapNodeStroke}
+                      nodeStrokeWidth={2}
+                    />
+                    <Controls
+                      position="bottom-left"
+                      showInteractive={false}
+                      className="!border-none !bg-white/80 !backdrop-blur !shadow-[0_18px_50px_-30px_rgba(15,23,42,0.65)]"
+                    />
+                  </ReactFlow>
+                </div>
               </div>
-            </div>
 
-            {/* Center: Canvas */}
-            <div className="col-span-7 min-h-0 bg-slate-100/60">
-              <ReactFlow
-                style={{ width: "100%", height: "100%" }}
-                className="!bg-transparent"
-                onInit={handleInit}
-                nodes={nodes}
-                edges={edges}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                onConnect={onConnect}
-                nodeTypes={memoizedNodeTypes}
-                onNodeClick={onNodeClick}
-                onPaneClick={onPaneClick}
-                onDrop={onDrop}
-                onDragOver={onDragOver}
-                onSelectionChange={handleSelectionChange}
-                onMoveEnd={handleMoveEnd}
-                defaultEdgeOptions={{
-                  type: "smoothstep",
-                  markerEnd: { type: MarkerType.ArrowClosed },
-                }}
-                snapToGrid
-                snapGrid={[8, 8]}
-                selectionOnDrag
-                panOnDrag={[1, 2]}
-                panOnScroll
-                zoomOnScroll
-                zoomOnPinch
-                panOnScrollSpeed={0.8}
-                elevateNodesOnSelect
-                selectionMode={SelectionMode.Partial}
-                deleteKeyCode={null}
-              >
-                <Background
-                  color="#e2e8f0"
-                  variant={BackgroundVariant.Lines}
-                  gap={24}
-                />
-                <MiniMap
-                  className="!bg-white/80"
-                  pannable
-                  zoomable
-                  nodeColor={miniMapNodeColor}
-                  nodeStrokeColor={miniMapNodeStroke}
-                  nodeStrokeWidth={2}
-                />
-                <Controls position="bottom-left" showInteractive={false} />
-              </ReactFlow>
-            </div>
-
-            {/* Right: Inspector + Simulator */}
-            <div className="col-span-3 min-h-0 overflow-y-auto border-l bg-white/80 p-4 backdrop-blur-sm">
-              <div className="flex flex-col gap-4">
-                <Inspector selectedNode={selected} onChange={updateSelected} />
-                <Simulator nodes={simulatorNodes} edges={edges} />
-                <Card className="shadow-sm">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-sm">
-                      <Bug className="h-4 w-4" /> Consejos de construcción
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-1 text-xs text-muted-foreground">
-                    <div>
-                      • Mantené los mensajes por debajo de los {waTextLimit}{" "}
-                      caracteres.
+              {/* Right: Inspector + Simulator */}
+              <div className="col-span-12 flex min-h-0 flex-col lg:col-span-3">
+                <div className="flex h-full flex-col overflow-hidden rounded-[28px] border border-white/60 bg-white/70 shadow-[0_30px_90px_-40px_rgba(15,23,42,0.55)] backdrop-blur">
+                  <div className="flex-1 overflow-y-auto px-6 py-6">
+                    <div className="flex flex-col gap-5">
+                      <Inspector selectedNode={selected} onChange={updateSelected} />
+                      <Simulator nodes={simulatorNodes} edges={edges} />
+                      <Card className="rounded-3xl border border-slate-200/60 shadow-[0_18px_45px_-30px_rgba(15,23,42,0.4)]">
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2 text-sm">
+                            <Bug className="h-4 w-4" /> Consejos de construcción
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-1 text-xs text-muted-foreground">
+                          <div>
+                            • Mantené los mensajes por debajo de los {waTextLimit}{" "}
+                            caracteres.
+                          </div>
+                          <div>• Usá Opciones (quick replies) para hacer menús.</div>
+                          <div>• Usá Delay para evitar atosigar a los usuarios.</div>
+                          <div>
+                            • Condition puede ramificar según <code>context</code> y
+                            resultados de API.
+                          </div>
+                        </CardContent>
+                      </Card>
                     </div>
-                    <div>• Usá Opciones (quick replies) para hacer menús.</div>
-                    <div>• Usá Delay para evitar atosigar a los usuarios.</div>
-                    <div>
-                      • Condition puede ramificar según <code>context</code> y
-                      resultados de API.
-                    </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
