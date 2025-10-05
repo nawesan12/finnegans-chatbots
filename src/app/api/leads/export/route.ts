@@ -133,6 +133,7 @@ export async function GET(request: Request) {
       { phone: contains },
       { message: contains },
       { notes: contains },
+      { focusArea: contains },
     ];
   }
 

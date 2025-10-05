@@ -137,6 +137,7 @@ export async function POST(request: Request) {
         company: leadData.company,
         phone: leadData.phone,
         message: leadData.message,
+        focusArea: leadData.focusArea,
       },
     });
 

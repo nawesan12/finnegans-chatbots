@@ -31,7 +31,13 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import { leadStatuses, type LeadStatus } from "@/lib/leads";
+import {
+  getLeadFocusAreaDescription,
+  getLeadFocusAreaLabel,
+  leadFocusAreas,
+  leadStatuses,
+  type LeadStatus,
+} from "@/lib/leads";
 import { authenticatedFetch, UnauthorizedError } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/store";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -266,6 +272,7 @@ type LeadRecord = {
   phone: string | null;
   message: string;
   status: string;
+  focusArea: string | null;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -302,10 +309,12 @@ const LeadsPage = () => {
   );
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [notesDraft, setNotesDraft] = useState("");
+  const [focusAreaDraft, setFocusAreaDraft] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
   const [updatingStatusIds, setUpdatingStatusIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const [updatingFocusArea, setUpdatingFocusArea] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [highlightedLeadId, setHighlightedLeadId] = useState<string | null>(
     null,
@@ -384,6 +393,7 @@ const LeadsPage = () => {
             ...lead,
             company: lead.company ?? null,
             phone: lead.phone ?? null,
+            focusArea: lead.focusArea ?? null,
             notes: lead.notes ?? null,
           }))
         : [];
@@ -459,7 +469,7 @@ const LeadsPage = () => {
   const updateLead = useCallback(
     async (
       leadId: string,
-      payload: Partial<Pick<LeadRecord, "status" | "notes">>,
+      payload: Partial<Pick<LeadRecord, "status" | "notes" | "focusArea">>,
     ) => {
       const response = await authenticatedFetch(`/api/leads/${leadId}`, {
         method: "PATCH",
@@ -520,6 +530,42 @@ const LeadsPage = () => {
     [updateLead],
   );
 
+  const handleFocusAreaChangeDialog = useCallback(
+    async (value: string) => {
+      if (!selectedLead) {
+        setFocusAreaDraft(value);
+        return;
+      }
+
+      const previous = selectedLead.focusArea ?? "";
+      setFocusAreaDraft(value);
+
+      if (value === previous) {
+        return;
+      }
+
+      setUpdatingFocusArea(true);
+
+      try {
+        await updateLead(selectedLead.id, { focusArea: value });
+        const label = getLeadFocusAreaLabel(value) || value;
+        toast.success(`Necesidad principal actualizada a ${label}.`);
+      } catch (error) {
+        setFocusAreaDraft(previous);
+        if (error instanceof UnauthorizedError) {
+          return;
+        }
+        toast.error(
+          (error as Error)?.message ??
+            "No pudimos actualizar la necesidad principal.",
+        );
+      } finally {
+        setUpdatingFocusArea(false);
+      }
+    },
+    [selectedLead, updateLead],
+  );
+
   const selectedLead = useMemo(() => {
     if (!selectedLeadId) {
       return null;
@@ -530,8 +576,11 @@ const LeadsPage = () => {
   useEffect(() => {
     if (selectedLead) {
       setNotesDraft(selectedLead.notes ?? "");
+      setFocusAreaDraft(selectedLead.focusArea ?? "");
     } else {
       setNotesDraft("");
+      setFocusAreaDraft("");
+      setUpdatingFocusArea(false);
     }
   }, [selectedLead]);
 
@@ -569,6 +618,7 @@ const LeadsPage = () => {
         lead.phone ?? "",
         lead.message,
         lead.notes ?? "",
+        getLeadFocusAreaLabel(lead.focusArea),
       ];
 
       return values.some((value) =>
@@ -819,6 +869,27 @@ const LeadsPage = () => {
               >
                 {statusMeta.label}
               </Badge>
+            </div>
+          );
+        },
+      },
+      {
+        key: "focusArea",
+        label: "Necesidad principal",
+        render: (lead) => {
+          const label = getLeadFocusAreaLabel(lead.focusArea);
+          const description = getLeadFocusAreaDescription(lead.focusArea);
+          return (
+            <div className="space-y-1">
+              <Badge
+                variant="outline"
+                className="border-slate-200 bg-slate-50 text-slate-700"
+              >
+                {label || "No especificada"}
+              </Badge>
+              {description ? (
+                <p className="text-xs text-gray-500">{description}</p>
+              ) : null}
             </div>
           );
         },
@@ -1316,6 +1387,49 @@ const LeadsPage = () => {
                   <div className="space-y-1 text-sm text-gray-600">
                     <p className="font-semibold text-gray-900">Empresa</p>
                     <p>{selectedLead.company ?? "No especificada"}</p>
+                  </div>
+                  <div className="space-y-2 text-sm text-gray-600">
+                    <p className="font-semibold text-gray-900">Necesidad principal</p>
+                    <Select
+                      value={focusAreaDraft || undefined}
+                      onValueChange={(value) => {
+                        void handleFocusAreaChangeDialog(value);
+                      }}
+                      disabled={updatingFocusArea}
+                    >
+                      <SelectTrigger className="w-full border-gray-200 bg-white text-left text-gray-700 focus:border-[#4BC3FE] focus:ring-[#4BC3FE]/40">
+                        <SelectValue placeholder="Selecciona una opción" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white text-gray-700">
+                        {leadFocusAreas.map((area) => (
+                          <SelectItem key={area.value} value={area.value}>
+                            <div className="space-y-0.5 text-left">
+                              <p className="text-sm font-medium text-gray-900">
+                                {area.label}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {area.description}
+                              </p>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {getLeadFocusAreaDescription(
+                      focusAreaDraft || selectedLead.focusArea,
+                    ) ? (
+                      <p className="text-xs text-gray-500">
+                        {getLeadFocusAreaDescription(
+                          focusAreaDraft || selectedLead.focusArea,
+                        )}
+                      </p>
+                    ) : null}
+                    {updatingFocusArea ? (
+                      <p className="flex items-center gap-2 text-xs text-gray-500">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Guardando cambios...
+                      </p>
+                    ) : null}
                   </div>
                   <div className="space-y-1 text-sm text-gray-600">
                     <p className="font-semibold text-gray-900">Estado actual</p>

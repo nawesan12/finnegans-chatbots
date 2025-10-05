@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getAuthPayload } from "@/lib/auth";
-import { isValidLeadStatus } from "@/lib/leads";
+import { isValidLeadFocusArea, isValidLeadStatus } from "@/lib/leads";
 
 const MAX_NOTES_LENGTH = 2000;
 
@@ -36,9 +36,10 @@ export async function PATCH(
     return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
   }
 
-  const { status, notes } = payload as {
+  const { status, notes, focusArea } = payload as {
     status?: unknown;
     notes?: unknown;
+    focusArea?: unknown;
   };
 
   const data: Prisma.LeadUpdateInput = {};
@@ -52,6 +53,17 @@ export async function PATCH(
     }
 
     data.status = status;
+  }
+
+  if (focusArea !== undefined) {
+    if (typeof focusArea !== "string" || !isValidLeadFocusArea(focusArea)) {
+      return NextResponse.json(
+        { error: "La necesidad principal no es válida." },
+        { status: 400 },
+      );
+    }
+
+    data.focusArea = focusArea;
   }
 
   if (notes !== undefined) {
