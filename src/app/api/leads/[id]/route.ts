@@ -8,14 +8,15 @@ const MAX_NOTES_LENGTH = 2000;
 
 export async function PATCH(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> },
+  context: { params?: Promise<{ id: string }> },
 ) {
   const auth = getAuthPayload(request);
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id } = await context.params;
+  const params = context.params ? await context.params : undefined;
+  const id = params?.id;
   if (!id) {
     return NextResponse.json({ error: "Lead ID is required" }, { status: 400 });
   }
