@@ -152,7 +152,13 @@ export const getStarterData = <T extends FlowNodeType>(
 ): Omit<FlowNodeDataMap[T], "name"> => {
   const starters: { [K in FlowNodeType]: Omit<FlowNodeDataMap[K], "name"> } = {
     trigger: { keyword: "/start" },
-    message: { text: "Nuevo mensaje", useTemplate: false },
+    message: {
+      text: "Nuevo mensaje",
+      useTemplate: false,
+      templateName: "",
+      templateLanguage: "",
+      templateParameters: [],
+    },
     options: { options: ["Opcion 1", "Opcion 2"] },
     delay: { seconds: 1 },
     condition: {

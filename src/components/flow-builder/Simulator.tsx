@@ -300,6 +300,35 @@ export function Simulator({
           }
           case "message": {
             if (!isNodeOfType(current, "message")) break;
+            if (current.data.useTemplate) {
+              const templateName = current.data.templateName ?? "(sin plantilla)";
+              const templateLanguage = current.data.templateLanguage ?? "";
+              const params = Array.isArray(current.data.templateParameters)
+                ? (current.data.templateParameters as Array<{
+                    component?: string;
+                    value?: string;
+                  }> )
+                : [];
+              const resolvedParams = params.map((param) => {
+                const componentLabel = (param.component ?? "BODY").toString().toUpperCase();
+                const resolvedValue = tpl(param.value ?? "", runtimeContext);
+                return `• ${componentLabel}: ${resolvedValue || "(vacío)"}`;
+              });
+
+              const lines = [
+                `🧩 Template: ${templateName}${
+                  templateLanguage ? ` (${templateLanguage})` : ""
+                }`,
+              ];
+              if (resolvedParams.length) {
+                lines.push("Parámetros:");
+                lines.push(...resolvedParams);
+              }
+
+              addLog({ type: "bot", text: lines.join("\n") });
+              break;
+            }
+
             const text = tpl(current.data.text ?? "", runtimeContext);
             addLog({ type: "bot", text });
             break;

@@ -991,6 +991,19 @@ type SendMessagePayload =
         footer?: string | null;
         cta?: string | null;
       };
+    }
+  | {
+      type: "template";
+      template: {
+        name: string;
+        language: string;
+        components?: Array<{
+          type: string;
+          subType?: string | null;
+          index?: number | null;
+          parameters?: Array<{ type: "text"; text: string }>;
+        }>;
+      };
     };
 
 export type SendMessageResult =
@@ -1145,6 +1158,85 @@ export async function sendMessage(
         to: normalizedTo,
         type: "interactive",
         interactive,
+      };
+      break;
+    }
+
+    case "template": {
+      const template = message.template;
+      const templateName = template?.name?.trim();
+      const templateLanguage = template?.language?.trim();
+      if (!templateName || !templateLanguage) {
+        return {
+          success: false,
+          status: 400,
+          error: "Missing template name or language",
+        };
+      }
+
+      const components = Array.isArray(template?.components)
+        ? template.components
+        : [];
+
+      const normalizedComponents = components
+        .map((component) => {
+          const type = (component?.type ?? "").toString().trim().toLowerCase();
+          if (!type) return null;
+
+          const normalized: Record<string, unknown> = { type };
+
+          const subType = (component?.subType ?? "")?.toString().trim();
+          if (subType) {
+            normalized.sub_type = subType.toLowerCase();
+          }
+
+          if (
+            typeof component?.index === "number" &&
+            Number.isFinite(component.index)
+          ) {
+            normalized.index = component.index;
+          }
+
+          const parameters = Array.isArray(component?.parameters)
+            ? component.parameters
+                .map((parameter) => {
+                  if (!parameter || parameter.type !== "text") return null;
+                  const textValue =
+                    typeof parameter.text === "string"
+                      ? parameter.text
+                      : "";
+                  return { type: "text", text: textValue };
+                })
+                .filter((entry): entry is { type: "text"; text: string } =>
+                  entry !== null,
+                )
+            : [];
+
+          if (parameters.length) {
+            normalized.parameters = parameters;
+          }
+
+          return normalized;
+        })
+        .filter((component): component is Record<string, unknown> =>
+          component !== null,
+        );
+
+      const templatePayload: Record<string, unknown> = {
+        name: templateName,
+        language: { code: templateLanguage },
+      };
+
+      if (normalizedComponents.length) {
+        templatePayload.components = normalizedComponents;
+      }
+
+      body = {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: normalizedTo,
+        type: "template",
+        template: templatePayload,
       };
       break;
     }
