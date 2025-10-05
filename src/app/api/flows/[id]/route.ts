@@ -10,6 +10,7 @@ import {
   MetaFlowError,
   updateMetaFlow,
 } from "@/lib/meta-flow";
+import { toNullableJsonInput } from "@/lib/json";
 
 const FlowUpdateSchema = z.object({
   name: z.string().min(1),
@@ -116,7 +117,7 @@ export async function PUT(
         metaFlowVersion: remote.version,
         metaFlowRevisionId: remote.revisionId,
         metaFlowStatus: remote.status,
-        metaFlowMetadata: (remote.raw ?? null) as Prisma.JsonValue,
+        metaFlowMetadata: toNullableJsonInput(remote.raw),
       },
       include: {
         _count: {
