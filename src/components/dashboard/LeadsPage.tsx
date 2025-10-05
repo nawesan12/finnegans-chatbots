@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -41,6 +42,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   getLeadFocusAreaDescription,
   getLeadFocusAreaLabel,
+  isValidLeadFocusArea,
   leadFocusAreas,
   leadStatuses,
   type LeadStatus,
@@ -76,6 +78,19 @@ const datePresetOptions: { value: DatePreset; label: string; days: number }[] = 
   { value: "30d", label: "Últimos 30 días", days: 30 },
   { value: "90d", label: "Últimos 90 días", days: 90 },
 ];
+
+const managedQueryKeys = [
+  "status",
+  "focusArea",
+  "search",
+  "createdFrom",
+  "createdTo",
+  "range",
+] as const;
+
+function isValidDatePreset(value: string): value is DatePreset {
+  return datePresetOptions.some((option) => option.value === value);
+}
 
 type StatusAccent = {
   container: string;
@@ -251,6 +266,61 @@ function formatDateForInput(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
+function computePresetDates(preset: DatePreset) {
+  const option = datePresetOptions.find((item) => item.value === preset);
+  if (!option) {
+    return null;
+  }
+
+  const end = new Date();
+  end.setHours(0, 0, 0, 0);
+  const start = new Date(end);
+  start.setDate(start.getDate() - (option.days - 1));
+
+  return {
+    from: formatDateForInput(start),
+    to: formatDateForInput(end),
+  };
+}
+
+function sanitizeDateParam(value: string | null, endOfDay: boolean) {
+  if (!value) {
+    return "";
+  }
+
+  const trimmed = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return "";
+  }
+
+  return parseDateInput(trimmed, endOfDay) ? trimmed : "";
+}
+
+function derivePresetFromDates(
+  from: string,
+  to: string,
+): DatePreset | null {
+  if (!from || !to) {
+    return null;
+  }
+
+  const start = parseDateInput(from, false);
+  const end = parseDateInput(to, false);
+
+  if (!start || !end) {
+    return null;
+  }
+
+  const diffMs = end.getTime() - start.getTime();
+  if (diffMs < 0) {
+    return null;
+  }
+
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24)) + 1;
+  const match = datePresetOptions.find((option) => option.days === diffDays);
+  return match?.value ?? null;
+}
+
 function getStatusMeta(status: string) {
   const base = leadStatusMap.get(status as LeadStatus);
   if (base) {
@@ -304,6 +374,7 @@ const LeadsPage = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
+  const searchParamsString = searchParams.toString();
   const [leads, setLeads] = useState<LeadRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -335,6 +406,7 @@ const LeadsPage = () => {
     null,
   );
   const [isDeletingLead, setIsDeletingLead] = useState(false);
+  const skipSyncRef = useRef(false);
 
   const dateFormatter = useMemo(
     () =>
@@ -464,6 +536,147 @@ const LeadsPage = () => {
     }
     void fetchLeads();
   }, [fetchLeads, hasHydrated]);
+
+  useEffect(() => {
+    if (!hasHydrated) {
+      return;
+    }
+
+    if (skipSyncRef.current) {
+      skipSyncRef.current = false;
+      return;
+    }
+
+    const params = new URLSearchParams(searchParamsString);
+
+    const rawStatus = params.get("status");
+    const nextStatus = rawStatus?.trim() ? rawStatus.trim() : "all";
+    if (nextStatus !== statusFilter) {
+      setStatusFilter(nextStatus);
+    }
+
+    const rawFocus = params.get("focusArea");
+    const nextFocus =
+      rawFocus && rawFocus.trim() && isValidLeadFocusArea(rawFocus.trim())
+        ? rawFocus.trim()
+        : "all";
+    if (nextFocus !== focusAreaFilter) {
+      setFocusAreaFilter(nextFocus);
+    }
+
+    const rawSearch = params.get("search");
+    const nextSearch = rawSearch?.trim() ?? "";
+    if (nextSearch !== searchTerm) {
+      setSearchTerm(nextSearch);
+    }
+
+    const rawRange = params.get("range");
+    const normalizedRange =
+      rawRange && rawRange.trim() && isValidDatePreset(rawRange.trim())
+        ? (rawRange.trim() as DatePreset)
+        : null;
+
+    let nextCreatedFrom = sanitizeDateParam(params.get("createdFrom"), false);
+    let nextCreatedTo = sanitizeDateParam(params.get("createdTo"), true);
+    let presetAppliedFromRange = false;
+
+    if (!nextCreatedFrom && !nextCreatedTo && normalizedRange) {
+      const computed = computePresetDates(normalizedRange);
+      if (computed) {
+        nextCreatedFrom = computed.from;
+        nextCreatedTo = computed.to;
+        presetAppliedFromRange = true;
+      }
+    }
+
+    if (nextCreatedFrom !== createdFrom) {
+      setCreatedFrom(nextCreatedFrom);
+    }
+
+    if (nextCreatedTo !== createdTo) {
+      setCreatedTo(nextCreatedTo);
+    }
+
+    const derivedPreset = derivePresetFromDates(
+      nextCreatedFrom,
+      nextCreatedTo,
+    );
+    const nextPreset =
+      derivedPreset ?? (presetAppliedFromRange ? normalizedRange : null);
+
+    if (nextPreset !== datePreset) {
+      setDatePreset(nextPreset);
+    }
+  }, [
+    createdFrom,
+    createdTo,
+    datePreset,
+    focusAreaFilter,
+    hasHydrated,
+    searchParamsString,
+    searchTerm,
+    statusFilter,
+  ]);
+
+  useEffect(() => {
+    if (!hasHydrated) {
+      return;
+    }
+
+    const currentParams = new URLSearchParams(searchParamsString);
+    const nextParams = new URLSearchParams();
+
+    currentParams.forEach((value, key) => {
+      if (!managedQueryKeys.includes(key as (typeof managedQueryKeys)[number])) {
+        nextParams.append(key, value);
+      }
+    });
+
+    if (statusFilter !== "all") {
+      nextParams.set("status", statusFilter);
+    }
+
+    if (focusAreaFilter !== "all") {
+      nextParams.set("focusArea", focusAreaFilter);
+    }
+
+    const trimmedSearch = searchTerm.trim();
+    if (trimmedSearch) {
+      nextParams.set("search", trimmedSearch);
+    }
+
+    if (createdFrom) {
+      nextParams.set("createdFrom", createdFrom);
+    }
+
+    if (createdTo) {
+      nextParams.set("createdTo", createdTo);
+    }
+
+    if (datePreset && createdFrom && createdTo) {
+      nextParams.set("range", datePreset);
+    }
+
+    const nextQuery = nextParams.toString();
+    if (nextQuery === currentParams.toString()) {
+      return;
+    }
+
+    skipSyncRef.current = true;
+    const nextUrl = nextQuery ? `${pathname}?${nextQuery}` : pathname;
+    router.replace(nextUrl, { scroll: false });
+  }, [
+    createdFrom,
+    createdTo,
+    datePreset,
+    focusAreaFilter,
+    hasHydrated,
+    pathname,
+    router,
+    searchParamsString,
+    searchTerm,
+    statusFilter,
+  ]);
 
   useEffect(() => {
     const highlight = searchParams.get("highlight");
