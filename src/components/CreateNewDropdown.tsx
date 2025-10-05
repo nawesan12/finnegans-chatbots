@@ -13,16 +13,18 @@ const CreateNewDropdown = ({
   isOpen,
   onImportClick,
   onNewContactClick,
+  onNewFlowClick,
 }: {
   isOpen: boolean;
   onImportClick: () => void;
   onNewContactClick: () => void;
+  onNewFlowClick: () => void;
 }) => {
   const menuItems = [
     {
       icon: Bot,
       label: "Nuevo flujo",
-      action: () => console.log("Nuevo flujo"),
+      action: onNewFlowClick,
     },
     {
       icon: UserPlus,
@@ -51,6 +53,7 @@ const CreateNewDropdown = ({
             {menuItems.map((item, index) => (
               <button
                 key={index}
+                type="button"
                 onClick={item.action}
                 className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
               >

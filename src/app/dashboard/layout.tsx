@@ -69,11 +69,16 @@ export default function DashboardLayout({
     setIsAddContactModalOpen(true);
   };
 
+  const handleStartNewFlow = () => {
+    router.push("/dashboard/flows?open=new");
+  };
+
   return (
     <DashboardActionsProvider
       value={{
         openImportContacts: handleOpenImportModal,
         openNewContact: handleOpenAddContactModal,
+        startNewFlow: handleStartNewFlow,
       }}
     >
       <div className="flex h-screen bg-gray-100 font-sans">
@@ -86,6 +91,7 @@ export default function DashboardLayout({
             title={getPageTitle(pathname)}
             onImportClick={handleOpenImportModal}
             onNewContactClick={handleOpenAddContactModal}
+            onNewFlowClick={handleStartNewFlow}
           />
           <div className="flex-1 overflow-y-auto">
             <AnimatePresence mode="wait">
