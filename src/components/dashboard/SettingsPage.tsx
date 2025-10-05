@@ -306,7 +306,7 @@ const SettingsPage = () => {
     <div className="space-y-6 p-6">
       <PageHeader
         title="Configuración"
-        description="Gestiona las credenciales necesarias para conectar tus flujos de WhatsApp Business con Finnegan."
+        description="Gestiona las credenciales necesarias para conectar tus flujos de WhatsApp Business con Finnegans."
         actions={
           <>
             <Badge
@@ -333,7 +333,7 @@ const SettingsPage = () => {
             <div className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Meta Cloud API</CardTitle>
+                  <CardTitle>WhatsApp Cloud</CardTitle>
                   <CardDescription>
                     Configura las credenciales proporcionadas por Meta para habilitar
                     el envío y recepción de mensajes.
@@ -367,7 +367,7 @@ const SettingsPage = () => {
             <form onSubmit={handleSubmit} className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Meta Cloud API</CardTitle>
+                  <CardTitle>WhatsApp Cloud</CardTitle>
                   <CardDescription>
                     Estos datos permiten vincular tu número de WhatsApp Business con la
                     plataforma. Solo el personal autorizado debería modificarlos.
@@ -399,7 +399,7 @@ const SettingsPage = () => {
                       onChange={(event) =>
                         handleChange("metaVerifyToken", event.target.value)
                       }
-                      placeholder="Ej: finnegan-webhook-token"
+                      placeholder="Ej: finnegans-webhook-token"
                     />
                     <p className="text-xs text-gray-500">
                       Se usa para validar la suscripción del webhook de Meta. Debe
