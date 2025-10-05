@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import { getAuthPayload } from "@/lib/auth";
 import { sanitizeFlowDefinition } from "@/lib/flow-schema";
 import { createMetaFlow, MetaFlowError } from "@/lib/meta-flow";
+import { toNullableJsonInput } from "@/lib/json";
 
 const FlowPayloadSchema = z.object({
   name: z.string().min(1),
@@ -100,7 +101,7 @@ export async function POST(request: Request) {
         metaFlowVersion: remote.version,
         metaFlowRevisionId: remote.revisionId,
         metaFlowStatus: remote.status,
-        metaFlowMetadata: (remote.raw ?? null) as Prisma.JsonValue,
+        metaFlowMetadata: toNullableJsonInput(remote.raw),
         user: { connect: { id: auth.userId } },
       },
       include: {
