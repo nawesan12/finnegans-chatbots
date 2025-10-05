@@ -8,13 +8,20 @@ import React, {
 } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { MoreVertical, Upload, UserPlus, Search } from "lucide-react";
+import {
+  Download,
+  Loader2,
+  MoreVertical,
+  Upload,
+  UserPlus,
+  Search,
+} from "lucide-react";
 
 import PageHeader from "@/components/dashboard/PageHeader";
 import Table from "@/components/dashboard/Table";
 import { itemVariants } from "@/lib/animations";
 import { toast } from "sonner";
-import { authenticatedFetch } from "@/lib/api-client";
+import { authenticatedFetch, UnauthorizedError } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/store";
 import { useDashboardActions } from "@/lib/dashboard-context";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -66,6 +73,7 @@ const ContactsPage = () => {
   );
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const token = useAuthStore((state) => state.token);
   const hasHydrated = useAuthStore((state) => state.hasHydrated);
   const dashboardActions = useDashboardActions();
@@ -176,6 +184,89 @@ const ContactsPage = () => {
   const handleOpenNewContact = () => {
     dashboardActions?.openNewContact?.();
   };
+
+  const handleExport = useCallback(async () => {
+    if (filteredContacts.length === 0) {
+      toast.info("No hay contactos para exportar con los filtros actuales.");
+      return;
+    }
+
+    setIsExporting(true);
+
+    try {
+      const params = new URLSearchParams();
+      const trimmedSearch = searchTerm.trim();
+      if (trimmedSearch) {
+        params.set("search", trimmedSearch);
+      }
+      if (tagFilter !== "all") {
+        params.set("tagId", tagFilter);
+      }
+
+      const query = params.size > 0 ? `?${params.toString()}` : "";
+      const response = await authenticatedFetch(
+        `/api/contacts/export${query}`,
+      );
+
+      if (!response.ok) {
+        let message = "No se pudieron exportar los contactos.";
+        try {
+          const data = await response.json();
+          if (typeof data?.error === "string") {
+            message = data.error;
+          }
+        } catch (error) {
+          console.error("Failed to parse contacts export error", error);
+        }
+        throw new Error(message);
+      }
+
+      const blob = await response.blob();
+      let filename = `contacts-${new Date().toISOString().split("T")[0]}.csv`;
+      const contentDisposition = response.headers.get("content-disposition");
+
+      if (contentDisposition) {
+        const filenameStarMatch = /filename\*=UTF-8''([^;]+)/i.exec(
+          contentDisposition,
+        );
+        if (filenameStarMatch?.[1]) {
+          try {
+            filename = decodeURIComponent(filenameStarMatch[1]);
+          } catch (error) {
+            console.error("Failed to decode contacts filename", error);
+          }
+        } else {
+          const fallbackMatch = /filename="?([^";]+)"?/i.exec(
+            contentDisposition,
+          );
+          if (fallbackMatch?.[1]) {
+            filename = fallbackMatch[1];
+          }
+        }
+      }
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success("Exportamos tus contactos en CSV.");
+    } catch (error) {
+      if (error instanceof UnauthorizedError) {
+        return;
+      }
+      console.error("Failed to export contacts", error);
+      toast.error(
+        (error as Error)?.message ??
+          "No pudimos exportar los contactos. Intenta nuevamente.",
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  }, [filteredContacts.length, searchTerm, tagFilter]);
 
   const handleCopyPhone = useCallback(async (phone: string) => {
     try {
@@ -345,6 +436,24 @@ const ContactsPage = () => {
 
   const headerActions = (
     <>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => void handleExport()}
+        disabled={isExporting || filteredContacts.length === 0}
+      >
+        {isExporting ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Exportando...
+          </>
+        ) : (
+          <>
+            <Download className="mr-2 h-4 w-4" />
+            Exportar CSV
+          </>
+        )}
+      </Button>
       <Button
         type="button"
         variant="outline"
