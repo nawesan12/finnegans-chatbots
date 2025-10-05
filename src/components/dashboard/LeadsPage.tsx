@@ -70,6 +70,9 @@ const statusSelectLabelId = "leads-filter-status";
 const dateFromInputId = "leads-filter-date-from";
 const dateToInputId = "leads-filter-date-to";
 const focusAreaSelectLabelId = "leads-filter-focus-area";
+const focusAreaNoneValue = "__none";
+const focusAreaNoneQueryValue = "none";
+const focusAreaNoneLabel = "Sin especificar";
 
 type DatePreset = "7d" | "30d" | "90d";
 
@@ -362,6 +365,12 @@ type LeadStatusOption = {
   description?: string;
 };
 
+type LeadFocusAreaOption = {
+  value: string;
+  label: string;
+  description?: string;
+};
+
 const MAX_NOTES_LENGTH = 2000;
 
 type LeadSummaryResponse = {
@@ -384,6 +393,9 @@ const LeadsPage = () => {
   const [availableStatuses, setAvailableStatuses] = useState<LeadStatusOption[]>(
     () => [...leadStatuses],
   );
+  const [availableFocusAreas, setAvailableFocusAreas] = useState<
+    LeadFocusAreaOption[]
+  >(() => leadFocusAreas.map((area) => ({ ...area })));
   const [serverSummary, setServerSummary] = useState<LeadSummaryResponse | null>(
     null,
   );
@@ -510,6 +522,25 @@ const LeadsPage = () => {
         }));
 
       setAvailableStatuses([...baseStatuses, ...unknownStatuses]);
+      const baseFocusAreas: LeadFocusAreaOption[] = leadFocusAreas.map((area) => ({
+        ...area,
+      }));
+      const baseFocusAreaValues = new Set(
+        baseFocusAreas.map((option) => option.value),
+      );
+      const unknownFocusAreas = sanitizedLeads
+        .map((lead) => lead.focusArea)
+        .filter(
+          (focusArea): focusArea is string =>
+            Boolean(focusArea) && !baseFocusAreaValues.has(focusArea),
+        )
+        .filter((focusArea, index, array) => array.indexOf(focusArea) === index)
+        .map((focusArea) => ({
+          value: focusArea,
+          label: focusArea,
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label, "es"));
+      setAvailableFocusAreas([...baseFocusAreas, ...unknownFocusAreas]);
       setLeads(sanitizedLeads);
       const summaryData = parseLeadSummary(data.summary);
       const computedSummary = computeSummaryFromLeads(sanitizedLeads);
@@ -556,10 +587,14 @@ const LeadsPage = () => {
     }
 
     const rawFocus = params.get("focusArea");
-    const nextFocus =
-      rawFocus && rawFocus.trim() && isValidLeadFocusArea(rawFocus.trim())
-        ? rawFocus.trim()
-        : "all";
+    const trimmedFocus = rawFocus?.trim();
+    const nextFocus = trimmedFocus
+      ? trimmedFocus === focusAreaNoneQueryValue
+        ? focusAreaNoneValue
+        : isValidLeadFocusArea(trimmedFocus)
+          ? trimmedFocus
+          : "all"
+      : "all";
     if (nextFocus !== focusAreaFilter) {
       setFocusAreaFilter(nextFocus);
     }
@@ -637,7 +672,12 @@ const LeadsPage = () => {
     }
 
     if (focusAreaFilter !== "all") {
-      nextParams.set("focusArea", focusAreaFilter);
+      nextParams.set(
+        "focusArea",
+        focusAreaFilter === focusAreaNoneValue
+          ? focusAreaNoneQueryValue
+          : focusAreaFilter,
+      );
     }
 
     const trimmedSearch = searchTerm.trim();
@@ -765,6 +805,11 @@ const LeadsPage = () => {
       }
 
       const previous = selectedLead.focusArea ?? "";
+      if (!isValidLeadFocusArea(value)) {
+        setFocusAreaDraft(previous);
+        toast.error("La necesidad principal seleccionada no es válida.");
+        return;
+      }
       setFocusAreaDraft(value);
 
       if (value === previous) {
@@ -829,8 +874,14 @@ const LeadsPage = () => {
         return false;
       }
 
-      if (focusAreaFilter !== "all" && lead.focusArea !== focusAreaFilter) {
-        return false;
+      if (focusAreaFilter !== "all") {
+        if (focusAreaFilter === focusAreaNoneValue) {
+          if (lead.focusArea) {
+            return false;
+          }
+        } else if (lead.focusArea !== focusAreaFilter) {
+          return false;
+        }
       }
 
       if (dateFilter.from || dateFilter.to) {
@@ -1005,7 +1056,7 @@ const LeadsPage = () => {
       if (statusFilter !== "all") {
         params.set("status", statusFilter);
       }
-      if (focusAreaFilter !== "all") {
+      if (focusAreaFilter !== "all" && focusAreaFilter !== focusAreaNoneValue) {
         params.set("focusArea", focusAreaFilter);
       }
       if (trimmedSearch) {
@@ -1083,6 +1134,11 @@ const LeadsPage = () => {
     searchTerm,
     statusFilter,
   ]);
+
+  const hasUnspecifiedFocusAreas = useMemo(
+    () => leads.some((lead) => !lead.focusArea),
+    [leads],
+  );
 
   const columns = useMemo<TableColumn<LeadRecord>[]>(
     () => [
@@ -1532,7 +1588,12 @@ const LeadsPage = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todas las necesidades</SelectItem>
-                {leadFocusAreas.map((area) => (
+                {hasUnspecifiedFocusAreas ? (
+                  <SelectItem value={focusAreaNoneValue}>
+                    {focusAreaNoneLabel}
+                  </SelectItem>
+                ) : null}
+                {availableFocusAreas.map((area) => (
                   <SelectItem key={area.value} value={area.value}>
                     {area.label}
                   </SelectItem>
@@ -1719,15 +1780,21 @@ const LeadsPage = () => {
                         <SelectValue placeholder="Selecciona una opción" />
                       </SelectTrigger>
                       <SelectContent className="bg-white text-gray-700">
-                        {leadFocusAreas.map((area) => (
-                          <SelectItem key={area.value} value={area.value}>
+                        {availableFocusAreas.map((area) => (
+                          <SelectItem
+                            key={area.value}
+                            value={area.value}
+                            disabled={!isValidLeadFocusArea(area.value)}
+                          >
                             <div className="space-y-0.5 text-left">
                               <p className="text-sm font-medium text-gray-900">
                                 {area.label}
                               </p>
-                              <p className="text-xs text-gray-500">
-                                {area.description}
-                              </p>
+                              {area.description ? (
+                                <p className="text-xs text-gray-500">
+                                  {area.description}
+                                </p>
+                              ) : null}
                             </div>
                           </SelectItem>
                         ))}
