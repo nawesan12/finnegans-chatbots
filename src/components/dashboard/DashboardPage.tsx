@@ -11,7 +11,16 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { motion } from "framer-motion";
-import { MessageSquare, Users, ArrowRight, Bot, RefreshCw } from "lucide-react";
+import {
+  MessageSquare,
+  Users,
+  ArrowRight,
+  Bot,
+  RefreshCw,
+  AlertTriangle,
+  CheckCircle2,
+  Lightbulb,
+} from "lucide-react";
 import { containerVariants, itemVariants } from "@/lib/animations";
 import MetricCard from "@/components/dashboard/MetricCard";
 import FilterMultiSelect from "@/components/dashboard/FilterMultiSelect";
@@ -88,6 +97,25 @@ type DashboardInsights = {
 type StatusBreakdownWithPercentage = StatusBreakdownPoint & {
   percentage: number;
 };
+
+type InsightSeverity = "info" | "warning" | "critical" | "success";
+
+type OperationalInsight = {
+  id: string;
+  title: string;
+  description: string;
+  severity: InsightSeverity;
+  recommendedAction?: string;
+};
+
+const FAILURE_KEYWORDS = [
+  "failed",
+  "fallido",
+  "error",
+  "errored",
+  "rechazado",
+  "denied",
+];
 
 const dateRangeOptions = [
   { value: "7", label: "Últimos 7 días" },
@@ -256,8 +284,14 @@ const DashboardPage = () => {
         .sort((a, b) => b.count - a.count);
     }, [insights]);
 
-  const channelDistributionData = insights?.channelDistribution ?? [];
-  const flowPerformanceData = insights?.flowPerformance ?? [];
+  const channelDistributionData = useMemo(
+    () => insights?.channelDistribution ?? [],
+    [insights?.channelDistribution],
+  );
+  const flowPerformanceData = useMemo(
+    () => insights?.flowPerformance ?? [],
+    [insights?.flowPerformance],
+  );
   const hasChannelDistributionData = channelDistributionData.some(
     (entry) => entry.total > 0,
   );
@@ -267,6 +301,172 @@ const DashboardPage = () => {
   const hasStatusBreakdownData = statusBreakdownWithPercentage.some(
     (entry) => entry.count > 0,
   );
+
+
+  const insightSeverityConfig: Record<InsightSeverity, {
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    badgeClass: string;
+    iconWrapper: string;
+    iconClass: string;
+  }> = useMemo(
+    () => ({
+      info: {
+        label: "Seguimiento",
+        icon: Lightbulb,
+        badgeClass:
+          "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-400/40 dark:bg-sky-500/10 dark:text-sky-200",
+        iconWrapper:
+          "bg-sky-100 text-sky-600 dark:bg-sky-400/20 dark:text-sky-200",
+        iconClass: "text-sky-600 dark:text-sky-200",
+      },
+      warning: {
+        label: "Atención",
+        icon: AlertTriangle,
+        badgeClass:
+          "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-400/40 dark:bg-amber-500/10 dark:text-amber-200",
+        iconWrapper:
+          "bg-amber-100 text-amber-600 dark:bg-amber-400/20 dark:text-amber-200",
+        iconClass: "text-amber-600 dark:text-amber-200",
+      },
+      critical: {
+        label: "Crítico",
+        icon: AlertTriangle,
+        badgeClass:
+          "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-400/40 dark:bg-rose-500/10 dark:text-rose-200",
+        iconWrapper:
+          "bg-rose-100 text-rose-600 dark:bg-rose-400/20 dark:text-rose-200",
+        iconClass: "text-rose-600 dark:text-rose-200",
+      },
+      success: {
+        label: "Destacado",
+        icon: CheckCircle2,
+        badgeClass:
+          "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-500/10 dark:text-emerald-200",
+        iconWrapper:
+          "bg-emerald-100 text-emerald-600 dark:bg-emerald-400/20 dark:text-emerald-200",
+        iconClass: "text-emerald-600 dark:text-emerald-200",
+      },
+    }),
+    [],
+  );
+
+  const operationalInsights = useMemo<OperationalInsight[]>(() => {
+    const items: OperationalInsight[] = [];
+
+    if (metrics && metrics.totalSessions >= 20) {
+      const successRateLabel = `${percentageFormatter.format(metrics.flowSuccessRate)}%`;
+      const totalSessionsLabel = numberFormatter.format(metrics.totalSessions);
+      if (metrics.flowSuccessRate < 60) {
+        items.push({
+          id: "global-flow-critical",
+          title: "Tasa global de éxito por debajo del objetivo",
+          description: `Solo ${successRateLabel} de las ${totalSessionsLabel} sesiones completaron sus flujos en el periodo seleccionado.`,
+          severity: "critical",
+          recommendedAction:
+            "Revisa los nodos con errores en los flujos más utilizados y asegura condiciones de salida claras.",
+        });
+      } else if (metrics.flowSuccessRate < 75) {
+        items.push({
+          id: "global-flow-warning",
+          title: "Reducción en la tasa de finalización de flujos",
+          description: `${successRateLabel} de las ${totalSessionsLabel} sesiones terminaron correctamente.`,
+          severity: "warning",
+          recommendedAction:
+            "Monitorea los flujos con más volumen para detectar nodos que requieran ajustes o intervención humana.",
+        });
+      } else if (metrics.flowSuccessRate >= 90 && metrics.totalSessions >= 30) {
+        items.push({
+          id: "global-flow-success",
+          title: "Flujos con desempeño consistente",
+          description: `${successRateLabel} de ${totalSessionsLabel} sesiones completaron su recorrido sin intervención adicional.`,
+          severity: "success",
+          recommendedAction:
+            "Documenta las mejores prácticas de estos flujos y compártelas con el equipo para replicar el resultado.",
+        });
+      }
+    }
+
+    const flowsNeedingAttention = flowPerformanceData
+      .filter((flow) => flow.total >= 5 && flow.successRate < 70)
+      .sort((a, b) => a.successRate - b.successRate)
+      .slice(0, 3);
+
+    flowsNeedingAttention.forEach((flow) => {
+      const severity: InsightSeverity = flow.successRate < 50 ? "critical" : "warning";
+      items.push({
+        id: `flow-${flow.flowId}`,
+        title: `Baja conversión en ${flow.flowName}`,
+        description: `Solo ${percentageFormatter.format(flow.successRate)}% de ${numberFormatter.format(flow.total)} sesiones llegaron al final del flujo.`,
+        severity,
+        recommendedAction:
+          "Revisa las condiciones y mensajes del flujo para reducir desvíos y errores.",
+      });
+    });
+
+    const failingStatuses = statusBreakdownWithPercentage
+      .filter((status) => {
+        const normalized = status.status.toLowerCase();
+        return FAILURE_KEYWORDS.some((keyword) => normalized.includes(keyword));
+      })
+      .slice(0, 2);
+
+    failingStatuses.forEach((status) => {
+      const severity: InsightSeverity = status.percentage > 15 ? "critical" : "warning";
+      items.push({
+        id: `status-${status.status}`,
+        title: `Mensajes con estado ${status.status}`,
+        description: `${numberFormatter.format(status.count)} eventos representan el ${percentageFormatter.format(status.percentage)}% de la actividad registrada.`,
+        severity,
+        recommendedAction:
+          "Revisa los registros en la pestaña Logs para validar entregas y reintentar envíos si es necesario.",
+      });
+    });
+
+    const backlogChannels = channelDistributionData
+      .map((entry) => ({
+        ...entry,
+        difference: entry.received - entry.sent,
+        ratio: entry.sent > 0 ? entry.received / entry.sent : Infinity,
+      }))
+      .filter((entry) => entry.received >= 20 && (entry.ratio >= 1.4 || entry.sent === 0))
+      .sort((a, b) => b.difference - a.difference)
+      .slice(0, 2);
+
+    backlogChannels.forEach((entry) => {
+      const severity: InsightSeverity = entry.difference > 40 ? "critical" : "warning";
+      const differenceLabel = numberFormatter.format(entry.difference);
+      items.push({
+        id: `channel-${entry.channel}`,
+        title: `Acumulación en ${entry.channel}`,
+        description: `${differenceLabel} mensajes más recibidos que enviados en el periodo actual indican backlog operativo.`,
+        severity,
+        recommendedAction:
+          "Evalúa asignar agentes o automatizaciones adicionales en este canal para normalizar la carga.",
+      });
+    });
+
+    if (!items.length) {
+      items.push({
+        id: "healthy-operations",
+        title: "Operación estable",
+        description:
+          "No se detectaron anomalías relevantes con los filtros aplicados. Mantén la supervisión periódica para anticipar cambios.",
+        severity: "success",
+        recommendedAction:
+          "Comparte el resumen con tu equipo y continúa monitoreando los indicadores clave.",
+      });
+    }
+
+    return items;
+  }, [
+    channelDistributionData,
+    flowPerformanceData,
+    metrics,
+    numberFormatter,
+    percentageFormatter,
+    statusBreakdownWithPercentage,
+  ]);
 
   const fetchDashboardSummary = useCallback(async () => {
     if (!token) {
@@ -1012,6 +1212,61 @@ const DashboardPage = () => {
             )}
           </motion.div>
         </div>
+        <motion.div
+          variants={itemVariants}
+          className="rounded-lg bg-white p-6 shadow-md"
+        >
+          <div className="mb-4 space-y-2">
+            <h3 className="font-semibold text-gray-800">Insights accionables</h3>
+            <p className="text-sm text-gray-500">
+              Detectamos oportunidades y alertas según los filtros activos para
+              priorizar acciones operativas.
+            </p>
+          </div>
+          <div className="space-y-4">
+            {operationalInsights.map((insight) => {
+              const config = insightSeverityConfig[insight.severity];
+              const InsightIcon = config.icon;
+              return (
+                <div
+                  key={insight.id}
+                  className="rounded-lg border border-gray-100 bg-gray-50/60 p-4 transition hover:border-gray-200 hover:bg-white"
+                >
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`mt-1 flex h-8 w-8 items-center justify-center rounded-full ${config.iconWrapper}`}
+                    >
+                      <InsightIcon className={`h-4 w-4 ${config.iconClass}`} />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-medium text-gray-800">
+                          {insight.title}
+                        </p>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${config.badgeClass}`}
+                        >
+                          {config.label}
+                        </span>
+                      </div>
+                      <p className="text-sm leading-6 text-gray-600">
+                        {insight.description}
+                      </p>
+                      {insight.recommendedAction ? (
+                        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+                          Sugerencia:{" "}
+                          <span className="normal-case text-gray-500">
+                            {insight.recommendedAction}
+                          </span>
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </motion.div>
         <motion.div
           variants={itemVariants}
           className="rounded-lg bg-white p-6 shadow-md"
