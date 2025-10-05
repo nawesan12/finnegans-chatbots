@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 type DashboardActions = {
   openImportContacts: () => void;
   openNewContact: () => void;
+  startNewFlow: () => void;
 };
 
 const DashboardActionsContext = createContext<DashboardActions | null>(null);

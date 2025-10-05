@@ -13,10 +13,12 @@ const Header = ({
   title,
   onImportClick,
   onNewContactClick,
+  onNewFlowClick,
 }: {
   title: string;
   onImportClick: () => void;
   onNewContactClick: () => void;
+  onNewFlowClick: () => void;
 }) => {
   const router = useRouter();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -57,6 +59,11 @@ const Header = ({
 
   const handleNewContactAndCloseDropdown = () => {
     onNewContactClick();
+    setIsDropdownOpen(false);
+  };
+
+  const handleNewFlowAndCloseDropdown = () => {
+    onNewFlowClick();
     setIsDropdownOpen(false);
   };
 
@@ -106,6 +113,7 @@ const Header = ({
           </motion.button>
           <CreateNewDropdown
             isOpen={isDropdownOpen}
+            onNewFlowClick={handleNewFlowAndCloseDropdown}
             onImportClick={handleImportAndCloseDropdown}
             onNewContactClick={handleNewContactAndCloseDropdown}
           />
