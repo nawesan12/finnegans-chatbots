@@ -289,9 +289,12 @@ export function Palette({
   );
 
   return (
-    <div className={`space-y-3 ${className}`}>
+    <div className={`space-y-5 ${className}`}>
       {/* Search */}
-      <div className="relative" onKeyDown={(e) => e.stopPropagation()}>
+      <div
+        className="relative flex items-center rounded-2xl border border-white/60 bg-white/80 px-4 shadow-inner backdrop-blur"
+        onKeyDown={(e) => e.stopPropagation()}
+      >
         <Input
           ref={inputRef}
           value={query}
@@ -299,15 +302,15 @@ export function Palette({
           placeholder={searchPlaceholder}
           aria-label="Buscar nodos"
           role="searchbox"
-          className="pr-16"
+          className="h-11 flex-1 border-none bg-transparent pr-16 text-sm shadow-none focus-visible:ring-0 focus-visible:outline-none"
         />
         {/* Icon left */}
-        <Search className="pointer-events-none absolute right-10 top-2.5 h-4 w-4 text-muted-foreground" />
+        <Search className="pointer-events-none absolute right-11 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
         {/* Clear */}
         {query ? (
           <button
             aria-label="Limpiar búsqueda"
-            className="absolute right-2 top-2.5 rounded-md p-1 text-muted-foreground hover:bg-accent"
+            className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-slate-200/60 p-1 text-slate-500 transition hover:bg-slate-300/70"
             onClick={() => setQuery("")}
           >
             <X className="h-4 w-4" />
@@ -318,14 +321,14 @@ export function Palette({
       {/* List */}
       <div
         ref={listRef}
-        className="grid grid-cols-1 gap-2 outline-none"
+        className="grid grid-cols-1 gap-3 outline-none"
         role="listbox"
         aria-label="Paleta de nodos"
         tabIndex={0}
         onKeyDown={handleKeyDownList}
       >
         {filtered.length === 0 && (
-          <div className="rounded-2xl border p-4 text-sm text-muted-foreground">
+          <div className="rounded-2xl border border-dashed border-slate-200/70 bg-white/70 p-4 text-sm text-muted-foreground shadow-inner">
             Sin resultados para <span className="font-medium">“{query}”</span>.
             Probá con
             <span className="ml-1">“mensaje”</span>, <span>“opciones”</span>,{" "}
@@ -347,27 +350,32 @@ export function Palette({
               onClick={() => !p.disabled && onAdd(p.type)}
               onDragStart={(event) => handleDragStart(event, p)}
               draggable
-              whileHover={{ scale: 1.02 }}
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.98 }}
               className={[
-                "flex items-center gap-3 rounded-2xl border p-3 text-left transition",
-                "hover:shadow-sm focus:outline-none",
-                isActive ? "ring-2 ring-cyan-400" : "",
-                p.disabled ? "cursor-not-allowed opacity-60" : "",
+                "group flex items-center gap-3 rounded-2xl border border-white/60 bg-white/80 p-3 text-left shadow-[0_18px_40px_-30px_rgba(15,23,42,0.55)] transition-all duration-200",
+                "hover:-translate-y-0.5 hover:shadow-[0_28px_55px_-35px_rgba(14,165,233,0.55)] focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/80",
+                isActive
+                  ? "ring-2 ring-sky-300/80 shadow-[0_32px_70px_-40px_rgba(14,165,233,0.6)]"
+                  : "",
+                p.disabled ? "cursor-not-allowed opacity-50" : "",
               ].join(" ")}
               onMouseEnter={() => setActiveIndex(idx)}
             >
-              <Icon className="h-5 w-5" />
+              <span className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-sky-100/90 via-white to-emerald-100/70 text-sky-600 shadow-inner">
+                <Icon className="h-5 w-5" />
+              </span>
               <div className="min-w-0">
-                <div className="font-medium truncate">
+                <div className="truncate text-sm font-semibold text-slate-700">
                   {highlightMatch(p.label, debouncedQ)}
                 </div>
-                <div className="text-xs text-muted-foreground truncate">
+                <div className="truncate text-xs text-slate-500">
                   {highlightMatch(p.hint, debouncedQ)}
                 </div>
               </div>
 
               {/* Tipo como badge sutil (útil cuando los labels se parecen) */}
-              <span className="ml-auto rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+              <span className="ml-auto rounded-full border border-slate-200/70 bg-slate-100/70 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-500">
                 {p.type}
               </span>
             </motion.button>

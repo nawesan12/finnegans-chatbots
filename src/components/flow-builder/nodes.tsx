@@ -94,19 +94,24 @@ const Shell = memo(function Shell({
           data-testid={testId}
           aria-label={title}
           className={[
-            "relative w-[280px] rounded-2xl border bg-white shadow-sm transition-shadow",
-            selected ? "ring-2 ring-cyan-400" : "",
+            "group relative w-[280px] rounded-[28px] border border-white/60 bg-white/90 shadow-[0_22px_60px_-35px_rgba(15,23,42,0.55)] transition-all duration-200",
+            "hover:-translate-y-0.5 hover:shadow-[0_32px_80px_-40px_rgba(14,165,233,0.55)]",
+            selected
+              ? "ring-2 ring-sky-300/80 shadow-[0_36px_85px_-45px_rgba(14,165,233,0.65)]"
+              : "",
             className,
             color,
           ].join(" ")}
         >
           {/* Indicador superior de color sutil */}
           <div
-            className={`absolute inset-x-0 top-0 h-1 rounded-t-2xl ${color.replace("border-", "bg-")}`}
+            className={`absolute inset-x-0 top-0 h-1.5 rounded-t-[28px] ${color.replace("border-", "bg-")}`}
           />
-          <div className="flex items-center gap-2 px-4 py-2 border-b">
-            <Icon className="h-4 w-4" aria-hidden />
-            <h4 className="font-semibold text-sm truncate" title={title}>
+          <div className="flex items-center gap-3 border-b border-white/60 bg-white/80 px-5 py-3">
+            <span className="grid h-8 w-8 place-items-center rounded-xl bg-slate-100 text-slate-600 shadow-inner">
+              <Icon className="h-4 w-4" aria-hidden />
+            </span>
+            <h4 className="truncate text-sm font-semibold" title={title}>
               {title}
             </h4>
             {readOnly && (
@@ -115,7 +120,9 @@ const Shell = memo(function Shell({
               </span>
             )}
           </div>
-          <div className={`p-3 text-sm space-y-2 ${compact ? "py-2" : "py-3"}`}>
+          <div
+            className={`space-y-2 px-5 text-sm ${compact ? "py-3" : "py-4"}`}
+          >
             {children}
           </div>
         </div>
@@ -165,6 +172,8 @@ const Shell = memo(function Shell({
 /* =========================
    Handles comunes
    ========================= */
+const accentHandleClass = "react-flow__handle--accent";
+
 const CommonHandles = memo(function CommonHandles({
   top = false,
   bottom = true,
@@ -174,8 +183,20 @@ const CommonHandles = memo(function CommonHandles({
 }) {
   return (
     <>
-      {top && <Handle type="target" position={Position.Top} />}
-      {bottom && <Handle type="source" position={Position.Bottom} />}
+      {top && (
+        <Handle
+          type="target"
+          position={Position.Top}
+          className={accentHandleClass}
+        />
+      )}
+      {bottom && (
+        <Handle
+          type="source"
+          position={Position.Bottom}
+          className={accentHandleClass}
+        />
+      )}
     </>
   );
 });
@@ -285,7 +306,7 @@ const OptionsNode = memo(function OptionsNode({
             {options.map((opt, idx) => (
               <li
                 key={idx}
-                className="border rounded px-2 py-1 text-xs truncate"
+                className="truncate rounded-xl border border-slate-200/70 bg-slate-50/70 px-3 py-1 text-xs text-slate-600"
                 title={opt}
               >
                 {opt}
@@ -298,7 +319,11 @@ const OptionsNode = memo(function OptionsNode({
       </Shell>
 
       {/* Handles: 1 target arriba, N sources abajo, + 'no-match' */}
-      <Handle type="target" position={Position.Top} />
+      <Handle
+        type="target"
+        position={Position.Top}
+        className={accentHandleClass}
+      />
       {handlePercents.map((p, i) => (
         <Handle
           key={`opt-${i}`}
@@ -306,6 +331,7 @@ const OptionsNode = memo(function OptionsNode({
           type="source"
           position={Position.Bottom}
           style={{ left: `${p}%`, transform: "translateX(-50%)" }}
+          className={accentHandleClass}
         />
       ))}
       {/* No match al extremo derecho */}
@@ -314,6 +340,7 @@ const OptionsNode = memo(function OptionsNode({
         type="source"
         position={Position.Bottom}
         style={{ right: 8 }}
+        className={accentHandleClass}
       />
       <div
         className="absolute text-[10px] text-muted-foreground"
@@ -387,18 +414,24 @@ const ConditionNode = memo(function ConditionNode({
           True → left, False → right
         </div>
       </Shell>
-      <Handle type="target" position={Position.Top} />
+      <Handle
+        type="target"
+        position={Position.Top}
+        className={accentHandleClass}
+      />
       <Handle
         type="source"
         id="true"
         position={Position.Bottom}
         style={{ left: 80 }}
+        className={accentHandleClass}
       />
       <Handle
         type="source"
         id="false"
         position={Position.Bottom}
         style={{ left: 200 }}
+        className={accentHandleClass}
       />
     </div>
   );
@@ -665,7 +698,11 @@ const EndNode = memo(function EndNode({
       >
         <div className="text-xs text-muted-foreground">{reason}</div>
       </Shell>
-      <Handle type="target" position={Position.Top} />
+      <Handle
+        type="target"
+        position={Position.Top}
+        className={accentHandleClass}
+      />
     </div>
   );
 });
