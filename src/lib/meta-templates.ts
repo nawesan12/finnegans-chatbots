@@ -46,6 +46,36 @@ export type MetaTemplate = {
   components: MetaTemplateComponent[];
 };
 
+export type CreateMetaTemplateButton = {
+  type: string;
+  text?: string | null;
+  url?: string | null;
+  phoneNumber?: string | null;
+  example?: Record<string, unknown> | null;
+};
+
+export type CreateMetaTemplateComponent = {
+  type: string;
+  format?: string | null;
+  subType?: string | null;
+  text?: string | null;
+  example?: Record<string, unknown> | null;
+  buttons?: CreateMetaTemplateButton[] | null;
+};
+
+export type CreateMetaTemplatePayload = {
+  name: string;
+  category: string;
+  language: string;
+  allowCategoryChange?: boolean | null;
+  components?: CreateMetaTemplateComponent[] | null;
+};
+
+export type CreateMetaTemplateResult = {
+  id: string;
+  raw: unknown;
+};
+
 const ensureCredentials = async (
   userId: string,
 ): Promise<MetaTemplateCredentials> => {
@@ -155,6 +185,198 @@ const sanitizeTemplate = (input: unknown): MetaTemplate | null => {
   };
 };
 
+const normalizeUpper = (value?: string | null) => {
+  const trimmed = (value ?? "").trim();
+  return trimmed ? trimmed.toUpperCase() : "";
+};
+
+const sanitizeCreateButton = (
+  input: CreateMetaTemplateButton | null | undefined,
+): Record<string, unknown> | null => {
+  if (!input) return null;
+
+  const type = normalizeUpper(input.type);
+  if (!type) return null;
+
+  const result: Record<string, unknown> = { type };
+
+  const text = (input.text ?? "").toString().trim();
+  if (text) {
+    result.text = text;
+  }
+
+  const url = (input.url ?? "").toString().trim();
+  if (url) {
+    result.url = url;
+  }
+
+  const phoneNumber = (input.phoneNumber ?? "").toString().trim();
+  if (phoneNumber) {
+    result.phone_number = phoneNumber;
+  }
+
+  const example = toNullableRecord(input.example ?? null);
+  if (example && Object.keys(example).length > 0) {
+    result.example = example;
+  }
+
+  return result;
+};
+
+const sanitizeCreateComponent = (
+  input: CreateMetaTemplateComponent | null | undefined,
+): Record<string, unknown> | null => {
+  if (!input) return null;
+
+  const type = normalizeUpper(input.type);
+  if (!type) return null;
+
+  const result: Record<string, unknown> = { type };
+
+  const format = normalizeUpper(input.format ?? null);
+  if (format) {
+    result.format = format;
+  }
+
+  const subType = normalizeUpper(input.subType ?? null);
+  if (subType) {
+    result.sub_type = subType;
+  }
+
+  const text = (input.text ?? "").toString().trim();
+  if (text) {
+    result.text = text;
+  }
+
+  const example = toNullableRecord(input.example ?? null);
+  if (example && Object.keys(example).length > 0) {
+    result.example = example;
+  }
+
+  if (Array.isArray(input.buttons)) {
+    const buttons = input.buttons
+      .map((button) => sanitizeCreateButton(button))
+      .filter((button): button is Record<string, unknown> => !!button);
+    if (buttons.length) {
+      result.buttons = buttons;
+    }
+  }
+
+  return result;
+};
+
+const buildCreateTemplateBody = (
+  payload: CreateMetaTemplatePayload,
+): Record<string, unknown> => {
+  const name = (payload.name ?? "").trim();
+  if (!name) {
+    throw new MetaTemplateError("Template name is required", { status: 400 });
+  }
+
+  const language = (payload.language ?? "").trim();
+  if (!language) {
+    throw new MetaTemplateError("Template language is required", { status: 400 });
+  }
+
+  const category = normalizeUpper(payload.category ?? "");
+  if (!category) {
+    throw new MetaTemplateError("Template category is required", { status: 400 });
+  }
+
+  const body: Record<string, unknown> = {
+    name,
+    category,
+    language,
+  };
+
+  if (payload.allowCategoryChange) {
+    body.allow_category_change = true;
+  }
+
+  const components = Array.isArray(payload.components)
+    ? payload.components
+        .map((component) => sanitizeCreateComponent(component))
+        .filter((component): component is Record<string, unknown> => !!component)
+    : [];
+
+  if (components.length) {
+    body.components = components;
+  }
+
+  return body;
+};
+
+const performTemplateRequest = async (
+  url: string,
+  accessToken: string,
+  method: "POST" | "DELETE",
+  body?: Record<string, unknown>,
+): Promise<{ json: unknown }> => {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+  };
+
+  if (body) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), META_API_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      method,
+      headers,
+      ...(body ? { body: JSON.stringify(body) } : {}),
+      signal: controller.signal,
+    });
+
+    const raw = await response.text();
+    let json: unknown = null;
+    if (raw) {
+      try {
+        json = JSON.parse(raw);
+      } catch {
+        json = raw;
+      }
+    }
+
+    if (!response.ok) {
+      const errorMessage =
+        (json &&
+          typeof json === "object" &&
+          (json as { error?: { message?: string; error_user_msg?: string } }).error
+            ?.error_user_msg) ||
+        (json &&
+          typeof json === "object" &&
+          (json as { error?: { message?: string } }).error?.message) ||
+        response.statusText ||
+        "Meta template API request failed";
+
+      throw new MetaTemplateError(errorMessage, {
+        status: response.status,
+        details: json ?? raw,
+      });
+    }
+
+    return { json };
+  } catch (error) {
+    if (error instanceof MetaTemplateError) {
+      throw error;
+    }
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new MetaTemplateError("Meta template API request timed out", {
+        status: 504,
+      });
+    }
+    throw new MetaTemplateError("Meta template API request failed", {
+      details: error,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
 const fetchTemplatesPage = async (
   url: string,
   accessToken: string,
@@ -253,4 +475,46 @@ export const fetchMetaTemplates = async (
   }
 
   return templates;
+};
+
+export const createMetaTemplate = async (
+  userId: string,
+  payload: CreateMetaTemplatePayload,
+): Promise<CreateMetaTemplateResult> => {
+  const { accessToken, wabaId } = await ensureCredentials(userId);
+  const body = buildCreateTemplateBody(payload);
+  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${wabaId}/message_templates`;
+  const { json } = await performTemplateRequest(url, accessToken, "POST", body);
+
+  const id =
+    (json &&
+      typeof json === "object" &&
+      (json as Record<string, unknown>).id &&
+      typeof (json as Record<string, unknown>).id === "string"
+      ? ((json as Record<string, unknown>).id as string).trim()
+      : null) || null;
+
+  if (!id) {
+    throw new MetaTemplateError("Meta template response missing id", {
+      status: 502,
+      details: json,
+    });
+  }
+
+  return { id, raw: json };
+};
+
+export const deleteMetaTemplate = async (
+  userId: string,
+  templateId: string,
+): Promise<void> => {
+  const { accessToken } = await ensureCredentials(userId);
+  const trimmedId = templateId?.trim();
+
+  if (!trimmedId) {
+    throw new MetaTemplateError("Template id is required", { status: 400 });
+  }
+
+  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${trimmedId}`;
+  await performTemplateRequest(url, accessToken, "DELETE");
 };
