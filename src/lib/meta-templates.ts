@@ -113,6 +113,31 @@ const toNullableRecord = (value: unknown): Record<string, unknown> | null => {
   return value as Record<string, unknown>;
 };
 
+const extractMetaTemplateErrorMessage = (value: unknown): string | undefined => {
+  const record = toNullableRecord(value);
+  if (!record) return undefined;
+
+  const error = record.error as
+    | { message?: string | null; error_user_msg?: string | null }
+    | undefined;
+
+  if (!error || typeof error !== "object") {
+    return undefined;
+  }
+
+  const { error_user_msg, message } = error;
+
+  if (typeof error_user_msg === "string" && error_user_msg.trim()) {
+    return error_user_msg;
+  }
+
+  if (typeof message === "string" && message.trim()) {
+    return message;
+  }
+
+  return undefined;
+};
+
 const sanitizeComponent = (
   input: unknown,
 ): MetaTemplateComponent | null => {
@@ -349,13 +374,7 @@ const performTemplateRequest = async (
 
     if (!response.ok) {
       const errorMessage =
-        (json &&
-          typeof json === "object" &&
-          (json as { error?: { message?: string; error_user_msg?: string } }).error
-            ?.error_user_msg) ||
-        (json &&
-          typeof json === "object" &&
-          (json as { error?: { message?: string } }).error?.message) ||
+        extractMetaTemplateErrorMessage(json) ||
         response.statusText ||
         "Meta template API request failed";
 
