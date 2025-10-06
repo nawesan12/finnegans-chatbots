@@ -69,6 +69,19 @@ type SendMessage = (
           footer?: string;
           cta?: string;
         };
+      }
+    | {
+        type: "template";
+        template: {
+          name: string;
+          language: string;
+          components?: Array<{
+            type: string;
+            subType?: string | null;
+            index?: number | null;
+            parameters?: Array<{ type: "text"; text: string }>;
+          }>;
+        };
       },
 ) => Promise<SendMessageResult>;
 
