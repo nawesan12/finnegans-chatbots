@@ -23,9 +23,15 @@ type RawTemplate = Record<string, unknown>;
 
 type RawTemplateComponent = Record<string, unknown>;
 
+type RawTemplateError = {
+  message?: string;
+  error_user_msg?: string;
+};
+
 type RawTemplateResponse = {
   data?: unknown;
   paging?: { next?: unknown };
+  error?: RawTemplateError | null;
 };
 
 export type MetaTemplateComponent = {
@@ -184,20 +190,16 @@ const fetchTemplatesPage = async (
     }
 
     if (!response.ok) {
+      const userMessageRaw = json?.error?.error_user_msg;
+      const defaultMessageRaw = json?.error?.message;
+
+      const userMessage =
+        typeof userMessageRaw === "string" && userMessageRaw.trim() ? userMessageRaw : null;
+      const defaultMessage =
+        typeof defaultMessageRaw === "string" && defaultMessageRaw.trim() ? defaultMessageRaw : null;
+
       const errorMessage =
-        (json &&
-          typeof json === "object" &&
-          json &&
-          typeof (json as Record<string, unknown>).error === "object" &&
-          (json as Record<string, { error?: { message?: string; error_user_msg?: string } }>).error
-            ?.error_user_msg) ||
-        (json &&
-          typeof json === "object" &&
-          json &&
-          typeof (json as Record<string, unknown>).error === "object" &&
-          (json as Record<string, { error?: { message?: string } }>).error?.message) ||
-        response.statusText ||
-        "Meta template API request failed";
+        userMessage || defaultMessage || response.statusText || "Meta template API request failed";
 
       throw new MetaTemplateError(errorMessage, {
         status: response.status,
