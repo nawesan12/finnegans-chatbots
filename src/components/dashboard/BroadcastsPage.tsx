@@ -28,7 +28,7 @@ import {
 import { containerVariants, itemVariants } from "@/lib/animations";
 import MetricCard from "@/components/dashboard/MetricCard";
 import PageHeader from "@/components/dashboard/PageHeader";
-import Table from "@/components/dashboard/Table";
+import Table, { type TableColumn } from "@/components/dashboard/Table";
 import { useAuthStore } from "@/lib/store";
 import { toast } from "sonner";
 import { authenticatedFetch } from "@/lib/api-client";
@@ -179,6 +179,8 @@ const BroadcastsPage = () => {
   const [highlightedBroadcastId, setHighlightedBroadcastId] = useState<
     string | null
   >(null);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [flowFilter, setFlowFilter] = useState<string>("all");
 
   const messageTooLong = message.length > MESSAGE_CHARACTER_LIMIT;
 
@@ -580,7 +582,7 @@ const BroadcastsPage = () => {
     ];
   }, [broadcasts, numberFormatter]);
 
-  const columns = useMemo(
+  const columns: TableColumn<BroadcastItem>[] = useMemo(
     () => [
       {
         key: "title",
@@ -653,10 +655,10 @@ const BroadcastsPage = () => {
     [numberFormatter],
   );
 
-  const selectedBroadcast = useMemo(
-    () => broadcasts.find((item) => item.id === selectedBroadcastId) ?? null,
-    [broadcasts, selectedBroadcastId],
-  );
+  const handleResetFilters = useCallback(() => {
+    setStatusFilter("all");
+    setFlowFilter("all");
+  }, []);
 
   const handleToggleContact = (contactId: string) => {
     setSelectedContacts((prev) =>
@@ -793,6 +795,116 @@ const BroadcastsPage = () => {
 
     return `curl -X POST https://tu-dominio.com/api/broadcasts \\n  -H "Content-Type: application/json" \\n  -H "Authorization: Bearer YOUR_TOKEN" \\n  -d '${JSON.stringify(payload, null, 2)}'`;
   }, []);
+
+  const statusFilterOptions = useMemo(() => {
+    const uniqueStatuses = Array.from(
+      new Set(
+        broadcasts
+          .map((broadcast) => broadcast.status)
+          .filter((status): status is string => Boolean(status)),
+      ),
+    );
+
+    return uniqueStatuses
+      .map((status) => ({
+        value: status,
+        label: statusLabels[status] ?? status,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label, "es"));
+  }, [broadcasts]);
+
+  const flowFilterOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    let includeUnassigned = false;
+
+    broadcasts.forEach((broadcast) => {
+      if (broadcast.flowId) {
+        const label =
+          broadcast.flow?.name?.trim() ||
+          `Flujo ${broadcast.flowId.slice(0, 6)}…`;
+        if (!map.has(broadcast.flowId)) {
+          map.set(broadcast.flowId, label);
+        }
+      } else {
+        includeUnassigned = true;
+      }
+    });
+
+    const options = Array.from(map.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, "es"));
+
+    if (includeUnassigned) {
+      options.push({ value: "unassigned", label: "Sin flujo asociado" });
+    }
+
+    return options;
+  }, [broadcasts]);
+
+  const filteredBroadcasts = useMemo(() => {
+    return broadcasts.filter((broadcast) => {
+      if (statusFilter !== "all" && broadcast.status !== statusFilter) {
+        return false;
+      }
+
+      if (flowFilter === "unassigned") {
+        return !broadcast.flowId;
+      }
+
+      if (flowFilter !== "all" && broadcast.flowId !== flowFilter) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [broadcasts, flowFilter, statusFilter]);
+
+  const hasActiveFilters = statusFilter !== "all" || flowFilter !== "all";
+
+  const tableEmptyState = hasActiveFilters
+    ? {
+        title: "No se encontraron campañas",
+        description:
+          "Modifica o reinicia los filtros para ver otras campañas.",
+        action: (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleResetFilters}
+            className="text-[#4bc3fe] hover:text-indigo-900"
+          >
+            Restablecer filtros
+          </Button>
+        ),
+      }
+    : {
+        title: "Aún no registras campañas",
+        description:
+          "Usa el compositor superior para enviar tu primer mensaje masivo y monitorear aquí su desempeño.",
+        action: (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleScrollToComposer}
+          >
+            <Megaphone className="h-4 w-4" />
+            Crear campaña ahora
+          </Button>
+        ),
+      };
+
+  const selectedBroadcast = useMemo(
+    () => {
+      const inFiltered = filteredBroadcasts.find(
+        (item) => item.id === selectedBroadcastId,
+      );
+      if (inFiltered) {
+        return inFiltered;
+      }
+      return broadcasts.find((item) => item.id === selectedBroadcastId) ?? null;
+    },
+    [broadcasts, filteredBroadcasts, selectedBroadcastId],
+  );
 
   const headerActions = (
     <>
@@ -1475,24 +1587,67 @@ const BroadcastsPage = () => {
             )}
           </div>
           <div className="p-6">
-            <Table //@ts-expect-error bla
-              columns={columns} //@ts-expect-error bla
-              data={broadcasts}
-              emptyState={{
-                title: "Aún no registras campañas",
-                description:
-                  "Usa el compositor superior para enviar tu primer mensaje masivo y monitorear aquí su desempeño.",
-                action: (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleScrollToComposer}
+            <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-wrap gap-4">
+                <div className="flex min-w-[200px] flex-col gap-1">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Estado
+                  </span>
+                  <Select
+                    value={statusFilter}
+                    onValueChange={(value) => setStatusFilter(value)}
                   >
-                    <Megaphone className="h-4 w-4" />
-                    Crear campaña ahora
-                  </Button>
-                ),
-              }}
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Todos los estados" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos los estados</SelectItem>
+                      {statusFilterOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex min-w-[220px] flex-col gap-1">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Flujo asociado
+                  </span>
+                  <Select
+                    value={flowFilter}
+                    onValueChange={(value) => setFlowFilter(value)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Todos los flujos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos los flujos</SelectItem>
+                      {flowFilterOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {hasActiveFilters && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleResetFilters}
+                  className="self-start text-[#4bc3fe] hover:text-indigo-900 lg:self-auto"
+                >
+                  Restablecer filtros
+                </Button>
+              )}
+            </div>
+            <Table
+              columns={columns}
+              data={filteredBroadcasts}
+              emptyState={tableEmptyState}
               getRowProps={(broadcast) => {
                 const isHighlighted = highlightedBroadcastId === broadcast.id;
                 return {
