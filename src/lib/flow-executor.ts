@@ -55,19 +55,34 @@ type SendMessage = (
   to: string,
   message:
     | { type: "text"; text: string }
-    | { type: "media"; mediaType: string; url: string; caption?: string }
+    | {
+        type: "media";
+        mediaType: "image" | "video" | "audio" | "document";
+        id?: string;
+        url?: string;
+        caption?: string;
+      }
     | { type: "options"; text: string; options: string[] }
+    | {
+        type: "list";
+        text: string;
+        button: string;
+        sections: Array<{
+          title: string;
+          rows: Array<{ id: string; title: string }>;
+        }>;
+      }
     | {
         type: "flow";
         flow: {
-          name: string;
+          name?: string | null;
           id: string;
           token: string;
-          version?: string;
-          header?: string;
+          version?: string | null;
+          header?: string | null;
           body: string;
-          footer?: string;
-          cta?: string;
+          footer?: string | null;
+          cta?: string | null;
         };
       }
     | {
@@ -957,7 +972,8 @@ export async function executeFlow(
           const data = currentNode.data as MediaData;
           const mediaPayload = {
             mediaType: data.mediaType,
-            url: tpl(data.url),
+            id: data.id ? tpl(data.id) : undefined,
+            url: data.url ? tpl(data.url) : undefined,
             caption: data.caption ? tpl(data.caption) : undefined,
           };
           const sendResult = await sendMessage(
