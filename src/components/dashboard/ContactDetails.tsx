@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { authenticatedFetch } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/store";
-import { Loader2, RefreshCcw, Workflow } from "lucide-react";
+import { Loader2, RefreshCcw, Send, Workflow } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -69,6 +69,8 @@ const ContactDetails = ({ contactId }: { contactId: string }) => {
   const [activityCursor, setActivityCursor] = useState<string | null>(null);
   const [isRefreshingActivity, setIsRefreshingActivity] = useState(false);
   const [isLoadingMoreActivity, setIsLoadingMoreActivity] = useState(false);
+  const [messageDraft, setMessageDraft] = useState("");
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
   const token = useAuthStore((state) => state.token);
   const hasHydrated = useAuthStore((state) => state.hasHydrated);
 
@@ -307,6 +309,46 @@ const ContactDetails = ({ contactId }: { contactId: string }) => {
     void fetchActivity({ mode: "append", cursor: activityCursor });
   };
 
+  const handleSendMessage = async () => {
+    if (!contact) return;
+    const message = messageDraft.trim();
+    if (!message) {
+      toast.info("Por favor, escribe un mensaje para enviar.");
+      return;
+    }
+
+    if (!token) {
+      toast.error("No se pudo autenticar la sesión actual");
+      return;
+    }
+
+    try {
+      setIsSendingMessage(true);
+      const response = await authenticatedFetch(
+        `/api/contacts/${contact.id}/message`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message }),
+        },
+      );
+
+      if (!response.ok) {
+        const message =
+          (await parseErrorMessage(response)) ?? "No se pudo enviar el mensaje.";
+        throw new Error(message);
+      }
+
+      toast.success("Mensaje enviado correctamente");
+      setMessageDraft("");
+      handleRefreshActivity();
+    } catch (error) {
+      toast.error((error as Error)?.message ?? "Error al enviar el mensaje");
+    } finally {
+      setIsSendingMessage(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="p-6 space-y-6">
@@ -427,6 +469,45 @@ const ContactDetails = ({ contactId }: { contactId: string }) => {
                 Este contacto no tiene etiquetas asignadas.
               </p>
             )}
+          </div>
+        </motion.div>
+        <motion.div
+          variants={itemVariants}
+          className="bg-white rounded-lg shadow-md p-6"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                Enviar mensaje directo
+              </h3>
+              <p className="mt-1 text-sm text-gray-500">
+                Redacta y envía un mensaje de WhatsApp directamente a este
+                contacto.
+              </p>
+            </div>
+          </div>
+          <Textarea
+            value={messageDraft}
+            onChange={(e) => setMessageDraft(e.target.value)}
+            placeholder="Escribe tu mensaje aquí..."
+            rows={4}
+            className="mt-4"
+            disabled={isSendingMessage}
+          />
+          <div className="mt-4 flex justify-end">
+            <Button onClick={handleSendMessage} disabled={isSendingMessage}>
+              {isSendingMessage ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Enviando...
+                </>
+              ) : (
+                <>
+                  <Send className="mr-2 h-4 w-4" />
+                  Enviar mensaje
+                </>
+              )}
+            </Button>
           </div>
         </motion.div>
         <motion.div
