@@ -86,8 +86,17 @@ export const AssignVarDataSchema = BaseDataSchema.extend({
 
 export const MediaDataSchema = BaseDataSchema.extend({
   mediaType: z.enum(["image", "document", "video", "audio"]).default("image"),
-  url: z.string().url(),
+  url: z.string().url().optional(),
+  id: z.string().min(1).optional(),
   caption: z.string().max(1024).optional(),
+}).superRefine((data, ctx) => {
+  if (!data.url && !data.id) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Either a media URL or a media ID must be provided.",
+      path: ["url"],
+    });
+  }
 });
 
 export const HandoffDataSchema = BaseDataSchema.extend({

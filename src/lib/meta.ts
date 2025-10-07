@@ -1048,7 +1048,7 @@ export async function processManualFlowTrigger(
   try {
     await executeFlow(
       session,
-      candidateMessage, //@ts-expect-error bla
+      candidateMessage,
       (uid, to, payload) => sendMessage(uid, to, payload),
       incomingMeta,
     );
