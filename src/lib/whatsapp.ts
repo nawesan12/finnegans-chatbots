@@ -66,15 +66,15 @@ interface WAMedia {
   caption?: string;
 }
 
-interface WAImage extends WAMedia {}
-interface WAVideo extends WAMedia {}
+type WAImage = WAMedia;
+type WAVideo = WAMedia;
 interface WAAudio extends WAMedia {
   voice?: boolean;
 }
 interface WADocument extends WAMedia {
   filename?: string;
 }
-interface WASticker extends WAMedia {}
+type WASticker = WAMedia;
 
 interface WAMessage {
   id: string;
@@ -147,6 +147,32 @@ export type SendMessagePayload =
       text: string;
       button: string;
       sections: Array<{ title: string; rows: Array<{ id: string; title: string }> }>;
+    }
+  | {
+      type: "flow";
+      flow: {
+        name?: string | null;
+        id: string;
+        token: string;
+        version?: string | null;
+        header?: string | null;
+        body: string;
+        footer?: string | null;
+        cta?: string | null;
+      };
+    }
+  | {
+      type: "template";
+      template: {
+        name: string;
+        language: string;
+        components?: Array<{
+          type: string;
+          subType?: string | null;
+          index?: number | null;
+          parameters?: Array<{ type: "text"; text: string }>;
+        }>;
+      };
     };
 
 export type SendMessageResult =
@@ -492,6 +518,129 @@ export async function sendMessage(
         },
       };
       break;
+    case "flow": {
+      const flowPayload = message.flow;
+      const flowId = flowPayload?.id?.trim();
+      const flowToken = flowPayload?.token?.trim();
+      if (!flowId || !flowToken) {
+        return {
+          success: false,
+          status: 400,
+          error: "Missing WhatsApp Flow identifiers",
+        };
+      }
+
+      const flowName = flowPayload?.name?.trim() || "whatsapp_flow";
+      const flowVersion = flowPayload?.version?.trim();
+      const header = flowPayload?.header?.trim();
+      const footer = flowPayload?.footer?.trim();
+      const bodyText = (flowPayload?.body ?? "").trim();
+      const cta = flowPayload?.cta?.trim();
+
+      const interactive: Record<string, unknown> = {
+        type: "flow",
+        flow: {
+          name: flowName,
+          id: flowId,
+          token: flowToken,
+          ...(flowVersion ? { version: flowVersion } : {}),
+        },
+      };
+
+      if (header) {
+        interactive.header = { type: "text", text: header };
+      }
+      if (bodyText) {
+        interactive.body = { text: bodyText };
+      }
+      if (footer) {
+        interactive.footer = { text: footer };
+      }
+      if (cta) {
+        (interactive.flow as Record<string, unknown>).flow_cta = cta;
+      }
+
+      body = {
+        to: normalizedTo,
+        type: "interactive",
+        interactive,
+      };
+      break;
+    }
+    case "template": {
+      const template = message.template;
+      const templateName = template?.name?.trim();
+      const templateLanguage = template?.language?.trim();
+      if (!templateName || !templateLanguage) {
+        return {
+          success: false,
+          status: 400,
+          error: "Missing template name or language",
+        };
+      }
+
+      const components = Array.isArray(template?.components)
+        ? template.components
+        : [];
+
+      const normalizedComponents = components
+        .map((component) => {
+          const type = (component?.type ?? "").toString().trim().toLowerCase();
+          if (!type) return null;
+
+          const normalized: Record<string, unknown> = { type };
+
+          const subType = (component?.subType ?? "")?.toString().trim();
+          if (subType) {
+            normalized.sub_type = subType.toLowerCase();
+          }
+
+          if (
+            typeof component?.index === "number" &&
+            Number.isFinite(component.index)
+          ) {
+            normalized.index = component.index;
+          }
+
+          const parameters = Array.isArray(component?.parameters)
+            ? component.parameters
+                .map((parameter) => {
+                  if (!parameter || parameter.type !== "text") return null;
+                  const textValue =
+                    typeof parameter.text === "string" ? parameter.text : "";
+                  return { type: "text", text: textValue };
+                })
+                .filter((entry): entry is { type: "text"; text: string } =>
+                  entry !== null,
+                )
+            : [];
+
+          if (parameters.length) {
+            normalized.parameters = parameters;
+          }
+
+          return normalized;
+        })
+        .filter((component): component is Record<string, unknown> =>
+          component !== null,
+        );
+
+      const templatePayload: Record<string, unknown> = {
+        name: templateName,
+        language: { code: templateLanguage },
+      };
+
+      if (normalizedComponents.length) {
+        templatePayload.components = normalizedComponents;
+      }
+
+      body = {
+        to: normalizedTo,
+        type: "template",
+        template: templatePayload,
+      };
+      break;
+    }
   }
 
   if (!body) {
@@ -511,13 +660,33 @@ export async function sendMessage(
       signal: ctrl.signal,
     });
 
-    const json = await res.json();
+    const json = (await res.json()) as unknown;
     if (!res.ok) {
       console.error("Error sending message:", json);
       return { success: false, status: res.status, details: json };
     }
 
-    const messageId = (json as any)?.messages?.[0]?.id;
+    let messageId: string | null = null;
+    if (
+      typeof json === "object" &&
+      json !== null &&
+      "messages" in json &&
+      Array.isArray((json as { messages?: unknown }).messages)
+    ) {
+      const messages = (json as {
+        messages?: Array<{ id?: unknown }>;
+      }).messages;
+
+      const firstId = messages?.find(
+        (message): message is { id: string } =>
+          typeof message?.id === "string",
+      )?.id;
+
+      if (firstId) {
+        messageId = firstId;
+      }
+    }
+
     return { success: true, messageId };
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
@@ -626,8 +795,11 @@ export async function processManualFlowTrigger(
     };
   }
 
-  const sendMessageForUser = (to: string, payload: SendMessagePayload) =>
-    sendMessage(flow.userId, to, payload);
+  const sendMessageForUser: Parameters<typeof executeFlow>[2] = (
+    _userId,
+    to,
+    message,
+  ) => sendMessage(flow.userId, to, message);
 
   try {
     await executeFlow(
@@ -734,8 +906,11 @@ async function handleIncomingMessage(
     })) as SessionWithRelations;
   }
 
-  const sendMessageForUser = (to: string, payload: SendMessagePayload) =>
-    sendMessage(user.id, to, payload);
+  const sendMessageForUser: Parameters<typeof executeFlow>[2] = (
+    _userId,
+    to,
+    message,
+  ) => sendMessage(user.id, to, message);
 
   try {
     await executeFlow(session, userText, sendMessageForUser);

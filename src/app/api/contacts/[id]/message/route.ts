@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
-import { getCurrentUser } from "@/lib/session";
+import { getAuthPayload } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { sendMessage } from "@/lib/meta";
 
@@ -10,13 +10,14 @@ const messagePayloadSchema = z.object({
 });
 
 export async function POST(
-  request: Request,
-  { params }: { params: { id: string } },
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> },
 ) {
   try {
-    const user = await getCurrentUser();
+    const params = await context.params;
+    const auth = getAuthPayload(request);
 
-    if (!user) {
+    if (!auth) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
@@ -34,7 +35,7 @@ export async function POST(
     const contact = await prisma.contact.findFirst({
       where: {
         id: contactId,
-        userId: user.id,
+        userId: auth.userId,
       },
     });
 
@@ -45,7 +46,7 @@ export async function POST(
       );
     }
 
-    const result = await sendMessage(user.id, contact.phone, {
+    const result = await sendMessage(auth.userId, contact.phone, {
       type: "text",
       text: payload.data.message,
     });

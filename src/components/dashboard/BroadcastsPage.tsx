@@ -71,7 +71,7 @@ interface BroadcastRecipient {
   createdAt?: string;
 }
 
-interface BroadcastItem {
+interface BroadcastItem extends Record<PropertyKey, unknown> {
   id: string;
   title?: string | null;
   body: string;
@@ -1644,7 +1644,7 @@ const BroadcastsPage = () => {
                 </Button>
               )}
             </div>
-            <Table
+            <Table<BroadcastItem>
               columns={columns}
               data={filteredBroadcasts}
               emptyState={tableEmptyState}

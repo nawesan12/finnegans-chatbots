@@ -48,15 +48,15 @@ interface WAMedia {
   caption?: string;
 }
 
-interface WAImage extends WAMedia {}
-interface WAVideo extends WAMedia {}
+type WAImage = WAMedia;
+type WAVideo = WAMedia;
 interface WAAudio extends WAMedia {
   voice?: boolean;
 }
 interface WADocument extends WAMedia {
   filename?: string;
 }
-interface WASticker extends WAMedia {}
+type WASticker = WAMedia;
 
 interface WAMessage {
   id: string;
