@@ -1,7 +1,10 @@
 import crypto from "crypto";
 
-import { processManualFlowTrigger, processWebhookEvent } from "@/lib/meta";
-import type { MetaWebhookEvent } from "@/lib/meta";
+import {
+  processManualFlowTrigger,
+  processWebhookEvent,
+  type MetaWebhookEvent,
+} from "@/lib/whatsapp";
 import prisma from "@/lib/prisma";
 
 export type WebhookResult =
