@@ -140,6 +140,9 @@ export type SendMessagePayload =
         body: string;
         footer?: string | null;
         cta?: string | null;
+        mode?: string | null;
+        action?: string | null;
+        action_payload?: Record<string, unknown> | null;
       };
     }
   | {
