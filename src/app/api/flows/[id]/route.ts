@@ -19,6 +19,22 @@ const FlowUpdateSchema = z.object({
   definition: z.unknown().optional(),
 });
 
+const isRecoverableMetaError = (error: MetaFlowError): boolean => {
+  if (!error?.status) {
+    return true;
+  }
+
+  if (error.status >= 500) {
+    return true;
+  }
+
+  if (error.status === 504) {
+    return true;
+  }
+
+  return error.message?.includes("Missing Meta credentials");
+};
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -85,24 +101,67 @@ export async function PUT(
     const normalizedStatus = status?.trim() || "Draft";
     const existingFlow = await prisma.flow.findFirst({
       where: { id: params.id, userId: auth.userId },
-      select: { id: true, metaFlowId: true },
+      select: {
+        id: true,
+        metaFlowId: true,
+        metaFlowToken: true,
+        metaFlowVersion: true,
+        metaFlowRevisionId: true,
+        metaFlowStatus: true,
+        metaFlowMetadata: true,
+      },
     });
 
     if (!existingFlow) {
       return NextResponse.json({ error: "Flow not found" }, { status: 404 });
     }
 
-    const remote = existingFlow.metaFlowId
-      ? await updateMetaFlow(auth.userId, existingFlow.metaFlowId, {
-          name: trimmedName,
-          definition: definitionJson,
-          status: normalizedStatus,
-        })
-      : await createMetaFlow(auth.userId, {
-          name: trimmedName,
-          definition: definitionJson,
-          status: normalizedStatus,
-        });
+    let remote:
+      | {
+          id: string;
+          token: string | null;
+          version: string | null;
+          revisionId: string | null;
+          status: string | null;
+          raw: unknown;
+        }
+      | null = null;
+    let metaSyncWarning: string | null = null;
+
+    try {
+      remote = existingFlow.metaFlowId
+        ? await updateMetaFlow(auth.userId, existingFlow.metaFlowId, {
+            name: trimmedName,
+            definition: definitionJson,
+            status: normalizedStatus,
+          })
+        : await createMetaFlow(auth.userId, {
+            name: trimmedName,
+            definition: definitionJson,
+            status: normalizedStatus,
+          });
+    } catch (error) {
+      if (error instanceof MetaFlowError && isRecoverableMetaError(error)) {
+        console.warn(
+          `Meta Flow sync failed while updating flow ${existingFlow.id}:`,
+          error.message,
+        );
+        metaSyncWarning = error.message ?? "Meta Flow sync failed";
+      } else {
+        throw error;
+      }
+    }
+
+    const metaFlowData = remote
+      ? {
+          metaFlowId: remote.id,
+          metaFlowToken: remote.token,
+          metaFlowVersion: remote.version,
+          metaFlowRevisionId: remote.revisionId,
+          metaFlowStatus: remote.status,
+          metaFlowMetadata: toNullableJsonInput(remote.raw),
+        }
+      : {};
 
     const updatedFlow = await prisma.flow.update({
       where: { id: existingFlow.id },
@@ -112,12 +171,7 @@ export async function PUT(
         status: normalizedStatus,
         definition: definitionJson,
         updatedAt: new Date(),
-        metaFlowId: remote.id,
-        metaFlowToken: remote.token,
-        metaFlowVersion: remote.version,
-        metaFlowRevisionId: remote.revisionId,
-        metaFlowStatus: remote.status,
-        metaFlowMetadata: toNullableJsonInput(remote.raw),
+        ...metaFlowData,
       },
       include: {
         _count: {
@@ -126,7 +180,9 @@ export async function PUT(
       },
     });
 
-    return NextResponse.json(updatedFlow);
+    return NextResponse.json(
+      metaSyncWarning ? { ...updatedFlow, metaSyncWarning } : updatedFlow,
+    );
   } catch (error) {
     if (error instanceof MetaFlowError) {
       return NextResponse.json(

@@ -66,6 +66,13 @@ type FlowWithCounts = {
   createdAt: string;
   updatedAt: string;
   definition?: FlowData | null;
+  metaFlowId?: string | null;
+  metaFlowToken?: string | null;
+  metaFlowVersion?: string | null;
+  metaFlowRevisionId?: string | null;
+  metaFlowStatus?: string | null;
+  metaFlowMetadata?: unknown;
+  metaSyncWarning?: string | null;
   _count?: {
     broadcasts: number;
     sessions: number;
@@ -88,6 +95,20 @@ const mapFlowResponse = (flow: FlowWithCounts): FlowWithCounts => ({
   ...flow,
   definition: normalizeFlowDefinition(flow.definition),
 });
+
+const extractMetaSyncWarning = (payload: unknown): string | null => {
+  if (payload && typeof payload === "object" && "metaSyncWarning" in payload) {
+    const value = (payload as { metaSyncWarning?: unknown }).metaSyncWarning;
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      return trimmed.length ? trimmed : null;
+    }
+  }
+  return null;
+};
+
+const buildMetaSyncDescription = (warning: string) =>
+  `${warning}\nGuardamos el flujo localmente, pero no pudimos sincronizarlo con Meta. Revisa tus credenciales en Configuración cuando puedas.`;
 
 const FlowsPage = () => {
   const { user } = useAuthStore();
@@ -259,11 +280,10 @@ const FlowsPage = () => {
       try {
         setDuplicatingFlowId(flow.id);
         const sanitizedDefinition = normalizeFlowDefinition(flow.definition);
-        const response = await fetch(`/api/flows`, {
+        const response = await authenticatedFetch(`/api/flows`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
             name: `${flow.name} (copia)`,
@@ -277,9 +297,21 @@ const FlowsPage = () => {
           throw new Error("No se pudo duplicar el flujo");
         }
 
-        const duplicatedFlow: FlowWithCounts = await response.json();
-        toast.success("Flujo duplicado correctamente");
-        openFlowForEditing(duplicatedFlow);
+        const duplicatedFlowResponse =
+          (await response.json()) as FlowWithCounts & {
+            metaSyncWarning?: string | null;
+          };
+        const metaWarning = extractMetaSyncWarning(duplicatedFlowResponse);
+        const normalizedFlow = mapFlowResponse(duplicatedFlowResponse);
+        openFlowForEditing(normalizedFlow);
+        if (metaWarning) {
+          toast.success("Flujo duplicado (pendiente de sincronizar)");
+          toast.warning("Sincronización con Meta pendiente", {
+            description: buildMetaSyncDescription(metaWarning),
+          });
+        } else {
+          toast.success("Flujo duplicado correctamente");
+        }
         await fetchFlows();
       } catch (error) {
         console.error("Error duplicating flow:", error);
@@ -566,13 +598,27 @@ const FlowsPage = () => {
           );
         }
 
-        const updatedFlow: FlowWithCounts = await response.json();
-        const normalizedFlow = mapFlowResponse(updatedFlow);
+        const updatedFlowResponse =
+          (await response.json()) as FlowWithCounts & {
+            metaSyncWarning?: string | null;
+          };
+        const metaWarning = extractMetaSyncWarning(updatedFlowResponse);
+        const normalizedFlow = mapFlowResponse(updatedFlowResponse);
         openFlowForEditing(normalizedFlow);
-        toast.success(
-          `Flujo ${isNewFlow ? "creado" : "actualizado"} correctamente`,
-        );
         await fetchFlows();
+
+        if (metaWarning) {
+          toast.success(
+            `Flujo ${isNewFlow ? "creado" : "actualizado"} (pendiente de sincronizar)`,
+          );
+          toast.warning("Sincronización con Meta pendiente", {
+            description: buildMetaSyncDescription(metaWarning),
+          });
+        } else {
+          toast.success(
+            `Flujo ${isNewFlow ? "creado" : "actualizado"} correctamente`,
+          );
+        }
         return true;
       } catch (error) {
         toast.error(
