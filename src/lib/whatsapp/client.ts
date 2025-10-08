@@ -116,29 +116,47 @@ export async function sendMessage(
     case "flow": {
       const flowPayload = message.flow;
       const flowId = flowPayload?.id?.trim();
-      const flowToken = flowPayload?.token?.trim();
-      if (!flowId || !flowToken) {
+      const flowToken = flowPayload?.token?.trim(); // This is the flow_token
+      const cta = flowPayload?.cta?.trim();
+
+      if (!flowId || !cta) {
         return {
           success: false,
           status: 400,
-          error: "Missing WhatsApp Flow identifiers",
+          error: "Missing WhatsApp Flow ID or CTA",
         };
       }
 
-      const flowName = flowPayload?.name?.trim() || "whatsapp_flow";
-      const flowVersion = flowPayload?.version?.trim();
       const header = flowPayload?.header?.trim();
       const footer = flowPayload?.footer?.trim();
       const bodyText = (flowPayload?.body ?? "").trim();
-      const cta = flowPayload?.cta?.trim();
+
+      const parameters: Record<string, unknown> = {
+        flow_message_version: "3",
+        flow_id: flowId,
+        flow_cta: cta,
+      };
+
+      if (flowToken) {
+        parameters.flow_token = flowToken;
+      }
+
+      // Optional: If you need to pre-fill the flow or navigate to a specific screen
+      if (flowPayload.mode) {
+        parameters.mode = flowPayload.mode;
+      }
+      if (flowPayload.action) {
+        parameters.flow_action = flowPayload.action;
+      }
+      if (flowPayload.action_payload) {
+        parameters.flow_action_payload = flowPayload.action_payload;
+      }
 
       const interactive: Record<string, unknown> = {
         type: "flow",
-        flow: {
-          name: flowName,
-          id: flowId,
-          token: flowToken,
-          ...(flowVersion ? { version: flowVersion } : {}),
+        action: {
+          name: "flow",
+          parameters,
         },
       };
 
@@ -150,9 +168,6 @@ export async function sendMessage(
       }
       if (footer) {
         interactive.footer = { text: footer };
-      }
-      if (cta) {
-        (interactive.flow as Record<string, unknown>).flow_cta = cta;
       }
 
       body = {
