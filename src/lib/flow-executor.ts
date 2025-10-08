@@ -19,7 +19,7 @@ import {
   sanitizeFlowDefinition,
 } from "@/lib/flow-schema";
 import prisma from "@/lib/prisma";
-import type { SendMessageResult } from "@/lib/meta";
+import type { SendMessageResult } from "@/lib/whatsapp";
 
 export class FlowSendMessageError extends Error {
   status?: number;
@@ -162,6 +162,7 @@ type FlowRuntimeContext = {
   lastBotMessageAt?: string;
   lastBotMessageType?: string;
   lastBotMessage?: string;
+  lastOutboundMessageId?: string | null;
   lastInput?: string;
   lastInputTrimmed?: string;
   lastInputNormalized?: string;
@@ -555,6 +556,14 @@ export async function executeFlow(
       return v == null ? "" : String(v);
     });
 
+  const sendMessageAndRecord: SendMessage = async (...args) => {
+    const result = await sendMessage(...args);
+    if (result.success) {
+      context.lastOutboundMessageId = result.messageId ?? null;
+    }
+    return result;
+  };
+
   const safeEvalBool = (expr: string, ctx: Record<string, unknown>) => {
     // Basic sanitization—reject clearly unsafe tokens
     if (
@@ -799,7 +808,7 @@ export async function executeFlow(
               tpl,
             );
 
-            const sendResult = await sendMessage(
+            const sendResult = await sendMessageAndRecord(
               session.flow.userId,
               session.contact.phone,
               {
@@ -853,7 +862,7 @@ export async function executeFlow(
           }
 
           const text = tpl(data.text);
-          const sendResult = await sendMessage(
+          const sendResult = await sendMessageAndRecord(
             session.flow.userId,
             session.contact.phone,
             {
@@ -882,7 +891,7 @@ export async function executeFlow(
           const data = currentNode.data as OptionsData & { text?: string };
           const text = tpl(data.text ?? "");
           const options = data.options ?? [];
-          const sendResult = await sendMessage(
+          const sendResult = await sendMessageAndRecord(
             session.flow.userId,
             session.contact.phone,
             {
@@ -976,7 +985,7 @@ export async function executeFlow(
             url: data.url ? tpl(data.url) : undefined,
             caption: data.caption ? tpl(data.caption) : undefined,
           };
-          const sendResult = await sendMessage(
+          const sendResult = await sendMessageAndRecord(
             session.flow.userId,
             session.contact.phone,
             { type: "media", ...mediaPayload },
@@ -1028,7 +1037,7 @@ export async function executeFlow(
             );
           }
 
-          const sendResult = await sendMessage(
+          const sendResult = await sendMessageAndRecord(
             session.flow.userId,
             session.contact.phone,
             {

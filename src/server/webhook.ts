@@ -4,7 +4,7 @@ import {
   processManualFlowTrigger,
   processWebhookEvent,
   type MetaWebhookEvent,
-} from "@/lib/whatsapp";
+} from "@/lib/whatsapp/webhook";
 import prisma from "@/lib/prisma";
 
 export type WebhookResult =
