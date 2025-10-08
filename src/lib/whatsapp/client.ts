@@ -1,0 +1,303 @@
+import prisma from "@/lib/prisma";
+import {
+  SendMessagePayload,
+  SendMessageResult,
+} from "@/lib/whatsapp/types";
+import {
+  GRAPH_VERSION,
+  META_API_TIMEOUT_MS,
+} from "@/lib/whatsapp/config";
+import {
+  normalizePhone,
+  toLcTrim,
+} from "@/lib/whatsapp/utils";
+import { logger } from "@/lib/logger";
+
+export async function sendMessage(
+  userId: string,
+  to: string,
+  message: SendMessagePayload,
+): Promise<SendMessageResult> {
+  const normalizedTo = normalizePhone(to);
+  if (!normalizedTo) {
+    const error = "Invalid destination phone number";
+    logger.error(error, { to });
+    return { success: false, status: 400, error };
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { metaAccessToken: true, metaPhoneNumberId: true },
+  });
+
+  const accessToken = user?.metaAccessToken?.trim();
+  const phoneNumberId = user?.metaPhoneNumberId?.trim();
+
+  if (!accessToken || !phoneNumberId) {
+    const error = "Missing Meta API credentials for user";
+    logger.error(error, { userId });
+    return { success: false, error };
+  }
+
+  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`;
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+    "Content-Type": "application/json",
+  };
+
+  let body: Record<string, unknown> | undefined;
+
+  switch (message.type) {
+    case "text":
+      body = { to: normalizedTo, type: "text", text: { body: message.text } };
+      break;
+    case "media":
+      if (!message.id && !message.url) {
+        return {
+          success: false,
+          status: 400,
+          error: "Media message must have either an id or a url",
+        };
+      }
+      const allowedMedia: Record<string, true> = {
+        image: true,
+        video: true,
+        audio: true,
+        document: true,
+      };
+      const mType = allowedMedia[message.mediaType]
+        ? message.mediaType
+        : "image";
+      const mediaObject: { id?: string; link?: string; caption?: string } = {};
+      if (message.id) {
+        mediaObject.id = message.id;
+      } else if (message.url) {
+        mediaObject.link = message.url;
+      }
+      if (message.caption) {
+        mediaObject.caption = message.caption;
+      }
+      body = {
+        to: normalizedTo,
+        type: mType,
+        [mType]: mediaObject,
+      };
+      break;
+    case "options":
+      body = {
+        to: normalizedTo,
+        type: "interactive",
+        interactive: {
+          type: "button",
+          body: { text: message.text },
+          action: {
+            buttons: message.options.slice(0, 3).map((opt) => ({
+              type: "reply",
+              reply: { id: toLcTrim(opt), title: opt },
+            })),
+          },
+        },
+      };
+      break;
+    case "list":
+      body = {
+        to: normalizedTo,
+        type: "interactive",
+        interactive: {
+          type: "list",
+          body: { text: message.text },
+          action: {
+            button: message.button,
+            sections: message.sections,
+          },
+        },
+      };
+      break;
+    case "flow": {
+      const flowPayload = message.flow;
+      const flowId = flowPayload?.id?.trim();
+      const flowToken = flowPayload?.token?.trim();
+      if (!flowId || !flowToken) {
+        return {
+          success: false,
+          status: 400,
+          error: "Missing WhatsApp Flow identifiers",
+        };
+      }
+
+      const flowName = flowPayload?.name?.trim() || "whatsapp_flow";
+      const flowVersion = flowPayload?.version?.trim();
+      const header = flowPayload?.header?.trim();
+      const footer = flowPayload?.footer?.trim();
+      const bodyText = (flowPayload?.body ?? "").trim();
+      const cta = flowPayload?.cta?.trim();
+
+      const interactive: Record<string, unknown> = {
+        type: "flow",
+        flow: {
+          name: flowName,
+          id: flowId,
+          token: flowToken,
+          ...(flowVersion ? { version: flowVersion } : {}),
+        },
+      };
+
+      if (header) {
+        interactive.header = { type: "text", text: header };
+      }
+      if (bodyText) {
+        interactive.body = { text: bodyText };
+      }
+      if (footer) {
+        interactive.footer = { text: footer };
+      }
+      if (cta) {
+        (interactive.flow as Record<string, unknown>).flow_cta = cta;
+      }
+
+      body = {
+        to: normalizedTo,
+        type: "interactive",
+        interactive,
+      };
+      break;
+    }
+    case "template": {
+      const template = message.template;
+      const templateName = template?.name?.trim();
+      const templateLanguage = template?.language?.trim();
+      if (!templateName || !templateLanguage) {
+        return {
+          success: false,
+          status: 400,
+          error: "Missing template name or language",
+        };
+      }
+
+      const components = Array.isArray(template?.components)
+        ? template.components
+        : [];
+
+      const normalizedComponents = components
+        .map((component) => {
+          const type = (component?.type ?? "").toString().trim().toLowerCase();
+          if (!type) return null;
+
+          const normalized: Record<string, unknown> = { type };
+
+          const subType = (component?.subType ?? "")?.toString().trim();
+          if (subType) {
+            normalized.sub_type = subType.toLowerCase();
+          }
+
+          if (
+            typeof component?.index === "number" &&
+            Number.isFinite(component.index)
+          ) {
+            normalized.index = component.index;
+          }
+
+          const parameters = Array.isArray(component?.parameters)
+            ? component.parameters
+                .map((parameter) => {
+                  if (!parameter || parameter.type !== "text") return null;
+                  const textValue =
+                    typeof parameter.text === "string" ? parameter.text : "";
+                  return { type: "text", text: textValue };
+                })
+                .filter((entry): entry is { type: "text"; text: string } =>
+                  entry !== null,
+                )
+            : [];
+
+          if (parameters.length) {
+            normalized.parameters = parameters;
+          }
+
+          return normalized;
+        })
+        .filter((component): component is Record<string, unknown> =>
+          component !== null,
+        );
+
+      const templatePayload: Record<string, unknown> = {
+        name: templateName,
+        language: { code: templateLanguage },
+      };
+
+      if (normalizedComponents.length) {
+        templatePayload.components = normalizedComponents;
+      }
+
+      body = {
+        to: normalizedTo,
+        type: "template",
+        template: templatePayload,
+      };
+      break;
+    }
+  }
+
+  if (!body) {
+    return { success: false, error: "Unsupported message type" };
+  }
+
+  body.messaging_product = "whatsapp";
+
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), META_API_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+
+    const json = (await res.json()) as unknown;
+    if (!res.ok) {
+      logger.error("Error sending message to Meta API", {
+        status: res.status,
+        details: json,
+        userId,
+      });
+      return { success: false, status: res.status, details: json };
+    }
+
+    let messageId: string | null = null;
+    if (
+      typeof json === "object" &&
+      json !== null &&
+      "messages" in json &&
+      Array.isArray((json as { messages?: unknown }).messages)
+    ) {
+      const messages = (json as {
+        messages?: Array<{ id?: unknown }>;
+      }).messages;
+
+      const firstId = messages?.find(
+        (message): message is { id: string } =>
+          typeof message?.id === "string",
+      )?.id;
+
+      if (firstId) {
+        messageId = firstId;
+      }
+    }
+
+    return { success: true, messageId };
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      logger.error("Request to Meta API timed out", { userId });
+      return { success: false, error: "Request to Meta timed out" };
+    }
+    logger.error("Failed to send message", {
+      error: error instanceof Error ? error.message : String(error),
+      userId,
+    });
+    return { success: false, error: "Unknown error" };
+  } finally {
+    clearTimeout(t);
+  }
+}
