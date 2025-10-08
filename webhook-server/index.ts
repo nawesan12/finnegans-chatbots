@@ -1,4 +1,4 @@
-import express, { Request, Response, NextFunction } from "express";
+import express, { Request, Response } from "express";
 import {
   processWebhookGet,
   processWebhookPost,
@@ -13,10 +13,39 @@ const port = process.env.PORT || 3001;
 // Middleware to read the raw body, which is needed for signature verification
 app.use(express.text({ type: "application/json" }));
 
+function normalizeQuery(
+  query: Request["query"],
+): Record<string, string | string[] | undefined> {
+  const normalized: Record<string, string | string[] | undefined> = {};
+
+  for (const [key, value] of Object.entries(query)) {
+    if (Array.isArray(value)) {
+      normalized[key] = value.map((item) =>
+        typeof item === "string" ? item : JSON.stringify(item),
+      );
+      continue;
+    }
+
+    if (typeof value === "string" || typeof value === "undefined") {
+      normalized[key] = value;
+      continue;
+    }
+
+    if (value === null) {
+      normalized[key] = undefined;
+      continue;
+    }
+
+    normalized[key] = JSON.stringify(value);
+  }
+
+  return normalized;
+}
+
 async function toWebhookRequest(req: Request): Promise<WebhookRequest> {
   return {
     headers: req.headers,
-    query: req.query,
+    query: normalizeQuery(req.query),
     body: typeof req.body === "string" ? req.body : "",
     url: `${req.protocol}://${req.get("host")}${req.originalUrl}`,
   };

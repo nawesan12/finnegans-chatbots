@@ -28,7 +28,8 @@ function createJsonLogger() {
 
     if (request) {
       entry.requestId = request.headers.get("x-vercel-id") ?? undefined;
-      entry.ip = request.ip;
+      const forwardedFor = request.headers.get("x-forwarded-for") ?? undefined;
+      entry.ip = forwardedFor?.split(",")[0]?.trim() ?? undefined;
       entry.userAgent = request.headers.get("user-agent") ?? undefined;
     }
 
