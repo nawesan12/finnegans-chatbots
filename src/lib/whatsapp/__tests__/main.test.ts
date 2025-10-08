@@ -1,7 +1,8 @@
 import { jest } from "@jest/globals";
 import prisma from "@/lib/prisma";
-import { processWebhookEvent, sendMessage } from "../whatsapp";
-import { executeFlow } from "../flow-executor";
+import { processWebhookEvent } from "../webhook";
+import { sendMessage } from "../client";
+import { executeFlow } from "../../flow-executor";
 
 // Mock prisma
 jest.mock("@/lib/prisma", () => ({
@@ -24,7 +25,7 @@ jest.mock("@/lib/prisma", () => ({
 }));
 
 // Mock flow-executor
-jest.mock("../flow-executor", () => ({
+jest.mock("../../flow-executor", () => ({
   executeFlow: jest.fn(),
 }));
 

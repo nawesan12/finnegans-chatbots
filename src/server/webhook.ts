@@ -3,14 +3,11 @@ import crypto from "crypto";
 import {
   processManualFlowTrigger,
   processWebhookEvent,
-  type MetaWebhookEvent,
-} from "@/lib/whatsapp";
+} from "@/lib/whatsapp/webhook";
+import { type MetaWebhookEvent } from "@/lib/whatsapp/types";
 import prisma from "@/lib/prisma";
-
-export type WebhookResult =
-  | { status: number; headers?: Record<string, string>; json: unknown }
-  | { status: number; headers?: Record<string, string>; text: string }
-  | { status: number; headers?: Record<string, string> };
+import { logger } from "@/lib/logger";
+import { NextRequest, NextResponse } from "next/server";
 
 async function isVerifyTokenValid(token: string | null, userId?: string) {
   if (!token) {
@@ -74,7 +71,7 @@ function getWebhookToken(
   return null;
 }
 
-type SupportedSignatureAlgorithm = "sha256" | "sha1";
+type SupportedSignatureAlgorithm = "sha256";
 
 type SignatureCandidate = {
   algorithm: SupportedSignatureAlgorithm;
@@ -96,7 +93,7 @@ function parseSignatureHeader(signature: string): SignatureCandidate[] {
     }
 
     const algorithm = algorithmRaw?.trim().toLowerCase();
-    if (algorithm !== "sha256" && algorithm !== "sha1") {
+    if (algorithm !== "sha256") {
       continue;
     }
 
@@ -111,7 +108,9 @@ function parseSignatureHeader(signature: string): SignatureCandidate[] {
         digest: Buffer.from(digest, "hex"),
       });
     } catch (error) {
-      console.error("Failed to parse webhook signature digest", error);
+      logger.error("Failed to parse webhook signature digest", {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -142,7 +141,9 @@ function verifyWebhookSignature(
         return true;
       }
     } catch (error) {
-      console.error("Failed to verify webhook signature", error);
+      logger.error("Failed to verify webhook signature", {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -156,33 +157,35 @@ const FLOW_TRIGGER_CORS_HEADERS = {
   "Access-Control-Max-Age": "300",
 } as const;
 
-function withFlowTriggerCors(result: WebhookResult): WebhookResult {
-  return {
-    ...result,
-    headers: {
-      ...FLOW_TRIGGER_CORS_HEADERS,
-      ...result.headers,
-    },
-  };
+function withFlowTriggerCors(response: NextResponse): NextResponse {
+  for (const [key, value] of Object.entries(FLOW_TRIGGER_CORS_HEADERS)) {
+    response.headers.set(key, value);
+  }
+  return response;
 }
 
-async function handleFlowTrigger(request: Request, flowId: string) {
+async function handleFlowTrigger(request: NextRequest, flowId: string): Promise<NextResponse> {
   let parsed: unknown;
   try {
     parsed = await request.json();
   } catch (error) {
-    console.error("Invalid JSON payload for flow trigger:", error);
-    return withFlowTriggerCors({
-      status: 400,
-      json: { error: "Invalid JSON payload" },
-    });
+    logger.error(
+      "Invalid JSON payload for flow trigger",
+      {
+        error: error instanceof Error ? error.message : String(error),
+        flowId,
+      },
+      request,
+    );
+    return withFlowTriggerCors(
+      NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 }),
+    );
   }
 
   if (!isPlainObject(parsed)) {
-    return withFlowTriggerCors({
-      status: 400,
-      json: { error: "Payload must be a JSON object" },
-    });
+    return withFlowTriggerCors(
+      NextResponse.json({ error: "Payload must be a JSON object" }, { status: 400 }),
+    );
   }
 
   const flow = await prisma.flow.findUnique({
@@ -191,30 +194,27 @@ async function handleFlowTrigger(request: Request, flowId: string) {
   });
 
   if (!flow) {
-    return withFlowTriggerCors({
-      status: 404,
-      json: { error: "Flow not found" },
-    });
+    return withFlowTriggerCors(
+      NextResponse.json({ error: "Flow not found" }, { status: 404 }),
+    );
   }
 
   const token = getWebhookToken(request, parsed);
   const validToken = await isVerifyTokenValid(token, flow.userId);
 
   if (!validToken) {
-    return withFlowTriggerCors({
-      status: 403,
-      json: { error: "Forbidden" },
-    });
+    return withFlowTriggerCors(
+      NextResponse.json({ error: "Forbidden" }, { status: 403 }),
+    );
   }
 
   const from =
     pickFirstString(parsed, ["from", "phone", "wa_id", "waId"]) ?? null;
 
   if (!from) {
-    return withFlowTriggerCors({
-      status: 400,
-      json: { error: "Missing contact phone identifier" },
-    });
+    return withFlowTriggerCors(
+      NextResponse.json({ error: "Missing contact phone identifier" }, { status: 400 }),
+    );
   }
 
   const message =
@@ -228,10 +228,9 @@ async function handleFlowTrigger(request: Request, flowId: string) {
     ]) ?? null;
 
   if (!message) {
-    return withFlowTriggerCors({
-      status: 400,
-      json: { error: "Missing message text" },
-    });
+    return withFlowTriggerCors(
+      NextResponse.json({ error: "Missing message text" }, { status: 400 }),
+    );
   }
 
   const profile = isPlainObject(parsed.profile) ? parsed.profile : null;
@@ -280,24 +279,27 @@ async function handleFlowTrigger(request: Request, flowId: string) {
   });
 
   if (!result.success) {
-    return withFlowTriggerCors({
-      status: result.status ?? 500,
-      json: { error: result.error },
-    });
+    return withFlowTriggerCors(
+      NextResponse.json({ error: result.error }, { status: result.status ?? 500 }),
+    );
   }
 
-  return withFlowTriggerCors({
-    status: 200,
-    json: {
-      success: true,
-      flowId: result.flowId,
-      sessionId: result.sessionId,
-      contactId: result.contactId,
-    },
-  });
+  return withFlowTriggerCors(
+    NextResponse.json(
+      {
+        success: true,
+        flowId: result.flowId,
+        sessionId: result.sessionId,
+        contactId: result.contactId,
+      },
+      { status: 200 },
+    ),
+  );
 }
 
-export async function handleWebhookGet(request: Request): Promise<WebhookResult> {
+export async function handleWebhookGet(
+  request: NextRequest,
+): Promise<NextResponse> {
   try {
     const { searchParams } = new URL(request.url);
     const mode = searchParams.get("hub.mode");
@@ -305,15 +307,15 @@ export async function handleWebhookGet(request: Request): Promise<WebhookResult>
     const challenge = searchParams.get("hub.challenge");
 
     if (mode?.toLowerCase() !== "subscribe") {
-      return { status: 400, text: "Invalid mode" };
+      return new NextResponse("Invalid mode", { status: 400 });
     }
     if (!challenge) {
-      return { status: 400, text: "Missing hub.challenge" };
+      return new NextResponse("Missing hub.challenge", { status: 400 });
     }
 
     const trimmedToken = token?.trim();
     if (!trimmedToken) {
-      return { status: 403, text: "Forbidden" };
+      return new NextResponse("Forbidden", { status: 403 });
     }
 
     const userWithToken = await prisma.user.findFirst({
@@ -322,23 +324,26 @@ export async function handleWebhookGet(request: Request): Promise<WebhookResult>
     });
 
     if (!userWithToken) {
-      return { status: 403, text: "Forbidden" };
+      return new NextResponse("Forbidden", { status: 403 });
     }
 
-    return {
+    return new NextResponse(challenge, {
       status: 200,
-      text: challenge,
       headers: { "Content-Type": "text/plain" },
-    };
+    });
   } catch (error) {
-    console.error("Webhook verification error:", error);
-    return { status: 500, text: "Internal Server Error" };
+    logger.error(
+      "Webhook verification error",
+      { error: error instanceof Error ? error.message : String(error) },
+      request,
+    );
+    return new NextResponse("Internal Server Error", { status: 500 });
   }
 }
 
 export async function handleWebhookPost(
-  request: Request,
-): Promise<WebhookResult> {
+  request: NextRequest,
+): Promise<NextResponse> {
   const { searchParams } = new URL(request.url);
   const flowId = searchParams.get("flowId");
 
@@ -347,33 +352,35 @@ export async function handleWebhookPost(
   }
 
   try {
-    const signatureHeader =
-      request.headers.get("x-hub-signature-256") ??
-      request.headers.get("x-hub-signature");
+    const signatureHeader = request.headers.get("x-hub-signature-256");
 
     if (!signatureHeader) {
-      return { status: 401, json: { error: "Missing signature" } };
+      return NextResponse.json({ error: "Missing signature" }, { status: 401 });
     }
 
     const body = await request.text();
 
     if (!body) {
-      return { status: 400, json: { error: "Empty payload" } };
+      return NextResponse.json({ error: "Empty payload" }, { status: 400 });
     }
 
     let data: MetaWebhookEvent;
     try {
       data = JSON.parse(body) as MetaWebhookEvent;
     } catch (error) {
-      console.error("Invalid webhook payload:", error);
-      return { status: 400, json: { error: "Invalid JSON payload" } };
+      logger.error(
+        "Invalid webhook payload",
+        { error: error instanceof Error ? error.message : String(error) },
+        request,
+      );
+      return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
     }
 
     const phoneNumberId =
       data?.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
 
     if (!phoneNumberId) {
-      return { status: 400, json: { error: "Missing phone number ID" } };
+      return NextResponse.json({ error: "Missing phone number ID" }, { status: 400 });
     }
 
     const trimmedPhoneNumberId = phoneNumberId.trim();
@@ -386,35 +393,38 @@ export async function handleWebhookPost(
     const appSecret = user?.metaAppSecret?.trim() ?? null;
 
     if (!appSecret) {
-      console.error(
-        "User/app secret not configured for phone number ID:",
+      logger.error("User/app secret not configured for phone number ID", {
         phoneNumberId,
-      );
-      return { status: 404, json: { error: "User not configured" } };
+      });
+      return NextResponse.json({ error: "User not configured" }, { status: 404 });
     }
 
     if (!verifyWebhookSignature(signatureHeader, body, appSecret)) {
-      return { status: 401, json: { error: "Invalid signature" } };
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
 
     await processWebhookEvent(data);
 
-    return { status: 200, json: { success: true } };
+    return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
-    console.error("Webhook processing error:", error);
-    return { status: 500, json: { error: "Internal Server Error" } };
+    logger.error(
+      "Webhook processing error",
+      { error: error instanceof Error ? error.message : String(error) },
+      request,
+    );
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
 
 export async function handleWebhookOptions(
-  request: Request,
-): Promise<WebhookResult> {
+  request: NextRequest,
+): Promise<NextResponse> {
   const { searchParams } = new URL(request.url);
   const flowId = searchParams.get("flowId");
 
   if (!flowId) {
-    return { status: 404, json: { error: "Not Found" } };
+    return NextResponse.json({ error: "Not Found" }, { status: 404 });
   }
 
-  return withFlowTriggerCors({ status: 204 });
+  return withFlowTriggerCors(new NextResponse(null, { status: 204 }));
 }
