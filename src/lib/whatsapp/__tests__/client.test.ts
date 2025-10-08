@@ -129,6 +129,50 @@ describe("sendMessage", () => {
     expect(body.interactive.action.sections[0].rows).toHaveLength(1);
   });
 
+  it("should send a flow message with the correct payload", async () => {
+    await sendMessage("user-1", "1122334455", {
+      type: "flow",
+      flow: {
+        id: "flow-id-123",
+        cta: "Open Flow",
+        token: "flow-token-456",
+        body: "This is the body of the flow message.",
+        header: "Flow Header",
+        footer: "Flow Footer",
+      },
+    });
+
+    const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
+    const body = JSON.parse(fetchCall[1].body);
+
+    expect(body.type).toBe("interactive");
+    expect(body.interactive.type).toBe("flow");
+    expect(body.interactive.action.name).toBe("flow");
+    expect(body.interactive.action.parameters.flow_message_version).toBe("3");
+    expect(body.interactive.action.parameters.flow_id).toBe("flow-id-123");
+    expect(body.interactive.action.parameters.flow_cta).toBe("Open Flow");
+    expect(body.interactive.action.parameters.flow_token).toBe("flow-token-456");
+    expect(body.interactive.body.text).toBe("This is the body of the flow message.");
+    expect(body.interactive.header.text).toBe("Flow Header");
+    expect(body.interactive.footer.text).toBe("Flow Footer");
+  });
+
+  it("should return an error if flow message is missing id or cta", async () => {
+    const result1 = await sendMessage("user-1", "1122334455", {
+      type: "flow",
+      flow: { id: "flow-id", cta: "" },
+    });
+    expect(result1.success).toBe(false);
+    expect(result1.error).toContain("Missing WhatsApp Flow ID or CTA");
+
+    const result2 = await sendMessage("user-1", "1122334455", {
+      type: "flow",
+      flow: { id: "", cta: "Go" },
+    });
+    expect(result2.success).toBe(false);
+    expect(result2.error).toContain("Missing WhatsApp Flow ID or CTA");
+  });
+
   it("should return an error for invalid phone number", async () => {
     const result = await sendMessage("user-1", "invalid-phone", { type: "text", text: "test" });
     expect(result.success).toBe(false);
