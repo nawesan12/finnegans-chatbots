@@ -262,9 +262,13 @@ async function handleIncomingMessage(
       status: { in: ["Active", "Paused"] },
     },
     include: { flow: true, contact: true },
+    orderBy: { updatedAt: "desc" },
   })) as SessionWithRelations | null;
 
-  let session: SessionWithRelations | null = existingSession;
+  let session: SessionWithRelations | null =
+    existingSession && isWhatsappChannel(existingSession.flow?.channel)
+      ? existingSession
+      : null;
   let flow = session?.flow ?? null;
 
   if (!flow) {
