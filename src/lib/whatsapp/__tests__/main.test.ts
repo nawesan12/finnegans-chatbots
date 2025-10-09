@@ -75,7 +75,9 @@ describe("WhatsApp Integration", () => {
           {
             changes: [
               {
+                field: "messages",
                 value: {
+                  messaging_product: "whatsapp",
                   metadata: { phone_number_id: "123456789" },
                   messages: [
                     {
@@ -85,7 +87,12 @@ describe("WhatsApp Integration", () => {
                       text: { body: "Hello" },
                     },
                   ],
-                  contacts: [{ wa_id: "1122334455", profile: { name: "Test User" } }],
+                  contacts: [
+                    {
+                      wa_id: "1122334455",
+                      profile: { name: "Test User" },
+                    },
+                  ],
                 },
               },
             ],
@@ -106,6 +113,12 @@ describe("WhatsApp Integration", () => {
       });
       expect(prisma.contact.upsert).toHaveBeenCalled();
       expect(executeFlow).toHaveBeenCalled();
+      const incomingMeta = (executeFlow as jest.Mock).mock.calls[0]?.[3];
+      expect(incomingMeta).toEqual({
+        type: "text",
+        rawText: "Hello",
+        interactive: null,
+      });
     });
 
     it("should not process if user is not found", async () => {
@@ -115,9 +128,18 @@ describe("WhatsApp Integration", () => {
           {
             changes: [
               {
+                field: "messages",
                 value: {
+                  messaging_product: "whatsapp",
                   metadata: { phone_number_id: "unknown-id" },
-                  messages: [{ id: "msg-1", from: "1122334455", type: "text", text: { body: "Hello" } }],
+                  messages: [
+                    {
+                      id: "msg-1",
+                      from: "1122334455",
+                      type: "text",
+                      text: { body: "Hello" },
+                    },
+                  ],
                 },
               },
             ],
@@ -130,6 +152,60 @@ describe("WhatsApp Integration", () => {
       await processWebhookEvent(webhookEvent);
 
       expect(executeFlow).not.toHaveBeenCalled();
+    });
+
+    it("should forward interactive metadata to the flow executor", async () => {
+      const webhookEvent = {
+        object: "whatsapp_business_account",
+        entry: [
+          {
+            changes: [
+              {
+                field: "messages",
+                value: {
+                  messaging_product: "whatsapp",
+                  metadata: { phone_number_id: "123456789" },
+                  messages: [
+                    {
+                      id: "msg-2",
+                      from: "1122334455",
+                      type: "interactive",
+                      interactive: {
+                        type: "button",
+                        button_reply: { id: "opt-1", title: "Option 1" },
+                      },
+                    },
+                  ],
+                  contacts: [
+                    {
+                      wa_id: "1122334455",
+                      profile: { name: "Interactive User" },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.contact.upsert as jest.Mock).mockResolvedValue(mockContact);
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession);
+
+      await processWebhookEvent(webhookEvent);
+
+      expect(executeFlow).toHaveBeenCalled();
+      const incomingMeta = (executeFlow as jest.Mock).mock.calls[0]?.[3];
+      expect(incomingMeta).toEqual({
+        type: "interactive",
+        rawText: "Option 1",
+        interactive: {
+          type: "button",
+          id: "opt-1",
+          title: "Option 1",
+        },
+      });
     });
   });
 

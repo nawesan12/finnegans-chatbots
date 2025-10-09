@@ -1,7 +1,6 @@
 import type { Flow } from "@prisma/client";
 import {
   WAMessage,
-  WAStatus,
   WAStatusError,
 } from "@/lib/whatsapp/types";
 
