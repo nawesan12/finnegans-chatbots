@@ -35,17 +35,16 @@ describe("sendMessage", () => {
       text: "Hello World",
     });
 
-    expect(global.fetch).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        body: JSON.stringify({
-          to: "1122334455",
-          type: "text",
-          text: { body: "Hello World" },
-          messaging_product: "whatsapp",
-        }),
-      }),
-    );
+    const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
+    const body = JSON.parse(fetchCall[1].body);
+
+    expect(body).toMatchObject({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: "1122334455",
+      type: "text",
+      text: { body: "Hello World", preview_url: false },
+    });
   });
 
   it("should send an image message with an ID", async () => {
@@ -56,17 +55,16 @@ describe("sendMessage", () => {
       caption: "A beautiful picture",
     });
 
-    expect(global.fetch).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        body: JSON.stringify({
-          to: "1122334455",
-          type: "image",
-          image: { id: "media-id", caption: "A beautiful picture" },
-          messaging_product: "whatsapp",
-        }),
-      }),
-    );
+    const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
+    const body = JSON.parse(fetchCall[1].body);
+
+    expect(body).toMatchObject({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: "1122334455",
+      type: "image",
+      image: { id: "media-id", caption: "A beautiful picture" },
+    });
   });
 
   it("should send a video message with a URL", async () => {
@@ -76,17 +74,16 @@ describe("sendMessage", () => {
       url: "https://example.com/video.mp4",
     });
 
-    expect(global.fetch).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        body: JSON.stringify({
-          to: "1122334455",
-          type: "video",
-          video: { link: "https://example.com/video.mp4" },
-          messaging_product: "whatsapp",
-        }),
-      }),
-    );
+    const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
+    const body = JSON.parse(fetchCall[1].body);
+
+    expect(body).toMatchObject({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: "1122334455",
+      type: "video",
+      video: { link: "https://example.com/video.mp4" },
+    });
   });
 
   it("should return an error if media message has no id or url", async () => {
@@ -108,6 +105,8 @@ describe("sendMessage", () => {
     const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
     const body = JSON.parse(fetchCall[1].body);
 
+    expect(body.messaging_product).toBe("whatsapp");
+    expect(body.recipient_type).toBe("individual");
     expect(body.interactive.type).toBe("button");
     expect(body.interactive.action.buttons).toHaveLength(2);
     expect(body.interactive.action.buttons[0].reply.id).toBe("option 1");
@@ -124,6 +123,8 @@ describe("sendMessage", () => {
     const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
     const body = JSON.parse(fetchCall[1].body);
 
+    expect(body.messaging_product).toBe("whatsapp");
+    expect(body.recipient_type).toBe("individual");
     expect(body.interactive.type).toBe("list");
     expect(body.interactive.action.button).toBe("View Options");
     expect(body.interactive.action.sections[0].rows).toHaveLength(1);
@@ -145,6 +146,8 @@ describe("sendMessage", () => {
     const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
     const body = JSON.parse(fetchCall[1].body);
 
+    expect(body.messaging_product).toBe("whatsapp");
+    expect(body.recipient_type).toBe("individual");
     expect(body.type).toBe("interactive");
     expect(body.interactive.type).toBe("flow");
     expect(body.interactive.action.name).toBe("flow");

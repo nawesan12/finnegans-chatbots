@@ -61,6 +61,11 @@ const mockSession = {
   contact: mockContact,
 };
 
+const mockCompletedSession = {
+  ...mockSession,
+  status: "Completed",
+};
+
 describe("WhatsApp Integration", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -95,7 +100,9 @@ describe("WhatsApp Integration", () => {
 
       (prisma.user.findFirst as jest.Mock).mockResolvedValue(mockUser);
       (prisma.contact.upsert as jest.Mock).mockResolvedValue(mockContact);
-      (prisma.session.findFirst as jest.Mock).mockResolvedValue(null); // No active session
+      (prisma.session.findFirst as jest.Mock)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null); // No active session history
       (prisma.flow.findMany as jest.Mock).mockResolvedValue([mockFlow]);
       (prisma.session.create as jest.Mock).mockResolvedValue(mockSession);
 
@@ -105,7 +112,73 @@ describe("WhatsApp Integration", () => {
         where: { metaPhoneNumberId: "123456789" },
       });
       expect(prisma.contact.upsert).toHaveBeenCalled();
-      expect(executeFlow).toHaveBeenCalled();
+      expect(executeFlow).toHaveBeenCalledTimes(1);
+      const execArgs = (executeFlow as jest.Mock).mock.calls[0];
+      expect(execArgs[1]).toBe("Hello");
+      expect(execArgs[3]).toEqual({
+        type: "text",
+        rawText: "Hello",
+        interactive: null,
+      });
+    });
+
+    it("should resume the assigned flow session and pass interactive metadata", async () => {
+      const webhookEvent = {
+        object: "whatsapp_business_account",
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  metadata: { phone_number_id: "123456789" },
+                  messages: [
+                    {
+                      id: "msg-2",
+                      from: "1122334455",
+                      type: "interactive",
+                      interactive: {
+                        type: "button",
+                        button_reply: { id: "btn-1", title: "Yes" },
+                      },
+                    },
+                  ],
+                  contacts: [
+                    { wa_id: "1122334455", profile: { name: "Test User" } },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const resumedSession = { ...mockSession };
+
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.contact.upsert as jest.Mock).mockResolvedValue(mockContact);
+      (prisma.session.findFirst as jest.Mock)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(mockCompletedSession);
+      (prisma.session.update as jest.Mock).mockResolvedValue(resumedSession);
+
+      await processWebhookEvent(webhookEvent);
+
+      expect(prisma.flow.findMany).not.toHaveBeenCalled();
+      expect(prisma.session.create).not.toHaveBeenCalled();
+      expect(prisma.session.update).toHaveBeenCalledWith({
+        where: { id: mockCompletedSession.id },
+        data: { status: "Active", currentNodeId: null, context: {} },
+        include: { flow: true, contact: true },
+      });
+
+      expect(executeFlow).toHaveBeenCalledTimes(1);
+      const execArgs = (executeFlow as jest.Mock).mock.calls[0];
+      expect(execArgs[1]).toBe("Yes");
+      expect(execArgs[3]).toEqual({
+        type: "interactive",
+        rawText: "Yes",
+        interactive: { type: "button", id: "btn-1", title: "Yes" },
+      });
     });
 
     it("should not process if user is not found", async () => {

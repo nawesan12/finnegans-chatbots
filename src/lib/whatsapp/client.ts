@@ -45,11 +45,21 @@ export async function sendMessage(
     "Content-Type": "application/json",
   };
 
+  const basePayload: Record<string, unknown> = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: normalizedTo,
+  };
+
   let body: Record<string, unknown> | undefined;
 
   switch (message.type) {
     case "text":
-      body = { to: normalizedTo, type: "text", text: { body: message.text } };
+      body = {
+        ...basePayload,
+        type: "text",
+        text: { body: message.text, preview_url: false },
+      };
       break;
     case "media":
       if (!message.id && !message.url) {
@@ -78,14 +88,14 @@ export async function sendMessage(
         mediaObject.caption = message.caption;
       }
       body = {
-        to: normalizedTo,
+        ...basePayload,
         type: mType,
         [mType]: mediaObject,
       };
       break;
     case "options":
       body = {
-        to: normalizedTo,
+        ...basePayload,
         type: "interactive",
         interactive: {
           type: "button",
@@ -101,7 +111,7 @@ export async function sendMessage(
       break;
     case "list":
       body = {
-        to: normalizedTo,
+        ...basePayload,
         type: "interactive",
         interactive: {
           type: "list",
@@ -171,7 +181,7 @@ export async function sendMessage(
       }
 
       body = {
-        to: normalizedTo,
+        ...basePayload,
         type: "interactive",
         interactive,
       };
@@ -245,7 +255,7 @@ export async function sendMessage(
       }
 
       body = {
-        to: normalizedTo,
+        ...basePayload,
         type: "template",
         template: templatePayload,
       };
@@ -256,8 +266,6 @@ export async function sendMessage(
   if (!body) {
     return { success: false, error: "Unsupported message type" };
   }
-
-  body.messaging_product = "whatsapp";
 
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), META_API_TIMEOUT_MS);

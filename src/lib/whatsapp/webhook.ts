@@ -256,22 +256,38 @@ async function handleIncomingMessage(
     },
   });
 
-  const existingSession = (await prisma.session.findFirst({
+  const activeSession = (await prisma.session.findFirst({
     where: { contactId: contact.id, status: { in: ["Active", "Paused"] } },
+    orderBy: { updatedAt: "desc" },
     include: { flow: true, contact: true },
   })) as SessionWithRelations | null;
 
-  let session: SessionWithRelations | null = existingSession;
+  let session: SessionWithRelations | null = activeSession;
+
+  if (!session) {
+    session = (await prisma.session.findFirst({
+      where: { contactId: contact.id },
+      orderBy: { updatedAt: "desc" },
+      include: { flow: true, contact: true },
+    })) as SessionWithRelations | null;
+  }
+
   let flow = session?.flow ?? null;
+
+  if (flow && (!isWhatsappChannel(flow.channel ?? null) || flow.status !== "Active")) {
+    flow = null;
+  }
+
+  const interactiveTitle =
+    msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || null;
+  const interactiveId =
+    msg.interactive?.button_reply?.id || msg.interactive?.list_reply?.id || null;
 
   if (!flow) {
     const availableFlows = await prisma.flow.findMany({
       where: { userId: user.id, status: "Active" },
     });
     const filteredFlows = availableFlows.filter((f) => isWhatsappChannel(f.channel));
-
-    const interactiveTitle = msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || null;
-    const interactiveId = msg.interactive?.button_reply?.id || msg.interactive?.list_reply?.id || null;
 
     flow = findBestMatchingFlow(filteredFlows, {
       fullText: userText,
@@ -314,8 +330,21 @@ async function handleIncomingMessage(
     message,
   ) => sendMessage(user.id, to, message);
 
+  const incomingMeta = {
+    type: msg.type ?? null,
+    rawText: msg.text?.body ?? userText,
+    interactive:
+      interactiveTitle || interactiveId || msg.interactive?.type
+        ? {
+            type: msg.interactive?.type ?? null,
+            id: interactiveId,
+            title: interactiveTitle,
+          }
+        : null,
+  };
+
   try {
-    await executeFlow(session, userText, sendMessageForUser);
+    await executeFlow(session, userText, sendMessageForUser, incomingMeta);
   } catch (err) {
     logger.error("Error executing flow for message", {
       messageId: msg.id,
