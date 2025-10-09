@@ -257,7 +257,10 @@ async function handleIncomingMessage(
   });
 
   const existingSession = (await prisma.session.findFirst({
-    where: { contactId: contact.id, status: { in: ["Active", "Paused"] } },
+    where: {
+      contactId: contact.id,
+      status: { in: ["Active", "Paused"] },
+    },
     include: { flow: true, contact: true },
   })) as SessionWithRelations | null;
 
@@ -270,8 +273,14 @@ async function handleIncomingMessage(
     });
     const filteredFlows = availableFlows.filter((f) => isWhatsappChannel(f.channel));
 
-    const interactiveTitle = msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || null;
-    const interactiveId = msg.interactive?.button_reply?.id || msg.interactive?.list_reply?.id || null;
+    const interactiveTitle =
+      msg.interactive?.button_reply?.title ||
+      msg.interactive?.list_reply?.title ||
+      null;
+    const interactiveId =
+      msg.interactive?.button_reply?.id ||
+      msg.interactive?.list_reply?.id ||
+      null;
 
     flow = findBestMatchingFlow(filteredFlows, {
       fullText: userText,
@@ -314,8 +323,33 @@ async function handleIncomingMessage(
     message,
   ) => sendMessage(user.id, to, message);
 
+  const interactiveType = msg.interactive?.type ?? null;
+  const interactiveId =
+    msg.interactive?.button_reply?.id || msg.interactive?.list_reply?.id || null;
+  const interactiveTitle =
+    msg.interactive?.button_reply?.title ||
+    msg.interactive?.list_reply?.title ||
+    null;
+
+  const incomingMeta = {
+    type: msg.type ?? (interactiveType ? "interactive" : "text"),
+    rawText:
+      msg.text?.body ??
+      interactiveTitle ??
+      (typeof msg.type === "string" && msg.type !== "text" ? userText : null) ??
+      userText,
+    interactive:
+      interactiveType || interactiveId || interactiveTitle
+        ? {
+            type: interactiveType,
+            id: interactiveId,
+            title: interactiveTitle,
+          }
+        : null,
+  } as const;
+
   try {
-    await executeFlow(session, userText, sendMessageForUser);
+    await executeFlow(session, userText, sendMessageForUser, incomingMeta);
   } catch (err) {
     logger.error("Error executing flow for message", {
       messageId: msg.id,
@@ -345,6 +379,25 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
   for (const entry of data.entry ?? []) {
     for (const change of entry.changes ?? []) {
       const val = change?.value;
+      const field = change?.field?.toLowerCase();
+
+      if (field && field !== "messages") {
+        continue;
+      }
+
+      const messagingProductRaw =
+        val?.messaging_product ??
+        (val as { messagingProduct?: string } | undefined)?.messagingProduct ??
+        null;
+      if (
+        messagingProductRaw &&
+        messagingProductRaw.trim().toLowerCase() !== "whatsapp"
+      ) {
+        logger.info("Skipping non-WhatsApp webhook payload", {
+          messagingProduct: messagingProductRaw,
+        });
+        continue;
+      }
       const phoneNumberId = val?.metadata?.phone_number_id;
 
       if (!phoneNumberId) continue;

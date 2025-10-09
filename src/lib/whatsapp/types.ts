@@ -1,9 +1,7 @@
 import type {
   Contact,
   Flow,
-  Prisma,
   Session as PrismaSession,
-  User,
 } from "@prisma/client";
 
 // ===== Types =====
@@ -96,6 +94,8 @@ export interface WAContact {
 }
 
 export interface WAChangeValue {
+  messaging_product?: string;
+  messagingProduct?: string;
   messages?: WAMessage[];
   statuses?: WAStatus[];
   metadata: {
@@ -104,8 +104,13 @@ export interface WAChangeValue {
   contacts?: WAContact[];
 }
 
+export interface WAEntryChange {
+  field?: string;
+  value?: WAChangeValue;
+}
+
 export interface WAEntry {
-  changes?: { value?: WAChangeValue }[];
+  changes?: WAEntryChange[];
 }
 
 export interface MetaWebhookEvent {
