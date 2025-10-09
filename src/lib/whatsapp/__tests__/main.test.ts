@@ -207,6 +207,56 @@ describe("WhatsApp Integration", () => {
         },
       });
     });
+
+    it("should resume the most recent WhatsApp session without rematching flows", async () => {
+      const webhookEvent = {
+        object: "whatsapp_business_account",
+        entry: [
+          {
+            changes: [
+              {
+                field: "messages",
+                value: {
+                  messaging_product: "whatsapp",
+                  metadata: { phone_number_id: "123456789" },
+                  messages: [
+                    {
+                      id: "msg-3",
+                      from: "1122334455",
+                      type: "text",
+                      text: { body: "hello there" },
+                    },
+                  ],
+                  contacts: [
+                    {
+                      wa_id: "1122334455",
+                      profile: { name: "Session User" },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.contact.upsert as jest.Mock).mockResolvedValue(mockContact);
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession);
+
+      await processWebhookEvent(webhookEvent);
+
+      expect(prisma.session.findFirst).toHaveBeenCalledWith({
+        where: {
+          contactId: mockContact.id,
+          status: { in: ["Active", "Paused"] },
+        },
+        include: { flow: true, contact: true },
+        orderBy: { updatedAt: "desc" },
+      });
+      expect(prisma.flow.findMany).not.toHaveBeenCalled();
+      expect(executeFlow).toHaveBeenCalled();
+    });
   });
 
   describe("sendMessage", () => {
