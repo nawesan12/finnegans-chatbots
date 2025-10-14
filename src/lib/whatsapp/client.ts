@@ -13,32 +13,212 @@ import {
 } from "@/lib/whatsapp/utils";
 import { logger } from "@/lib/logger";
 
-export async function sendMessage(
+type MetaApiErrorInfo = {
+  message?: string;
+  code?: number;
+  errorSubcode?: number;
+};
+
+type MetaCredentials = {
+  accessToken: string;
+  phoneNumberId: string;
+};
+
+const META_NOT_ALLOWED_CODE = 131030;
+const META_ALREADY_ALLOWED_CODE = 131031;
+const META_SANDBOX_NOT_ALLOWED_SUBCODE = 2494003;
+
+const extractMetaError = (details: unknown): MetaApiErrorInfo | null => {
+  if (!details || typeof details !== "object") {
+    return null;
+  }
+
+  const error = (details as { error?: unknown }).error;
+  if (!error || typeof error !== "object") {
+    return null;
+  }
+
+  const raw = error as {
+    message?: unknown;
+    code?: unknown;
+    error_subcode?: unknown;
+  };
+
+  const result: MetaApiErrorInfo = {};
+  if (typeof raw.message === "string") {
+    result.message = raw.message;
+  }
+  if (typeof raw.code === "number") {
+    result.code = raw.code;
+  }
+  if (typeof raw.error_subcode === "number") {
+    result.errorSubcode = raw.error_subcode;
+  }
+
+  return result;
+};
+
+const isRecipientNotAllowedError = (
+  error: MetaApiErrorInfo | null,
+): boolean => {
+  if (!error) {
+    return false;
+  }
+
+  if (error.code === META_NOT_ALLOWED_CODE) {
+    return true;
+  }
+
+  if (error.errorSubcode === META_SANDBOX_NOT_ALLOWED_SUBCODE) {
+    return true;
+  }
+
+  const normalizedMessage = error.message?.toLowerCase() ?? "";
+  return normalizedMessage.includes("allowed list");
+};
+
+const isRecipientAlreadyAllowListedError = (
+  error: MetaApiErrorInfo | null,
+): boolean => {
+  if (!error) {
+    return false;
+  }
+
+  if (error.code === META_ALREADY_ALLOWED_CODE) {
+    return true;
+  }
+
+  const normalizedMessage = error.message?.toLowerCase() ?? "";
+  return (
+    normalizedMessage.includes("already") &&
+    normalizedMessage.includes("allowed list")
+  );
+};
+
+const parseJsonResponse = async (res: Response): Promise<unknown> => {
+  try {
+    return await res.json();
+  } catch (error) {
+    logger.error("Failed to parse Meta API response as JSON", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+};
+
+const extractMessageIdentifiers = (json: unknown) => {
+  let messageId: string | null = null;
+  let conversationId: string | null = null;
+
+  if (json && typeof json === "object") {
+    const payload = json as Record<string, unknown>;
+
+    const messagesValue = (payload as { messages?: unknown }).messages;
+    if (Array.isArray(messagesValue)) {
+      const messages = messagesValue as Array<{ id?: unknown }>;
+      const firstMessageId = messages.find(
+        (entry): entry is { id: string } => typeof entry?.id === "string",
+      )?.id;
+      if (firstMessageId) {
+        messageId = firstMessageId;
+      }
+    }
+
+    const conversationValue = (payload as { conversation?: unknown }).conversation;
+    if (conversationValue && typeof conversationValue === "object") {
+      const conversation = conversationValue as { id?: unknown };
+      if (typeof conversation.id === "string") {
+        conversationId = conversation.id;
+      }
+    }
+  }
+
+  return { messageId, conversationId };
+};
+
+async function addRecipientToSandboxAllowList(
   userId: string,
-  to: string,
-  message: SendMessagePayload,
-): Promise<SendMessageResult> {
-  const normalizedTo = normalizePhone(to);
-  if (!normalizedTo) {
-    const error = "Invalid destination phone number";
-    logger.error(error, { to });
-    return { success: false, status: 400, error };
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { metaAccessToken: true, metaPhoneNumberId: true },
-  });
-
-  const accessToken = user?.metaAccessToken?.trim();
-  const phoneNumberId = user?.metaPhoneNumberId?.trim();
-
+  normalizedWaId: string,
+  credentials: MetaCredentials,
+): Promise<boolean> {
+  const { accessToken, phoneNumberId } = credentials;
   if (!accessToken || !phoneNumberId) {
-    const error = "Missing Meta API credentials for user";
-    logger.error(error, { userId });
-    return { success: false, error };
+    return false;
   }
 
+  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/allowed_senders`;
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+    "Content-Type": "application/json",
+  };
+  const payload = {
+    wa_id: normalizedWaId,
+    messaging_product: "whatsapp",
+  };
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), META_API_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    const json = await parseJsonResponse(res);
+    if (res.ok) {
+      logger.info("Added recipient to WhatsApp sandbox allow list", {
+        userId,
+        waId: normalizedWaId,
+      });
+      return true;
+    }
+
+    const metaError = extractMetaError(json);
+    const errorMessage = metaError?.message ?? "Failed to update allow list";
+
+    if (isRecipientAlreadyAllowListedError(metaError) || res.status === 409) {
+      logger.info("Recipient already present in allow list", {
+        userId,
+        waId: normalizedWaId,
+      });
+      return true;
+    }
+
+    logger.error("Failed to add recipient to WhatsApp sandbox allow list", {
+      userId,
+      waId: normalizedWaId,
+      status: res.status,
+      error: errorMessage,
+      details: json,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      logger.error("Allow list request to Meta API timed out", { userId });
+    } else {
+      logger.error("Error adding recipient to sandbox allow list", {
+        userId,
+        waId: normalizedWaId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  return false;
+}
+
+async function sendMessageInternal(
+  userId: string,
+  normalizedTo: string,
+  message: SendMessagePayload,
+  credentials: MetaCredentials,
+  retryAttempted: boolean,
+): Promise<SendMessageResult> {
+  const { accessToken, phoneNumberId } = credentials;
   const url = `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`;
   const headers = {
     Authorization: `Bearer ${accessToken}`,
@@ -49,9 +229,16 @@ export async function sendMessage(
 
   switch (message.type) {
     case "text":
-      body = { to: normalizedTo, type: "text", text: { body: message.text } };
+      body = {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: normalizedTo,
+        type: "text",
+        text: { body: message.text, preview_url: false },
+      };
       break;
-    case "media":
+
+    case "media": {
       if (!message.id && !message.url) {
         return {
           success: false,
@@ -59,48 +246,73 @@ export async function sendMessage(
           error: "Media message must have either an id or a url",
         };
       }
-      const allowedMedia: Record<string, true> = {
+
+      const allowed: Record<string, true> = {
         image: true,
         video: true,
         audio: true,
         document: true,
       };
-      const mType = allowedMedia[message.mediaType]
-        ? message.mediaType
-        : "image";
+      const mType = allowed[message.mediaType] ? message.mediaType : "image";
+
       const mediaObject: { id?: string; link?: string; caption?: string } = {};
       if (message.id) {
         mediaObject.id = message.id;
       } else if (message.url) {
         mediaObject.link = message.url;
       }
+
       if (message.caption) {
         mediaObject.caption = message.caption;
       }
+
       body = {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
         to: normalizedTo,
         type: mType,
         [mType]: mediaObject,
       };
       break;
-    case "options":
+    }
+
+    case "options": {
+      const options = (message.options || []).slice(0, 3);
       body = {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
         to: normalizedTo,
         type: "interactive",
         interactive: {
           type: "button",
           body: { text: message.text },
           action: {
-            buttons: message.options.slice(0, 3).map((opt) => ({
+            buttons: options.map((opt) => ({
               type: "reply",
-              reply: { id: toLcTrim(opt), title: opt },
+              reply: {
+                id: toLcTrim(opt).replace(/\s+/g, "_") || "opt",
+                title: opt,
+              },
             })),
           },
         },
       };
       break;
-    case "list":
+    }
+
+    case "list": {
+      const sections = Array.isArray(message.sections)
+        ? message.sections.map((section) => ({
+            title: section.title,
+            rows: Array.isArray(section.rows)
+              ? section.rows.map((row) => ({ id: row.id, title: row.title }))
+              : [],
+          }))
+        : [];
+
       body = {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
         to: normalizedTo,
         type: "interactive",
         interactive: {
@@ -108,15 +320,17 @@ export async function sendMessage(
           body: { text: message.text },
           action: {
             button: message.button,
-            sections: message.sections,
+            sections,
           },
         },
       };
       break;
+    }
+
     case "flow": {
       const flowPayload = message.flow;
       const flowId = flowPayload?.id?.trim();
-      const flowToken = flowPayload?.token?.trim(); // This is the flow_token
+      const flowToken = flowPayload?.token?.trim();
       const cta = flowPayload?.cta?.trim();
 
       if (!flowId || !cta) {
@@ -127,12 +341,14 @@ export async function sendMessage(
         };
       }
 
+      const flowName = flowPayload?.name?.trim() ?? "whatsapp_flow";
+      const flowVersion = flowPayload?.version?.trim() ?? "3";
       const header = flowPayload?.header?.trim();
       const footer = flowPayload?.footer?.trim();
       const bodyText = (flowPayload?.body ?? "").trim();
 
       const parameters: Record<string, unknown> = {
-        flow_message_version: "3",
+        flow_message_version: flowVersion,
         flow_id: flowId,
         flow_cta: cta,
       };
@@ -140,22 +356,20 @@ export async function sendMessage(
       if (flowToken) {
         parameters.flow_token = flowToken;
       }
-
-      // Optional: If you need to pre-fill the flow or navigate to a specific screen
-      if (flowPayload.mode) {
+      if (flowPayload?.mode) {
         parameters.mode = flowPayload.mode;
       }
-      if (flowPayload.action) {
+      if (flowPayload?.action) {
         parameters.flow_action = flowPayload.action;
       }
-      if (flowPayload.action_payload) {
+      if (flowPayload?.action_payload) {
         parameters.flow_action_payload = flowPayload.action_payload;
       }
 
       const interactive: Record<string, unknown> = {
         type: "flow",
         action: {
-          name: "flow",
+          name: flowName,
           parameters,
         },
       };
@@ -171,12 +385,15 @@ export async function sendMessage(
       }
 
       body = {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
         to: normalizedTo,
         type: "interactive",
         interactive,
       };
       break;
     }
+
     case "template": {
       const template = message.template;
       const templateName = template?.name?.trim();
@@ -245,74 +462,123 @@ export async function sendMessage(
       }
 
       body = {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
         to: normalizedTo,
         type: "template",
         template: templatePayload,
       };
       break;
     }
+
+    default:
+      body = undefined;
   }
 
   if (!body) {
     return { success: false, error: "Unsupported message type" };
   }
 
-  body.messaging_product = "whatsapp";
-
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), META_API_TIMEOUT_MS);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), META_API_TIMEOUT_MS);
 
   try {
     const res = await fetch(url, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
-      signal: ctrl.signal,
+      signal: controller.signal,
     });
 
-    const json = (await res.json()) as unknown;
+    const json = await parseJsonResponse(res);
+
     if (!res.ok) {
+      const metaError = extractMetaError(json);
+      const errorMessage =
+        metaError?.message ?? "Error sending message via Meta API";
+
       logger.error("Error sending message to Meta API", {
-        status: res.status,
-        details: json,
         userId,
+        status: res.status,
+        error: errorMessage,
+        details: json,
       });
-      return { success: false, status: res.status, details: json };
-    }
 
-    let messageId: string | null = null;
-    if (
-      typeof json === "object" &&
-      json !== null &&
-      "messages" in json &&
-      Array.isArray((json as { messages?: unknown }).messages)
-    ) {
-      const messages = (json as {
-        messages?: Array<{ id?: unknown }>;
-      }).messages;
+      if (!retryAttempted && isRecipientNotAllowedError(metaError)) {
+        const allowListed = await addRecipientToSandboxAllowList(
+          userId,
+          normalizedTo,
+          credentials,
+        );
 
-      const firstId = messages?.find(
-        (message): message is { id: string } =>
-          typeof message?.id === "string",
-      )?.id;
-
-      if (firstId) {
-        messageId = firstId;
+        if (allowListed) {
+          return sendMessageInternal(
+            userId,
+            normalizedTo,
+            message,
+            credentials,
+            true,
+          );
+        }
       }
+
+      return {
+        success: false,
+        status: res.status,
+        error: errorMessage,
+        details: json,
+      };
     }
 
-    return { success: true, messageId };
+    const { messageId, conversationId } = extractMessageIdentifiers(json);
+
+    return { success: true, messageId, conversationId };
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       logger.error("Request to Meta API timed out", { userId });
       return { success: false, error: "Request to Meta timed out" };
     }
     logger.error("Failed to send message", {
-      error: error instanceof Error ? error.message : String(error),
       userId,
+      error: error instanceof Error ? error.message : String(error),
     });
     return { success: false, error: "Unknown error" };
   } finally {
-    clearTimeout(t);
+    clearTimeout(timeout);
   }
+}
+
+export async function sendMessage(
+  userId: string,
+  to: string,
+  message: SendMessagePayload,
+): Promise<SendMessageResult> {
+  const normalizedTo = normalizePhone(to);
+  if (!normalizedTo) {
+    const error = "Invalid destination phone number";
+    logger.error(error, { to });
+    return { success: false, status: 400, error };
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { metaAccessToken: true, metaPhoneNumberId: true },
+  });
+
+  const accessToken = user?.metaAccessToken?.trim() ?? null;
+  const phoneNumberId = user?.metaPhoneNumberId?.trim() ?? null;
+
+  if (!accessToken || !phoneNumberId) {
+    const error = "Missing Meta API credentials for user";
+    logger.error(error, { userId });
+    return { success: false, error };
+  }
+
+  return sendMessageInternal(
+    userId,
+    normalizedTo,
+    message,
+    { accessToken, phoneNumberId },
+    false,
+  );
 }
