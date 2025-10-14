@@ -13,50 +13,35 @@ import {
 } from "@/lib/whatsapp/utils";
 import { logger } from "@/lib/logger";
 
-export async function sendMessage(
-  userId: string,
-  to: string,
+type MetaMessageBodyResult =
+  | { ok: true; body: Record<string, unknown> }
+  | { ok: false; result: SendMessageResult };
+
+type MetaErrorDetails = {
+  code?: number;
+  errorSubcode?: number;
+  message?: string;
+};
+
+function buildMetaMessageBody(
+  normalizedTo: string,
   message: SendMessagePayload,
-): Promise<SendMessageResult> {
-  const normalizedTo = normalizePhone(to);
-  if (!normalizedTo) {
-    const error = "Invalid destination phone number";
-    logger.error(error, { to });
-    return { success: false, status: 400, error };
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { metaAccessToken: true, metaPhoneNumberId: true },
-  });
-
-  const accessToken = user?.metaAccessToken?.trim();
-  const phoneNumberId = user?.metaPhoneNumberId?.trim();
-
-  if (!accessToken || !phoneNumberId) {
-    const error = "Missing Meta API credentials for user";
-    logger.error(error, { userId });
-    return { success: false, error };
-  }
-
-  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`;
-  const headers = {
-    Authorization: `Bearer ${accessToken}`,
-    "Content-Type": "application/json",
-  };
-
-  let body: Record<string, unknown> | undefined;
-
+): MetaMessageBodyResult {
   switch (message.type) {
     case "text":
-      body = { to: normalizedTo, type: "text", text: { body: message.text } };
-      break;
+      return {
+        ok: true,
+        body: { to: normalizedTo, type: "text", text: { body: message.text } },
+      };
     case "media":
       if (!message.id && !message.url) {
         return {
-          success: false,
-          status: 400,
-          error: "Media message must have either an id or a url",
+          ok: false,
+          result: {
+            success: false,
+            status: 400,
+            error: "Media message must have either an id or a url",
+          },
         };
       }
       const allowedMedia: Record<string, true> = {
@@ -77,53 +62,62 @@ export async function sendMessage(
       if (message.caption) {
         mediaObject.caption = message.caption;
       }
-      body = {
-        to: normalizedTo,
-        type: mType,
-        [mType]: mediaObject,
+      return {
+        ok: true,
+        body: {
+          to: normalizedTo,
+          type: mType,
+          [mType]: mediaObject,
+        },
       };
-      break;
     case "options":
-      body = {
-        to: normalizedTo,
-        type: "interactive",
-        interactive: {
-          type: "button",
-          body: { text: message.text },
-          action: {
-            buttons: message.options.slice(0, 3).map((opt) => ({
-              type: "reply",
-              reply: { id: toLcTrim(opt), title: opt },
-            })),
+      return {
+        ok: true,
+        body: {
+          to: normalizedTo,
+          type: "interactive",
+          interactive: {
+            type: "button",
+            body: { text: message.text },
+            action: {
+              buttons: message.options.slice(0, 3).map((opt) => ({
+                type: "reply",
+                reply: { id: toLcTrim(opt), title: opt },
+              })),
+            },
           },
         },
       };
-      break;
     case "list":
-      body = {
-        to: normalizedTo,
-        type: "interactive",
-        interactive: {
-          type: "list",
-          body: { text: message.text },
-          action: {
-            button: message.button,
-            sections: message.sections,
+      return {
+        ok: true,
+        body: {
+          to: normalizedTo,
+          type: "interactive",
+          interactive: {
+            type: "list",
+            body: { text: message.text },
+            action: {
+              button: message.button,
+              sections: message.sections,
+            },
           },
         },
       };
-      break;
     case "flow": {
       const flowPayload = message.flow;
       const flowId = flowPayload?.id?.trim();
-      const flowToken = flowPayload?.token?.trim(); // This is the flow_token
+      const flowToken = flowPayload?.token?.trim();
       const cta = flowPayload?.cta?.trim();
 
       if (!flowId || !cta) {
         return {
-          success: false,
-          status: 400,
-          error: "Missing WhatsApp Flow ID or CTA",
+          ok: false,
+          result: {
+            success: false,
+            status: 400,
+            error: "Missing WhatsApp Flow ID or CTA",
+          },
         };
       }
 
@@ -141,7 +135,6 @@ export async function sendMessage(
         parameters.flow_token = flowToken;
       }
 
-      // Optional: If you need to pre-fill the flow or navigate to a specific screen
       if (flowPayload.mode) {
         parameters.mode = flowPayload.mode;
       }
@@ -170,12 +163,14 @@ export async function sendMessage(
         interactive.footer = { text: footer };
       }
 
-      body = {
-        to: normalizedTo,
-        type: "interactive",
-        interactive,
+      return {
+        ok: true,
+        body: {
+          to: normalizedTo,
+          type: "interactive",
+          interactive,
+        },
       };
-      break;
     }
     case "template": {
       const template = message.template;
@@ -183,9 +178,12 @@ export async function sendMessage(
       const templateLanguage = template?.language?.trim();
       if (!templateName || !templateLanguage) {
         return {
-          success: false,
-          status: 400,
-          error: "Missing template name or language",
+          ok: false,
+          result: {
+            success: false,
+            status: 400,
+            error: "Missing template name or language",
+          },
         };
       }
 
@@ -244,40 +242,166 @@ export async function sendMessage(
         templatePayload.components = normalizedComponents;
       }
 
-      body = {
-        to: normalizedTo,
-        type: "template",
-        template: templatePayload,
+      return {
+        ok: true,
+        body: {
+          to: normalizedTo,
+          type: "template",
+          template: templatePayload,
+        },
       };
-      break;
     }
+    default:
+      return { ok: false, result: { success: false, error: "Unsupported message type" } };
+  }
+}
+
+function extractMetaErrorDetails(json: unknown): MetaErrorDetails | null {
+  if (
+    typeof json !== "object" ||
+    json === null ||
+    !("error" in json) ||
+    typeof (json as { error?: unknown }).error !== "object" ||
+    (json as { error?: unknown }).error === null
+  ) {
+    return null;
   }
 
-  if (!body) {
-    return { success: false, error: "Unsupported message type" };
-  }
+  const error = (json as { error: Record<string, unknown> }).error;
+  const code = typeof error.code === "number" ? error.code : undefined;
+  const errorSubcode =
+    typeof error.error_subcode === "number" ? error.error_subcode : undefined;
+  const message =
+    typeof error.message === "string"
+      ? error.message
+      : typeof error.error_user_msg === "string"
+        ? error.error_user_msg
+        : undefined;
 
-  body.messaging_product = "whatsapp";
+  return { code, errorSubcode, message };
+}
 
+async function registerRecipientInSandbox(
+  userId: string,
+  accessToken: string,
+  phoneNumberId: string,
+  normalizedPhone: string,
+): Promise<boolean> {
+  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/registered_senders`;
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), META_API_TIMEOUT_MS);
+  const timeout = setTimeout(() => ctrl.abort(), META_API_TIMEOUT_MS);
 
   try {
     const res = await fetch(url, {
       method: "POST",
-      headers,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        phone_number: normalizedPhone,
+      }),
+      signal: ctrl.signal,
+    });
+
+    if (!res.ok) {
+      let details: unknown = null;
+      try {
+        details = await res.json();
+      } catch {
+        // ignore JSON parsing errors and fall back to null
+      }
+      logger.warn("Failed to register WhatsApp recipient in sandbox", {
+        status: res.status,
+        details,
+        userId,
+      });
+      return false;
+    }
+
+    logger.info("Registered WhatsApp recipient in sandbox allow list", {
+      userId,
+      phoneNumberId,
+      recipient: normalizedPhone,
+    });
+    return true;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      logger.warn("Timed out while registering WhatsApp recipient", {
+        userId,
+      });
+    } else {
+      logger.warn("Unexpected error while registering WhatsApp recipient", {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function attemptSendMessage(
+  options: {
+    userId: string;
+    accessToken: string;
+    phoneNumberId: string;
+    messageBody: Record<string, unknown>;
+    normalizedTo: string;
+  },
+  attempt = 1,
+): Promise<SendMessageResult> {
+  const { userId, accessToken, phoneNumberId, messageBody, normalizedTo } = options;
+  const body = { ...messageBody, messaging_product: "whatsapp" };
+  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`;
+
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), META_API_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify(body),
       signal: ctrl.signal,
     });
 
     const json = (await res.json()) as unknown;
     if (!res.ok) {
+      const metaError = extractMetaErrorDetails(json);
+
+      if (
+        attempt === 1 &&
+        res.status === 400 &&
+        metaError?.code === 131030 &&
+        (await registerRecipientInSandbox(
+          userId,
+          accessToken,
+          phoneNumberId,
+          normalizedTo,
+        ))
+      ) {
+        return attemptSendMessage(options, attempt + 1);
+      }
+
       logger.error("Error sending message to Meta API", {
         status: res.status,
         details: json,
         userId,
       });
-      return { success: false, status: res.status, details: json };
+      const errorMessage =
+        metaError?.message ?? "Failed to send message via Meta API";
+      return {
+        success: false,
+        status: res.status,
+        error: errorMessage,
+        details: json,
+      };
     }
 
     let messageId: string | null = null;
@@ -313,6 +437,52 @@ export async function sendMessage(
     });
     return { success: false, error: "Unknown error" };
   } finally {
-    clearTimeout(t);
+    clearTimeout(timeout);
   }
+}
+
+export async function sendMessage(
+  userId: string,
+  to: string,
+  message: SendMessagePayload,
+): Promise<SendMessageResult> {
+  const normalizedTo = normalizePhone(to);
+  if (!normalizedTo) {
+    const error = "Invalid destination phone number";
+    logger.error(error, { to });
+    return { success: false, status: 400, error };
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      metaAccessToken: true,
+      metaPhoneNumberId: true,
+    },
+  });
+
+  const accessToken = user?.metaAccessToken?.trim();
+  const phoneNumberId = user?.metaPhoneNumberId?.trim();
+
+  if (!accessToken || !phoneNumberId) {
+    const error = "Missing Meta API credentials for user";
+    logger.error(error, { userId });
+    return { success: false, error };
+  }
+
+  const buildResult = buildMetaMessageBody(normalizedTo, message);
+  if (!buildResult.ok) {
+    return buildResult.result;
+  }
+
+  return attemptSendMessage(
+    {
+      userId,
+      accessToken,
+      phoneNumberId,
+      messageBody: buildResult.body,
+      normalizedTo,
+    },
+    1,
+  );
 }
