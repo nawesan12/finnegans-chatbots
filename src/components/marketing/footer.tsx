@@ -38,7 +38,7 @@ const navigationSections = [
 const legalLinks = [
   {
     label: "Privacidad",
-    href: "https://finnegans.com/legales/privacidad",
+    href: "/politica-de-privacidad",
   },
   {
     label: "Términos",
