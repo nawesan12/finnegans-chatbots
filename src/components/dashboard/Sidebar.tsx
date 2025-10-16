@@ -10,6 +10,7 @@ import {
   Bot,
   CircleHelp,
   Megaphone,
+  MessageCircle,
   MessageSquare,
   NotebookPen,
   Settings,
@@ -263,6 +264,13 @@ const Sidebar = ({
             href: "/dashboard/broadcasts",
             description: "Programaciones y campañas",
             badge: { label: "Nuevo", variant: "outline" },
+          },
+          {
+            id: "conversations",
+            icon: MessageCircle,
+            label: "Conversaciones",
+            href: "/dashboard/conversations",
+            description: "Inbox centralizado",
           },
           {
             id: "leads",

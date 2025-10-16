@@ -47,6 +47,7 @@ export default function DashboardLayout({
     "/dashboard": "Panel de Control",
     "/dashboard/flows": "Flujos de Mensajes",
     "/dashboard/broadcasts": "Mensajes Masivos",
+    "/dashboard/conversations": "Conversaciones",
     "/dashboard/leads": "Leads",
     "/dashboard/logs": "Registros",
     "/dashboard/contacts": "Contactos",
