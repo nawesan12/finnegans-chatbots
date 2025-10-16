@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { authenticatedFetch } from "@/lib/api-client";
+import { safeStructuredClone } from "@/lib/safe-clone";
 
 type InspectorProps = {
   selectedNode: FlowNode | null;
@@ -143,7 +144,7 @@ const setNestedValue = (
   val: unknown,
 ): FlowNode["data"] => {
   const parts = path.split(".");
-  const clone = structuredClone((obj ?? {}) as Record<string, unknown>);
+  const clone = safeStructuredClone((obj ?? {}) as Record<string, unknown>);
   let cur = clone as Record<string, unknown>;
   for (let i = 0; i < parts.length - 1; i += 1) {
     const key = parts[i];
