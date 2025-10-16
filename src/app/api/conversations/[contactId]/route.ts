@@ -9,14 +9,14 @@ interface Params {
 
 export async function GET(
   request: Request,
-  context: { params: Params },
+  context: { params: Promise<Params> },
 ) {
   const auth = getAuthPayload(request);
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { contactId } = context.params;
+  const { contactId } = await context.params;
 
   try {
     const conversation = await fetchConversationByContactId(
