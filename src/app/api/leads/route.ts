@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { leadFormSchema } from "@/lib/validations/lead";
 import { getAuthPayload } from "@/lib/auth";
 import { leadStatuses } from "@/lib/leads";
+import { parseLeadFilters } from "@/server/leads-filters";
 
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX_REQUESTS = 5;
@@ -47,11 +48,18 @@ export async function GET(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const statusFilter = searchParams.get("status")?.trim();
+    const parsedFilters = parseLeadFilters(searchParams);
+
+    if (!parsedFilters.ok) {
+      return NextResponse.json(
+        { error: parsedFilters.message },
+        { status: parsedFilters.status },
+      );
+    }
 
     const whereClause =
-      statusFilter && leadStatuses.some((status) => status.value === statusFilter)
-        ? { status: statusFilter }
+      Object.keys(parsedFilters.where).length > 0
+        ? parsedFilters.where
         : undefined;
 
     const [leads, groupedCounts] = await prisma.$transaction([
