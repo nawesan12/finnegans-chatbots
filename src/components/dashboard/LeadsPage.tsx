@@ -419,7 +419,7 @@ const LeadsPage = () => {
   );
   const [isDeletingLead, setIsDeletingLead] = useState(false);
   const skipSyncRef = useRef(false);
-  const fetchLeadsRef = useRef<() => Promise<void>>();
+  const fetchLeadsRef = useRef<(() => Promise<void>) | null>(null);
 
   const dateFormatter = useMemo(
     () =>
