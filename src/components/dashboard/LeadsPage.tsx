@@ -419,6 +419,7 @@ const LeadsPage = () => {
   );
   const [isDeletingLead, setIsDeletingLead] = useState(false);
   const skipSyncRef = useRef(false);
+  const fetchLeadsRef = useRef<() => Promise<void>>();
 
   const dateFormatter = useMemo(
     () =>
@@ -452,7 +453,8 @@ const LeadsPage = () => {
     return { from, to, isInvalid: false } as const;
   }, [createdFrom, createdTo]);
 
-  const dateRangeError = dateFilter.isInvalid
+  const isDateRangeInvalid = dateFilter.isInvalid;
+  const dateRangeError = isDateRangeInvalid
     ? "La fecha inicial no puede ser posterior a la final."
     : null;
 
@@ -469,10 +471,48 @@ const LeadsPage = () => {
   );
 
   const fetchLeads = useCallback(async () => {
+    if (isDateRangeInvalid) {
+      const message =
+        dateRangeError ?? "El rango de fechas seleccionado es inválido.";
+      setErrorMessage(message);
+      toast.error(message);
+      return;
+    }
+
     try {
       setLoading(true);
       setErrorMessage(null);
-      const response = await authenticatedFetch("/api/leads");
+      const params = new URLSearchParams();
+      const trimmedSearch = searchTerm.trim();
+
+      if (statusFilter !== "all") {
+        params.set("status", statusFilter);
+      }
+
+      if (focusAreaFilter !== "all") {
+        params.set(
+          "focusArea",
+          focusAreaFilter === focusAreaNoneValue
+            ? focusAreaNoneQueryValue
+            : focusAreaFilter,
+        );
+      }
+
+      if (trimmedSearch) {
+        params.set("search", trimmedSearch);
+      }
+
+      if (createdFrom) {
+        params.set("createdFrom", createdFrom);
+      }
+
+      if (createdTo) {
+        params.set("createdTo", createdTo);
+      }
+
+      const query = params.toString();
+      const endpoint = query ? `/api/leads?${query}` : "/api/leads";
+      const response = await authenticatedFetch(endpoint);
       if (!response.ok) {
         const message =
           (await parseErrorMessage(response)) ??
@@ -562,14 +602,24 @@ const LeadsPage = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [
+    createdFrom,
+    createdTo,
+    dateRangeError,
+    focusAreaFilter,
+    isDateRangeInvalid,
+    searchTerm,
+    statusFilter,
+  ]);
+
+  fetchLeadsRef.current = fetchLeads;
 
   useEffect(() => {
     if (!hasHydrated) {
       return;
     }
-    void fetchLeads();
-  }, [fetchLeads, hasHydrated]);
+    void fetchLeadsRef.current?.();
+  }, [hasHydrated]);
 
   useEffect(() => {
     if (!hasHydrated) {
@@ -1059,8 +1109,13 @@ const LeadsPage = () => {
       if (statusFilter !== "all") {
         params.set("status", statusFilter);
       }
-      if (focusAreaFilter !== "all" && focusAreaFilter !== focusAreaNoneValue) {
-        params.set("focusArea", focusAreaFilter);
+      if (focusAreaFilter !== "all") {
+        params.set(
+          "focusArea",
+          focusAreaFilter === focusAreaNoneValue
+            ? focusAreaNoneQueryValue
+            : focusAreaFilter,
+        );
       }
       if (trimmedSearch) {
         params.set("search", trimmedSearch);
