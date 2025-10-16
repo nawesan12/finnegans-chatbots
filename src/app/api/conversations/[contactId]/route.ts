@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 import { getAuthPayload } from "@/lib/auth";
 import { fetchConversationByContactId } from "@/server/conversations";
@@ -8,15 +8,15 @@ interface Params {
 }
 
 export async function GET(
-  request: Request,
-  context: { params: Params },
+  request: NextRequest,
+  context: { params: Promise<Params> },
 ) {
   const auth = getAuthPayload(request);
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { contactId } = context.params;
+  const { contactId } = await context.params;
 
   try {
     const conversation = await fetchConversationByContactId(
