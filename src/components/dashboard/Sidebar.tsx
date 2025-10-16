@@ -10,6 +10,7 @@ import {
   Bot,
   CircleHelp,
   Megaphone,
+  MessageCircle,
   MessageSquare,
   NotebookPen,
   Settings,
@@ -256,6 +257,13 @@ const Sidebar = ({
         id: "communication",
         label: "Comunicación",
         items: [
+          {
+            id: "conversations",
+            icon: MessageCircle,
+            label: "Conversaciones",
+            href: "/dashboard/conversations",
+            description: "Responde sin salir del panel",
+          },
           {
             id: "broadcasts",
             icon: Megaphone,
