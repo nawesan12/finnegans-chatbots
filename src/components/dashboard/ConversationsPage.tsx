@@ -61,6 +61,8 @@ const ConversationsPage: React.FC = () => {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(
     null,
   );
+  const [isAutoRefreshEnabled, setIsAutoRefreshEnabled] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const router = useRouter();
 
   const fetchConversations = useCallback(
@@ -87,6 +89,7 @@ const ConversationsPage: React.FC = () => {
 
         setConversations(payload.conversations ?? []);
         setErrorMessage(null);
+        setLastUpdatedAt(new Date());
       } catch (error) {
         if (error instanceof UnauthorizedError) {
           return;
@@ -109,6 +112,23 @@ const ConversationsPage: React.FC = () => {
   useEffect(() => {
     void fetchConversations("initial");
   }, [fetchConversations]);
+
+  useEffect(() => {
+    if (!isAutoRefreshEnabled) {
+      return;
+    }
+
+    void fetchConversations("refresh");
+
+    const AUTO_REFRESH_INTERVAL_MS = 60_000;
+    const intervalId = window.setInterval(() => {
+      void fetchConversations("refresh");
+    }, AUTO_REFRESH_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [fetchConversations, isAutoRefreshEnabled]);
 
   useEffect(() => {
     if (!loading && conversations.length > 0) {
@@ -341,6 +361,19 @@ const ConversationsPage: React.FC = () => {
     }
   }, [selectedConversation, selectedConversationLabel]);
 
+  const autoRefreshStatusLabel = useMemo(() => {
+    if (loading) {
+      return "Cargando...";
+    }
+    if (isRefreshing) {
+      return "Actualizando...";
+    }
+    if (!lastUpdatedAt) {
+      return "Sin actualizaciones recientes";
+    }
+    return `Actualizado ${formatRelativeTime(lastUpdatedAt.toISOString())}`;
+  }, [isRefreshing, lastUpdatedAt, loading]);
+
   const renderConversationList = () => {
     if (loading) {
       return (
@@ -560,6 +593,22 @@ const ConversationsPage: React.FC = () => {
                   Solo no leídos
                 </Label>
               </div>
+              <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs">
+                <Switch
+                  id="auto-refresh-switch"
+                  checked={isAutoRefreshEnabled}
+                  onCheckedChange={(checked) => setIsAutoRefreshEnabled(Boolean(checked))}
+                />
+                <div className="flex flex-col leading-tight">
+                  <Label
+                    htmlFor="auto-refresh-switch"
+                    className="cursor-pointer text-xs font-medium text-slate-600"
+                  >
+                    Auto actualizar
+                  </Label>
+                  <span className="text-[11px] text-slate-400">Cada 60 segundos</span>
+                </div>
+              </div>
               <FilterMultiSelect
                 label="Flujos"
                 options={flowOptions}
@@ -590,15 +639,21 @@ const ConversationsPage: React.FC = () => {
                   <SelectItem value="alphabetical">Orden alfabético</SelectItem>
                 </SelectContent>
               </Select>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleClearFilters}
-                className="ml-auto gap-2 text-xs"
-              >
-                <Filter className="h-4 w-4" aria-hidden="true" />
-                Limpiar filtros
-              </Button>
+              <div className="ml-auto flex items-center gap-2">
+                <div className="flex items-center gap-1 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-500">
+                  <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>{autoRefreshStatusLabel}</span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleClearFilters}
+                  className="gap-2 text-xs"
+                >
+                  <Filter className="h-4 w-4" aria-hidden="true" />
+                  Limpiar filtros
+                </Button>
+              </div>
             </div>
           </div>
           <div className="flex-1 overflow-y-auto p-4">
