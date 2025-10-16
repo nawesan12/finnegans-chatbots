@@ -44,7 +44,7 @@ type LogEntryBase =
 
 type LogEntry = LogEntryBase & { ts: number };
 
-type SimContext = { vars: Record<string, unknown> };
+type SimContext = { vars: Record<string, unknown>; input?: string };
 
 const now = () => Date.now();
 
@@ -56,9 +56,15 @@ const resolvePath = (source: unknown, segments: string[]): unknown =>
     return record[segment];
   }, source);
 
+const toLookupObject = (ctx: SimContext) => ({
+  ...ctx.vars,
+  vars: ctx.vars,
+  context: ctx,
+});
+
 const tpl = (text: string | undefined, ctx: SimContext) =>
   (text ?? "").replace(/\{\{\s*([\w.[\]0-9]+)\s*\}\}/g, (_m, key) => {
-    const value = resolvePath(ctx, key.split("."));
+    const value = resolvePath(toLookupObject(ctx), key.split("."));
     return value == null ? "" : String(value);
   });
 
@@ -90,7 +96,7 @@ const evalCondition = (expression: string, context: SimContext) => {
   }
   // Evalúa en función pura
   const fn = new Function("context", `return (!!(${expression}))`);
-  return !!fn(context);
+  return !!fn(toLookupObject(context));
 };
 
 export function Simulator({
@@ -254,7 +260,10 @@ export function Simulator({
   const applyInitialContext = useCallback(() => {
     const parsed = parseInitialContext();
     if (!parsed) return;
-    const nextContext: SimContext = { vars: safeStructuredClone(parsed) };
+    const nextContext: SimContext = {
+      ...contextRef.current,
+      vars: safeStructuredClone(parsed),
+    };
     contextRef.current = nextContext;
     setContext(nextContext);
     addLog({
@@ -371,7 +380,10 @@ export function Simulator({
                   unknown
                 >;
                 setDeepValue(nextVars, key, value);
-                const nextContext: SimContext = { vars: nextVars };
+                const nextContext: SimContext = {
+                  ...prev,
+                  vars: nextVars,
+                };
                 contextRef.current = nextContext;
                 return nextContext;
               });
@@ -448,6 +460,7 @@ export function Simulator({
 
               setContext((prev) => {
                 const nextContext: SimContext = {
+                  ...prev,
                   vars: { ...prev.vars, [assignTo]: parsed },
                 };
                 contextRef.current = nextContext;
@@ -564,6 +577,11 @@ export function Simulator({
       setAwaitingStep(false);
       setIsRunning(true);
       addLog({ type: "user", text: messageToSend });
+      setContext((prev) => {
+        const nextContext: SimContext = { ...prev, input: messageToSend };
+        contextRef.current = nextContext;
+        return nextContext;
+      });
       let shouldClearInput = true;
 
       try {
@@ -620,7 +638,10 @@ export function Simulator({
             shouldClearInput = false;
             return;
           }
-          const initial: SimContext = { vars: safeStructuredClone(base) };
+          const initial: SimContext = {
+            vars: safeStructuredClone(base),
+            input: messageToSend,
+          };
           contextRef.current = initial;
           setContext(initial);
           const msgLc = messageToSend.toLowerCase();
