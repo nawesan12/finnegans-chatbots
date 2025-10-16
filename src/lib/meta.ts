@@ -483,6 +483,42 @@ const LOG_STATUS_MAP: Record<string, string> = {
   Errored: "Error",
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function extractLastHistoryDirection(
+  context: Prisma.JsonValue | null | undefined,
+): "in" | "out" | null {
+  if (!isRecord(context)) {
+    return null;
+  }
+
+  const meta = context["_meta"];
+  if (!isRecord(meta)) {
+    return null;
+  }
+
+  const history = meta["history"];
+  if (!Array.isArray(history)) {
+    return null;
+  }
+
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const entry = history[index];
+    if (!isRecord(entry)) {
+      continue;
+    }
+
+    const direction = entry["direction"];
+    if (direction === "in" || direction === "out") {
+      return direction;
+    }
+  }
+
+  return null;
+}
+
 async function recordSessionSnapshot(sessionId: string) {
   const sessionSnapshot = await prisma.session.findUnique({
     where: { id: sessionId },
@@ -499,10 +535,25 @@ async function recordSessionSnapshot(sessionId: string) {
     return;
   }
 
-  const logStatus =
-    LOG_STATUS_MAP[sessionSnapshot.status] ??
-    sessionSnapshot.status ??
-    "In Progress";
+  const lastDirection = extractLastHistoryDirection(sessionSnapshot.context);
+  const normalizedStatus = sessionSnapshot.status?.trim() ?? null;
+
+  let logStatus: string;
+
+  if (normalizedStatus === "Completed") {
+    logStatus = "Completed";
+  } else if (normalizedStatus === "Errored") {
+    logStatus = "Error";
+  } else if (lastDirection === "out") {
+    logStatus = "Sent";
+  } else if (lastDirection === "in") {
+    logStatus = "Received";
+  } else {
+    logStatus =
+      LOG_STATUS_MAP[normalizedStatus ?? ""] ??
+      normalizedStatus ??
+      "In Progress";
+  }
 
   try {
     await prisma.log.create({

@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { verifyToken } from "@/lib/auth";
 import prisma from "@/lib/prisma";
-import { SENT_LOG_STATUSES } from "@/lib/dashboard/statuses";
+import {
+  RECEIVED_LOG_STATUSES,
+  SENT_LOG_STATUSES,
+} from "@/lib/dashboard/statuses";
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get("Authorization");
@@ -28,6 +31,7 @@ export async function GET(request: Request) {
       completedSessions,
       totalLogs,
       sentLogs,
+      receivedLogs,
     ] = await Promise.all([
       prisma.contact.count({ where: { userId } }),
       prisma.flow.count({ where: { userId } }),
@@ -59,6 +63,12 @@ export async function GET(request: Request) {
           status: { in: SENT_LOG_STATUSES },
         },
       }),
+      prisma.log.count({
+        where: {
+          flow: { userId },
+          status: { in: RECEIVED_LOG_STATUSES },
+        },
+      }),
     ]);
 
     const flowSuccessRate =
@@ -67,13 +77,14 @@ export async function GET(request: Request) {
         : 0;
 
     const messagesSent = sentLogs;
-    const messagesReceived = Math.max(totalLogs - sentLogs, 0);
+    let messagesReceived = receivedLogs;
 
     const undefinedDirectionLogs = totalLogs - (messagesSent + messagesReceived);
     if (undefinedDirectionLogs > 0) {
       console.warn(
         `Detected ${undefinedDirectionLogs} logs with undefined direction for user ${userId}.`,
       );
+      messagesReceived += undefinedDirectionLogs;
     }
 
     const metrics = {

@@ -7,7 +7,10 @@ import {
   normalizeMultiValue,
   resolveDateRange,
 } from "@/lib/dashboard/filters";
-import { isSentLogStatus } from "@/lib/dashboard/statuses";
+import {
+  isReceivedLogStatus,
+  isSentLogStatus,
+} from "@/lib/dashboard/statuses";
 
 type ChartPoint = {
   date: string;
@@ -59,6 +62,8 @@ function groupLogsByDate(logs: { createdAt: Date; status: string }[]): Record<st
 
     if (isSentLogStatus(log.status)) {
       buckets[key].sent += 1;
+    } else if (isReceivedLogStatus(log.status)) {
+      buckets[key].received += 1;
     } else {
       buckets[key].received += 1;
     }
