@@ -1143,6 +1143,216 @@ export type SendMessageResult =
 export const GRAPH_VERSION = "v23.0";
 export const META_API_TIMEOUT_MS = 15000;
 
+type MetaErrorDetails = {
+  code?: number;
+  errorSubcode?: number;
+  message?: string;
+};
+
+function extractMetaErrorDetails(json: unknown): MetaErrorDetails | null {
+  if (
+    typeof json !== "object" ||
+    json === null ||
+    !("error" in json) ||
+    typeof (json as { error?: unknown }).error !== "object" ||
+    (json as { error?: unknown }).error === null
+  ) {
+    return null;
+  }
+
+  const error = (json as { error: Record<string, unknown> }).error;
+  const code = typeof error.code === "number" ? error.code : undefined;
+  const errorSubcode =
+    typeof error.error_subcode === "number" ? error.error_subcode : undefined;
+  const message =
+    typeof error.message === "string"
+      ? error.message
+      : typeof error.error_user_msg === "string"
+        ? error.error_user_msg
+        : undefined;
+
+  return { code, errorSubcode, message };
+}
+
+async function registerRecipientInSandbox(
+  userId: string,
+  accessToken: string,
+  phoneNumberId: string,
+  normalizedPhone: string,
+): Promise<boolean> {
+  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/registered_senders`;
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), META_API_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        phone_number: normalizedPhone,
+      }),
+      signal: ctrl.signal,
+    });
+
+    if (!res.ok) {
+      let details: unknown = null;
+      try {
+        details = await res.json();
+      } catch {
+        // ignore JSON parse errors
+      }
+      console.error("Failed to add phone number to WhatsApp allow list", {
+        userId,
+        status: res.status,
+        details,
+      });
+      return false;
+    }
+
+    console.log("Registered WhatsApp recipient in sandbox allow list", {
+      userId,
+      phoneNumberId,
+      recipient: normalizedPhone,
+    });
+    return true;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      console.warn("Timed out while registering WhatsApp recipient", { userId });
+    } else {
+      console.error("Unexpected error while registering WhatsApp recipient", {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function attemptSendMessage(
+  options: {
+    userId: string;
+    accessToken: string;
+    phoneNumberId: string;
+    messageBody: Record<string, unknown>;
+    normalizedTo: string;
+  },
+  attempt = 1,
+): Promise<SendMessageResult> {
+  const { userId, accessToken, phoneNumberId, messageBody, normalizedTo } =
+    options;
+  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`;
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), META_API_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ...messageBody,
+        messaging_product: "whatsapp",
+      }),
+      signal: ctrl.signal,
+    });
+
+    const raw = await res.text().catch(() => "");
+    let json: unknown;
+    if (raw) {
+      try {
+        json = JSON.parse(raw);
+      } catch {
+        json = undefined;
+      }
+    }
+
+    if (!res.ok) {
+      const metaError = extractMetaErrorDetails(json);
+
+      if (
+        attempt === 1 &&
+        res.status === 400 &&
+        metaError?.code === 131030 &&
+        (await registerRecipientInSandbox(
+          userId,
+          accessToken,
+          phoneNumberId,
+          normalizedTo,
+        ))
+      ) {
+        console.warn(
+          "Recipient phone number not in WhatsApp allow list. Retrying after registration.",
+          { userId, recipient: normalizedTo },
+        );
+        return attemptSendMessage(options, attempt + 1);
+      }
+
+      const errorPayload = json as
+        | { error?: { message?: string; error_user_msg?: string } }
+        | undefined;
+      const graphMessage =
+        errorPayload?.error?.error_user_msg ?? errorPayload?.error?.message;
+      const fallback = raw || res.statusText || "Meta API request failed";
+      const errorMessage = graphMessage?.trim().length
+        ? graphMessage
+        : fallback;
+
+      const lowerMessage = errorMessage?.toLowerCase() ?? "";
+      const isAccessTokenError =
+        res.status === 401 ||
+        ((res.status === 400 || res.status === 403) &&
+          (lowerMessage.includes("access token") ||
+            lowerMessage.includes("session has expired")));
+
+      const normalizedError = isAccessTokenError
+        ? "Meta access token expired. Please reconnect WhatsApp in Settings."
+        : errorMessage;
+
+      console.error("Error sending message:", res.status, errorMessage);
+      return {
+        success: false,
+        status: res.status,
+        error: normalizedError,
+        details: json,
+      };
+    }
+
+    const response = json as
+      | {
+          messages?: Array<{ id?: string }>;
+          contacts?: Array<{ wa_id?: string }>;
+        }
+      | undefined;
+    const messageId =
+      response?.messages?.find((m) => typeof m?.id === "string")?.id ?? null;
+
+    return { success: true, messageId };
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      console.error("Error sending message: request timeout");
+      return { success: false, error: "Request to Meta timed out" };
+    }
+    console.error("Error sending message:", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Unknown error while sending message",
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function sendMessage(
   userId: string,
   to: string,
@@ -1170,18 +1380,11 @@ export async function sendMessage(
     return { success: false, error: errorMessage };
   }
 
-  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`;
-  const headers = {
-    Authorization: `Bearer ${accessToken}`,
-    "Content-Type": "application/json",
-  };
-
   // Construcción del cuerpo según tipo
   let body: Record<string, unknown> | undefined;
   switch (message.type) {
     case "text":
       body = {
-        messaging_product: "whatsapp",
         recipient_type: "individual",
         to: normalizedTo,
         type: "text",
@@ -1218,7 +1421,6 @@ export async function sendMessage(
       }
 
       body = {
-        messaging_product: "whatsapp",
         recipient_type: "individual",
         to: normalizedTo,
         type: mType,
@@ -1237,7 +1439,6 @@ export async function sendMessage(
       }));
 
       body = {
-        messaging_product: "whatsapp",
         recipient_type: "individual",
         to: normalizedTo,
         type: "interactive",
@@ -1257,7 +1458,6 @@ export async function sendMessage(
       // WhatsApp limita a 3 botones. Recortamos si es necesario.
       const opts = (message.options || []).slice(0, 3);
       body = {
-        messaging_product: "whatsapp",
         recipient_type: "individual",
         to: normalizedTo,
         type: "interactive",
@@ -1321,7 +1521,6 @@ export async function sendMessage(
       }
 
       body = {
-        messaging_product: "whatsapp",
         recipient_type: "individual",
         to: normalizedTo,
         type: "interactive",
@@ -1400,7 +1599,6 @@ export async function sendMessage(
       }
 
       body = {
-        messaging_product: "whatsapp",
         recipient_type: "individual",
         to: normalizedTo,
         type: "template",
@@ -1410,83 +1608,16 @@ export async function sendMessage(
     }
   }
 
-  // Llamada con timeout/abort
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), META_API_TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body ?? {}),
-      signal: ctrl.signal,
-    });
+  const messageBody = body ?? {};
 
-    const raw = await res.text().catch(() => "");
-    let json: unknown;
-
-    if (raw) {
-      try {
-        json = JSON.parse(raw);
-      } catch {
-        json = undefined;
-      }
-    }
-
-    if (!res.ok) {
-      const errorPayload = json as
-        | { error?: { message?: string; error_user_msg?: string } }
-        | undefined;
-      const graphMessage =
-        errorPayload?.error?.error_user_msg ?? errorPayload?.error?.message;
-      const fallback = raw || res.statusText || "Meta API request failed";
-      const errorMessage = graphMessage?.trim().length
-        ? graphMessage
-        : fallback;
-
-      const lowerMessage = errorMessage?.toLowerCase() ?? "";
-      const isAccessTokenError =
-        res.status === 401 ||
-        ((res.status === 400 || res.status === 403) &&
-          (lowerMessage.includes("access token") ||
-            lowerMessage.includes("session has expired")));
-
-      const normalizedError = isAccessTokenError
-        ? "Meta access token expired. Please reconnect WhatsApp in Settings."
-        : errorMessage;
-
-      console.error("Error sending message:", res.status, errorMessage);
-      return {
-        success: false,
-        status: res.status,
-        error: normalizedError,
-        details: json,
-      };
-    }
-
-    const response = json as
-      | {
-          messages?: Array<{ id?: string }>;
-          contacts?: Array<{ wa_id?: string }>;
-        }
-      | undefined;
-    const messageId =
-      response?.messages?.find((m) => typeof m?.id === "string")?.id ?? null;
-
-    return { success: true, messageId };
-  } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
-      console.error("Error sending message: request timeout");
-      return { success: false, error: "Request to Meta timed out" };
-    }
-    console.error("Error sending message:", error);
-    return {
-      success: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : "Unknown error while sending message",
-    };
-  } finally {
-    clearTimeout(t);
-  }
+  return attemptSendMessage(
+    {
+      userId,
+      accessToken,
+      phoneNumberId,
+      messageBody,
+      normalizedTo,
+    },
+    1,
+  );
 }
