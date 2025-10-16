@@ -7,7 +7,10 @@ import {
   normalizeMultiValue,
   resolveDateRange,
 } from "@/lib/dashboard/filters";
-import { isSentLogStatus } from "@/lib/dashboard/statuses";
+import {
+  isReceivedLogStatus,
+  isSentLogStatus,
+} from "@/lib/dashboard/statuses";
 
 const SESSION_STATUSES = new Set(["Active", "Paused", "Completed", "Errored"]);
 
@@ -106,13 +109,15 @@ export async function GET(request: Request) {
       if (entry) {
         if (isSentLogStatus(log.status)) {
           entry.sent += 1;
+        } else if (isReceivedLogStatus(log.status)) {
+          entry.received += 1;
         } else {
           entry.received += 1;
         }
         entry.total = entry.sent + entry.received;
       } else {
         const sent = isSentLogStatus(log.status) ? 1 : 0;
-        const received = sent ? 0 : 1;
+        const received = isReceivedLogStatus(log.status) ? 1 : sent ? 0 : 1;
         channelMap.set(channelLabel, {
           channel: channelLabel,
           sent,

@@ -3,7 +3,10 @@ import type { Prisma } from "@prisma/client";
 
 import { getAuthPayload } from "@/lib/auth";
 import prisma from "@/lib/prisma";
-import { isSentLogStatus } from "@/lib/dashboard/statuses";
+import {
+  isReceivedLogStatus,
+  isSentLogStatus,
+} from "@/lib/dashboard/statuses";
 
 const DEFAULT_LIMIT = 15;
 const MAX_LIMIT = 50;
@@ -152,7 +155,15 @@ function normalizeDirection(value: string | null, status: string | null):
     return "outbound";
   }
 
-  return status ? "inbound" : "unknown";
+  if (isReceivedLogStatus(status ?? undefined)) {
+    return "inbound";
+  }
+
+  if (status) {
+    return "system";
+  }
+
+  return "unknown";
 }
 
 function extractMetadata(context: Prisma.JsonValue | null) {
