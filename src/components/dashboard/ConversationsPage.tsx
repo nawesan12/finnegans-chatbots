@@ -447,14 +447,14 @@ const ConversationsPage: React.FC = () => {
                     </div>
                     <Button
                       variant="outline"
-                      size="xs"
+                      size="sm"
                       onClick={(event) => {
                         event.stopPropagation();
                         router.push(
                           `/dashboard/conversations/${conversation.contactId}`,
                         );
                       }}
-                      className="ml-auto whitespace-nowrap"
+                      className="ml-auto whitespace-nowrap text-xs"
                     >
                       Abrir conversación
                     </Button>
