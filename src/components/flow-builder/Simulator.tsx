@@ -34,6 +34,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import type { FlowEdge, FlowNode } from "./types";
 import { isNodeOfType } from "./types";
+import { safeStructuredClone } from "@/lib/safe-clone";
 
 type LogEntryBase =
   | { type: "user"; text: string }
@@ -253,7 +254,7 @@ export function Simulator({
   const applyInitialContext = useCallback(() => {
     const parsed = parseInitialContext();
     if (!parsed) return;
-    const nextContext: SimContext = { vars: structuredClone(parsed) };
+    const nextContext: SimContext = { vars: safeStructuredClone(parsed) };
     contextRef.current = nextContext;
     setContext(nextContext);
     addLog({
@@ -365,7 +366,7 @@ export function Simulator({
             if (typeof key === "string" && key.trim()) {
               const value = tpl(rawValue, runtimeContext);
               setContext((prev) => {
-                const nextVars = structuredClone(prev.vars) as Record<
+                const nextVars = safeStructuredClone(prev.vars) as Record<
                   string,
                   unknown
                 >;
@@ -619,7 +620,7 @@ export function Simulator({
             shouldClearInput = false;
             return;
           }
-          const initial: SimContext = { vars: structuredClone(base) };
+          const initial: SimContext = { vars: safeStructuredClone(base) };
           contextRef.current = initial;
           setContext(initial);
           const msgLc = messageToSend.toLowerCase();
@@ -662,7 +663,9 @@ export function Simulator({
     setIsPaused(false);
     setPausedNode(null);
     const base = parseInitialContext({ silent: true });
-    const initial = { vars: structuredClone(base ?? {}) } satisfies SimContext;
+    const initial = {
+      vars: safeStructuredClone(base ?? {}),
+    } satisfies SimContext;
     contextRef.current = initial;
     setContext(initial);
     setInput(selectedTriggerKeyword || "/start");
