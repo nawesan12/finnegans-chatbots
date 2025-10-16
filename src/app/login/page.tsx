@@ -23,12 +23,20 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [acceptedPolicies, setAcceptedPolicies] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { setUser } = useAuthStore();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) {
+      return;
+    }
+
+    if (!acceptedPolicies) {
+      toast.error(
+        "Debes aceptar la Política de Privacidad y los Términos y Condiciones para continuar.",
+      );
       return;
     }
 
@@ -182,6 +190,34 @@ export default function LoginPage() {
                 </div>
               </CardContent>
               <CardFooter className="flex flex-col gap-4 p-0">
+                <div className="flex items-start gap-3 text-left text-xs text-[#04102D]/70">
+                  <input
+                    id="login-legal"
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 rounded border border-[#04102D]/30 text-[#04102D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4BC3FE] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                    checked={acceptedPolicies}
+                    onChange={(event) => setAcceptedPolicies(event.target.checked)}
+                    disabled={isSubmitting}
+                    required
+                  />
+                  <label htmlFor="login-legal" className="leading-relaxed">
+                    Confirmo que he leído y acepto la{" "}
+                    <Link
+                      href="/politica-de-privacidad"
+                      className="font-semibold text-[#04102D] underline decoration-[#4BC3FE] decoration-2 underline-offset-4 hover:text-[#4BC3FE]"
+                    >
+                      Política de Privacidad
+                    </Link>{" "}
+                    y los{" "}
+                    <Link
+                      href="/terminos-y-condiciones"
+                      className="font-semibold text-[#04102D] underline decoration-[#4BC3FE] decoration-2 underline-offset-4 hover:text-[#4BC3FE]"
+                    >
+                      Términos y Condiciones
+                    </Link>
+                    .
+                  </label>
+                </div>
                 <Button
                   type="submit"
                   className="h-12 w-full items-center justify-center gap-2 rounded-full bg-[#04102D] text-base font-semibold text-white transition hover:bg-[#04102D]/90"

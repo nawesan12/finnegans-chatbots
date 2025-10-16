@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -23,6 +24,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [acceptedPolicies, setAcceptedPolicies] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -38,6 +40,13 @@ export default function RegisterPage() {
 
     if (password !== confirmPassword) {
       toast.error("Las contraseñas no coinciden.");
+      return;
+    }
+
+    if (!acceptedPolicies) {
+      toast.error(
+        "Debes aceptar la Política de Privacidad y los Términos y Condiciones para continuar.",
+      );
       return;
     }
 
@@ -218,6 +227,34 @@ export default function RegisterPage() {
                 </div>
               </CardContent>
               <CardFooter className="flex flex-col gap-4">
+                <div className="flex items-start gap-3 text-left text-xs text-[#04102D]/70">
+                  <input
+                    id="register-legal"
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 rounded border border-[#04102D]/30 text-[#04102D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4BC3FE] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+                    checked={acceptedPolicies}
+                    onChange={(event) => setAcceptedPolicies(event.target.checked)}
+                    disabled={isSubmitting}
+                    required
+                  />
+                  <label htmlFor="register-legal" className="leading-relaxed">
+                    Confirmo que he leído y acepto la{" "}
+                    <Link
+                      href="/politica-de-privacidad"
+                      className="font-semibold text-[#04102D] underline decoration-[#4BC3FE] decoration-2 underline-offset-4 hover:text-[#4BC3FE]"
+                    >
+                      Política de Privacidad
+                    </Link>{" "}
+                    y los{" "}
+                    <Link
+                      href="/terminos-y-condiciones"
+                      className="font-semibold text-[#04102D] underline decoration-[#4BC3FE] decoration-2 underline-offset-4 hover:text-[#4BC3FE]"
+                    >
+                      Términos y Condiciones
+                    </Link>
+                    .
+                  </label>
+                </div>
                 <Button
                   type="submit"
                   className="h-12 w-full rounded-full bg-[#4BC3FE] text-base font-semibold text-[#04102D] hover:bg-[#3EB6F1]"
