@@ -148,6 +148,12 @@ const QUICK_LINKS: SearchResultItem[] = [
     subtitle: "Segmenta audiencias y revisa historiales",
   },
   {
+    id: "quick-conversations",
+    href: "/dashboard/conversations",
+    title: "Conversaciones",
+    subtitle: "Gestiona tu inbox sin salir del panel",
+  },
+  {
     id: "quick-broadcasts",
     href: "/dashboard/broadcasts",
     title: "Campañas masivas",
