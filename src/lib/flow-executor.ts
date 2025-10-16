@@ -169,6 +169,13 @@ type FlowRuntimeContext = {
   handoffQueue?: string;
   handoffNote?: string;
   endReason?: string;
+  pendingWhatsAppFlow?: {
+    header: string | null;
+    body: string;
+    footer: string | null;
+    cta: string | null;
+    generatedAt: string;
+  } | null;
 };
 
 const DEFAULT_TRIGGER_KEYWORD = "default";
@@ -268,9 +275,6 @@ export async function executeFlow(
       definition: unknown;
       userId: string;
       name: string;
-      metaFlowId?: string | null;
-      metaFlowToken?: string | null;
-      metaFlowVersion?: string | null;
     };
     contact: { phone: string };
   },
@@ -1017,54 +1021,20 @@ export async function executeFlow(
             );
           }
 
-          const metaFlowId = session.flow.metaFlowId?.trim() ?? null;
-          const metaFlowToken = session.flow.metaFlowToken?.trim() ?? null;
-          const metaFlowVersion = session.flow.metaFlowVersion?.trim() ?? undefined;
-
-          if (!metaFlowId || !metaFlowToken) {
-            throw new FlowSendMessageError(
-              "Flow is not synchronized with Meta. Save the flow to sync identifiers.",
-              400,
-            );
-          }
-
-          const sendResult = await sendMessage(
-            session.flow.userId,
-            session.contact.phone,
-            {
-              type: "flow",
-              flow: {
-                name: session.flow.name,
-                id: metaFlowId,
-                token: metaFlowToken,
-                version: metaFlowVersion,
-                header: headerText || undefined,
-                body: bodyText,
-                footer: footerText || undefined,
-                cta: ctaText || undefined,
-              },
-            },
-          );
-
-          if (!sendResult?.success) {
-            console.error(
-              "Failed to send WhatsApp Flow message to",
-              session.contact.phone,
-              sendResult?.error ?? "",
-            );
-            const message =
-              sendResult?.error?.trim().length
-                ? sendResult.error
-                : "Failed to send WhatsApp Flow message";
-            throw new FlowSendMessageError(message, sendResult?.status);
-          }
-
           recordOutbound("flow", {
             header: headerText,
             body: bodyText,
             footer: footerText,
             cta: ctaText,
           });
+
+          context.pendingWhatsAppFlow = {
+            header: headerText || null,
+            body: bodyText,
+            footer: footerText || null,
+            cta: ctaText || null,
+            generatedAt: nowIso(),
+          };
           break;
         }
 
