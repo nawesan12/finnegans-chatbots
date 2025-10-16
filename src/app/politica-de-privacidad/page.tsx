@@ -9,6 +9,12 @@ export const metadata: Metadata = {
     "Conocé cómo Finnegans Chatbots gestiona, protege y utiliza los datos personales en cumplimiento con la normativa vigente en Latinoamérica.",
 };
 
+type PolicySection = {
+  title: string;
+  paragraphs: readonly string[];
+  items?: readonly string[];
+};
+
 const policySections = [
   {
     title: "1. Responsable del tratamiento",
@@ -90,7 +96,7 @@ const policySections = [
       "Si tenés preguntas adicionales, inquietudes o reclamos relacionados con esta política, podés escribirnos a hello@finnegans.com o completar el formulario de contacto disponible en nuestro sitio.",
     ],
   },
-] as const;
+] as const satisfies readonly PolicySection[];
 
 export default function PoliticaDePrivacidadPage() {
   return (
@@ -142,9 +148,9 @@ export default function PoliticaDePrivacidadPage() {
                   {paragraph}
                 </p>
               ))}
-              {section.items ? (
+              {"items" in section ? (
                 <ul className="list-disc space-y-2 pl-6 text-[#04102D]/70">
-                  {section.items.map((item) => (
+                  {section.items?.map((item) => (
                     <li key={item}>{item}</li>
                   ))}
                 </ul>
