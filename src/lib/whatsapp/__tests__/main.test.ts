@@ -208,6 +208,65 @@ describe("WhatsApp Integration", () => {
       });
     });
 
+    it("should surface command metadata from interactive messages", async () => {
+      const webhookEvent = {
+        object: "whatsapp_business_account",
+        entry: [
+          {
+            changes: [
+              {
+                field: "messages",
+                value: {
+                  messaging_product: "whatsapp",
+                  metadata: { phone_number_id: "123456789" },
+                  messages: [
+                    {
+                      id: "msg-3",
+                      from: "1122334455",
+                      type: "interactive",
+                      interactive: {
+                        type: "command",
+                        command: {
+                          id: "help_command",
+                          command: "/help",
+                          title: "Help",
+                        },
+                      },
+                    },
+                  ],
+                  contacts: [
+                    {
+                      wa_id: "1122334455",
+                      profile: { name: "Command User" },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      (prisma.user.findFirst as jest.Mock).mockResolvedValue(mockUser);
+      (prisma.contact.upsert as jest.Mock).mockResolvedValue(mockContact);
+      (prisma.session.findFirst as jest.Mock).mockResolvedValue(mockSession);
+
+      await processWebhookEvent(webhookEvent);
+
+      expect(executeFlow).toHaveBeenCalled();
+      const [_, message, __, incomingMeta] = (executeFlow as jest.Mock).mock.calls[0];
+      expect(message).toBe("Help");
+      expect(incomingMeta).toEqual({
+        type: "interactive",
+        rawText: "Help",
+        interactive: {
+          type: "command",
+          id: "help_command",
+          title: "Help",
+        },
+      });
+    });
+
     it("should resume the most recent WhatsApp session without rematching flows", async () => {
       const webhookEvent = {
         object: "whatsapp_business_account",

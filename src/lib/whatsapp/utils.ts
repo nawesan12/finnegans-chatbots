@@ -1,5 +1,6 @@
 import type { Flow } from "@prisma/client";
 import {
+  WACommand,
   WAMessage,
   WAStatusError,
 } from "@/lib/whatsapp/types";
@@ -27,6 +28,71 @@ export const normalizePhone = (value?: string | null): string | null => {
   if (!value) return null;
   const digits = value.replace(/[^0-9]/g, "");
   return digits.length ? digits : null;
+};
+
+const pickString = (value: unknown): string | null => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : null;
+};
+
+const findFirstMatchingField = (
+  source: WACommand | null | undefined,
+  fields: string[],
+): string | null => {
+  if (!source) return null;
+  const record = source as Record<string, unknown>;
+  for (const field of fields) {
+    const candidate = pickString(record[field]);
+    if (candidate) return candidate;
+  }
+  return null;
+};
+
+const findMatchingByPredicate = (
+  source: WACommand | null | undefined,
+  predicate: (key: string) => boolean,
+): string | null => {
+  if (!source) return null;
+  for (const [key, value] of Object.entries(source)) {
+    if (!predicate(key)) continue;
+    const candidate = pickString(value);
+    if (candidate) return candidate;
+  }
+  return null;
+};
+
+export const extractCommandIdentifier = (
+  command?: WACommand | null,
+): string | null => {
+  return (
+    findFirstMatchingField(command, ["id", "command", "name"]) ??
+    findMatchingByPredicate(command, (key) => key.toLowerCase().includes("id"))
+  );
+};
+
+export const extractCommandLabel = (command?: WACommand | null): string | null => {
+  return (
+    findFirstMatchingField(command, [
+      "title",
+      "text",
+      "label",
+      "button_text",
+      "button_label",
+      "display_text",
+      "command",
+      "name",
+    ]) ??
+    findMatchingByPredicate(command, (key) => {
+      const lowered = key.toLowerCase();
+      return (
+        lowered.includes("title") ||
+        lowered.includes("label") ||
+        lowered.includes("text") ||
+        lowered.includes("name")
+      );
+    })
+  );
 };
 
 const stripDiacritics = (value: string) =>
@@ -124,17 +190,45 @@ export const findBestMatchingFlow = (flows: Flow[], context: FlowMatchContext) =
 
 export function extractUserText(msg: WAMessage): string | null {
   if (!msg) return null;
+
+  const interactiveCommand =
+    msg.interactive?.type === "command" ? msg.interactive?.command : null;
+  const commandSource = interactiveCommand ?? msg.command ?? null;
+  const commandLabel = extractCommandLabel(commandSource);
+  const commandIdentifier = extractCommandIdentifier(commandSource);
+
   switch (msg.type) {
-    case "text":
-      return msg.text?.body?.trim() || null;
-    case "interactive":
-      return (
-        msg.interactive?.button_reply?.title ||
-        msg.interactive?.list_reply?.title ||
-        null
-      );
-    default:
+    case "text": {
+      const body = msg.text?.body?.trim();
+      if (body) return body;
+      if (commandLabel) return commandLabel;
+      return commandIdentifier ?? null;
+    }
+    case "interactive": {
+      if (msg.interactive?.type === "command") {
+        if (commandLabel) return commandLabel;
+        if (commandIdentifier) return commandIdentifier;
+        const body = msg.text?.body?.trim();
+        return body ?? "[command]";
+      }
+      const buttonTitle = msg.interactive?.button_reply?.title;
+      if (buttonTitle?.trim()) return buttonTitle.trim();
+      const listTitle = msg.interactive?.list_reply?.title;
+      if (listTitle?.trim()) return listTitle.trim();
+      if (commandLabel) return commandLabel;
+      return commandIdentifier ?? null;
+    }
+    case "command": {
+      if (commandLabel) return commandLabel;
+      if (commandIdentifier) return commandIdentifier;
+      const body = msg.text?.body?.trim();
+      return body ?? "[command]";
+    }
+    default: {
+      if (commandLabel) return commandLabel;
+      if (commandIdentifier) return commandIdentifier;
       return `[${msg.type ?? "unknown"}]`;
+    }
   }
 }
 

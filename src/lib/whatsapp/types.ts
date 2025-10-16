@@ -19,6 +19,7 @@ export type WAMessageType =
   | "audio"
   | "document"
   | "sticker"
+  | "command"
   | "unknown";
 
 export interface WAButtonReply {
@@ -32,10 +33,26 @@ export interface WAListReply {
   description?: string;
 }
 
+export interface WACommand {
+  id?: string | null;
+  command?: string | null;
+  name?: string | null;
+  title?: string | null;
+  description?: string | null;
+  text?: string | null;
+  label?: string | null;
+  button_label?: string | null;
+  button_text?: string | null;
+  display_text?: string | null;
+  payload?: unknown;
+  [key: string]: unknown;
+}
+
 export interface WAInteractive {
-  type: "button" | "list";
+  type?: string | null;
   button_reply?: WAButtonReply;
   list_reply?: WAListReply;
+  command?: WACommand;
 }
 
 export interface WAMedia {
@@ -59,9 +76,10 @@ export interface WAMessage {
   id: string;
   from: string;
   timestamp?: string;
-  type?: WAMessageType;
+  type?: WAMessageType | string | null;
   text?: { body?: string };
   interactive?: WAInteractive;
+  command?: WACommand;
   image?: WAImage;
   video?: WAVideo;
   audio?: WAAudio;

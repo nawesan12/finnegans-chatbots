@@ -17,6 +17,8 @@ import {
   BROADCAST_FAILURE_STATUSES,
   BROADCAST_SUCCESS_STATUSES,
   extractStatusError,
+  extractCommandIdentifier,
+  extractCommandLabel,
   extractUserText,
   findBestMatchingFlow,
   isWhatsappChannel,
@@ -277,13 +279,21 @@ async function handleIncomingMessage(
     });
     const filteredFlows = availableFlows.filter((f) => isWhatsappChannel(f.channel));
 
+    const interactiveCommand =
+      msg.interactive?.type === "command" ? msg.interactive?.command : null;
+    const commandSource = interactiveCommand ?? msg.command ?? null;
+    const commandLabel = extractCommandLabel(commandSource);
+    const commandIdentifier = extractCommandIdentifier(commandSource);
+
     const interactiveTitle =
       msg.interactive?.button_reply?.title ||
       msg.interactive?.list_reply?.title ||
+      commandLabel ||
       null;
     const interactiveId =
       msg.interactive?.button_reply?.id ||
       msg.interactive?.list_reply?.id ||
+      commandIdentifier ||
       null;
 
     flow = findBestMatchingFlow(filteredFlows, {
@@ -327,12 +337,24 @@ async function handleIncomingMessage(
     message,
   ) => sendMessage(user.id, to, message);
 
-  const interactiveType = msg.interactive?.type ?? null;
+  const interactiveCommand =
+    msg.interactive?.type === "command" ? msg.interactive?.command : null;
+  const commandSource = interactiveCommand ?? msg.command ?? null;
+  const commandLabel = extractCommandLabel(commandSource);
+  const commandIdentifier = extractCommandIdentifier(commandSource);
+
+  const interactiveType =
+    msg.interactive?.type ??
+    (msg.type === "command" && commandSource ? "command" : null);
   const interactiveId =
-    msg.interactive?.button_reply?.id || msg.interactive?.list_reply?.id || null;
+    msg.interactive?.button_reply?.id ||
+    msg.interactive?.list_reply?.id ||
+    commandIdentifier ||
+    null;
   const interactiveTitle =
     msg.interactive?.button_reply?.title ||
     msg.interactive?.list_reply?.title ||
+    commandLabel ||
     null;
 
   const incomingMeta = {
@@ -340,6 +362,7 @@ async function handleIncomingMessage(
     rawText:
       msg.text?.body ??
       interactiveTitle ??
+      commandLabel ??
       (typeof msg.type === "string" && msg.type !== "text" ? userText : null) ??
       userText,
     interactive:
