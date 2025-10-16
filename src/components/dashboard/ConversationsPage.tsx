@@ -9,20 +9,34 @@ import React, {
 import {
   ArrowLeft,
   Clock3,
+  Copy,
+  Download,
+  Filter,
   Loader2,
   MessageCircle,
   Phone,
   RefreshCw,
   Search,
+  SortDesc,
   UserRound,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import PageHeader from "@/components/dashboard/PageHeader";
+import FilterMultiSelect from "@/components/dashboard/FilterMultiSelect";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import {
   UnauthorizedError,
@@ -56,6 +70,10 @@ const relativeTimeFormatter = new Intl.RelativeTimeFormat("es-AR", {
 const absoluteTimeFormatter = new Intl.DateTimeFormat("es-AR", {
   dateStyle: "medium",
   timeStyle: "short",
+});
+
+const messageDayFormatter = new Intl.DateTimeFormat("es-AR", {
+  dateStyle: "full",
 });
 
 function formatRelativeTime(value: string): string {
@@ -101,6 +119,11 @@ const ConversationsPage: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [showUnreadOnly, setShowUnreadOnly] = useState(false);
+  const [selectedFlowIds, setSelectedFlowIds] = useState<string[]>([]);
+  const [sortOption, setSortOption] = useState<
+    "recent" | "oldest" | "alphabetical"
+  >("recent");
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(
     null,
   );
@@ -166,6 +189,106 @@ const ConversationsPage: React.FC = () => {
     }
   }, [conversations, loading]);
 
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+
+  const flowOptions = useMemo(() => {
+    const registry = new Map<string, string>();
+    conversations.forEach((conversation) => {
+      conversation.flows.forEach((flow) => {
+        if (!registry.has(flow.id)) {
+          registry.set(flow.id, flow.name);
+        }
+      });
+    });
+    return Array.from(registry.entries()).map(([value, label]) => ({
+      value,
+      label,
+    }));
+  }, [conversations]);
+
+  const filteredConversations = useMemo(() => {
+    const matchesSearch = (conversation: ConversationSummary) => {
+      if (!normalizedSearch) {
+        return true;
+      }
+      const values = [
+        conversation.contactName ?? "",
+        conversation.contactPhone,
+        conversation.lastMessage,
+        ...conversation.flows.map((flow) => flow.name),
+      ];
+      return values.some((value) =>
+        value.toLowerCase().includes(normalizedSearch),
+      );
+    };
+
+    const matchesUnread = (conversation: ConversationSummary) => {
+      if (!showUnreadOnly) {
+        return true;
+      }
+      return conversation.unreadCount > 0;
+    };
+
+    const matchesFlows = (conversation: ConversationSummary) => {
+      if (!selectedFlowIds.length) {
+        return true;
+      }
+      return conversation.flows.some((flow) =>
+        selectedFlowIds.includes(flow.id),
+      );
+    };
+
+    const filtered = conversations.filter(
+      (conversation) =>
+        matchesSearch(conversation) &&
+        matchesUnread(conversation) &&
+        matchesFlows(conversation),
+    );
+
+    const sorted = [...filtered].sort((first, second) => {
+      if (sortOption === "alphabetical") {
+        const firstLabel = (first.contactName ?? first.contactPhone).toLowerCase();
+        const secondLabel = (second.contactName ?? second.contactPhone).toLowerCase();
+        return firstLabel.localeCompare(secondLabel, "es");
+      }
+
+      const firstTime = new Date(first.lastActivity).getTime();
+      const secondTime = new Date(second.lastActivity).getTime();
+
+      if (Number.isNaN(firstTime) || Number.isNaN(secondTime)) {
+        return 0;
+      }
+
+      return sortOption === "recent"
+        ? secondTime - firstTime
+        : firstTime - secondTime;
+    });
+
+    return sorted;
+  }, [
+    conversations,
+    normalizedSearch,
+    selectedFlowIds,
+    showUnreadOnly,
+    sortOption,
+  ]);
+
+  const selectedConversation = useMemo(() => {
+    if (!filteredConversations.length) {
+      return null;
+    }
+
+    if (selectedConversationId === null) {
+      return null;
+    }
+
+    const match = filteredConversations.find(
+      (item) => item.contactId === selectedConversationId,
+    );
+
+    return match ?? filteredConversations[0];
+  }, [filteredConversations, selectedConversationId]);
+
   useEffect(() => {
     if (!filteredConversations.length) {
       return;
@@ -184,39 +307,33 @@ const ConversationsPage: React.FC = () => {
     }
   }, [filteredConversations, selectedConversationId]);
 
-  const normalizedSearch = searchTerm.trim().toLowerCase();
-  const filteredConversations = useMemo(() => {
-    if (!normalizedSearch) {
-      return conversations;
-    }
-    return conversations.filter((conversation) => {
-      const values = [
-        conversation.contactName ?? "",
-        conversation.contactPhone,
-        conversation.lastMessage,
-        ...conversation.flows.map((flow) => flow.name),
-      ];
-      return values.some((value) =>
-        value.toLowerCase().includes(normalizedSearch),
-      );
+  const totalUnreadCount = useMemo(
+    () =>
+      conversations.reduce(
+        (counter, conversation) => counter + conversation.unreadCount,
+        0,
+      ),
+    [conversations],
+  );
+
+  const distinctFlowCount = useMemo(() => {
+    const unique = new Set<string>();
+    conversations.forEach((conversation) => {
+      conversation.flows.forEach((flow) => unique.add(flow.id));
     });
-  }, [conversations, normalizedSearch]);
+    return unique.size;
+  }, [conversations]);
 
-  const selectedConversation = useMemo(() => {
-    if (!filteredConversations.length) {
-      return null;
+  const averageMessagesPerConversation = useMemo(() => {
+    if (!conversations.length) {
+      return 0;
     }
-
-    if (selectedConversationId === null) {
-      return null;
-    }
-
-    const match = filteredConversations.find(
-      (item) => item.contactId === selectedConversationId,
+    const totalMessages = conversations.reduce(
+      (counter, conversation) => counter + conversation.messages.length,
+      0,
     );
-
-    return match ?? filteredConversations[0];
-  }, [filteredConversations, selectedConversationId]);
+    return Number((totalMessages / conversations.length).toFixed(1));
+  }, [conversations]);
 
   const handleRefresh = () => {
     void fetchConversations("refresh");
@@ -224,6 +341,8 @@ const ConversationsPage: React.FC = () => {
 
   const handleClearFilters = () => {
     setSearchTerm("");
+    setShowUnreadOnly(false);
+    setSelectedFlowIds([]);
   };
 
   const renderMessage = (message: ConversationMessage) => {
@@ -279,6 +398,116 @@ const ConversationsPage: React.FC = () => {
     );
   };
 
+  const renderMessages = (messages: ConversationMessage[]) => {
+    if (!messages.length) {
+      return (
+        <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-slate-500">
+          <MessageCircle className="h-8 w-8 text-slate-400" aria-hidden="true" />
+          <p className="text-sm">
+            Aún no hay mensajes registrados en esta conversación.
+          </p>
+        </div>
+      );
+    }
+
+    const sortedMessages = [...messages].sort((first, second) => {
+      const firstTime = new Date(first.timestamp).getTime();
+      const secondTime = new Date(second.timestamp).getTime();
+      if (Number.isNaN(firstTime) || Number.isNaN(secondTime)) {
+        return 0;
+      }
+      return firstTime - secondTime;
+    });
+
+    const groups = sortedMessages.reduce(
+      (accumulator, message) => {
+        const dateValue = new Date(message.timestamp);
+        const key = Number.isNaN(dateValue.getTime())
+          ? "Fecha desconocida"
+          : messageDayFormatter.format(dateValue);
+        const current = accumulator.get(key) ?? [];
+        current.push(message);
+        accumulator.set(key, current);
+        return accumulator;
+      },
+      new Map<string, ConversationMessage[]>(),
+    );
+
+    return Array.from(groups.entries()).map(([label, entries]) => (
+      <div key={label} className="space-y-3">
+        <div className="sticky top-0 z-10 flex items-center justify-center">
+          <span className="inline-flex items-center rounded-full bg-white/80 px-4 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500 shadow-sm">
+            {label}
+          </span>
+        </div>
+        <div className="space-y-4">
+          {entries.map((message) => renderMessage(message))}
+        </div>
+      </div>
+    ));
+  };
+
+  useEffect(() => {
+    if (!selectedConversationId) {
+      return;
+    }
+
+    setConversations((previous) =>
+      previous.map((conversation) =>
+        conversation.contactId === selectedConversationId
+          ? { ...conversation, unreadCount: 0 }
+          : conversation,
+      ),
+    );
+  }, [selectedConversationId]);
+
+  const selectedConversationLabel = selectedConversation
+    ? selectedConversation.contactName ?? selectedConversation.contactPhone
+    : null;
+
+  const handleCopyPhone = useCallback(async () => {
+    if (!selectedConversation) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(selectedConversation.contactPhone);
+      toast.success("Número copiado al portapapeles");
+    } catch (error) {
+      toast.error("No pudimos copiar el número");
+      console.error(error);
+    }
+  }, [selectedConversation]);
+
+  const handleExportConversation = useCallback(() => {
+    if (!selectedConversation) {
+      return;
+    }
+
+    try {
+      const exportPayload = {
+        exportedAt: new Date().toISOString(),
+        conversation: selectedConversation,
+      };
+      const blob = new Blob([JSON.stringify(exportPayload, null, 2)], {
+        type: "application/json",
+      });
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const safeName =
+        selectedConversationLabel?.replace(/[^a-z0-9_-]+/gi, "-") ?? "conversacion";
+      link.href = objectUrl;
+      link.download = `${safeName}-finnegans.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+      toast.success("Descargamos el historial en formato JSON");
+    } catch (error) {
+      toast.error("No pudimos exportar la conversación");
+      console.error(error);
+    }
+  }, [selectedConversation, selectedConversationLabel]);
+
   const renderConversationList = () => {
     if (loading) {
       return (
@@ -314,8 +543,9 @@ const ConversationsPage: React.FC = () => {
                 : "Las conversaciones aparecerán automáticamente cuando tus clientes interactúen con tus flujos."}
             </p>
           </div>
-          {normalizedSearch ? (
-            <Button variant="outline" onClick={handleClearFilters}>
+          {normalizedSearch || showUnreadOnly || selectedFlowIds.length ? (
+            <Button variant="outline" onClick={handleClearFilters} className="gap-2">
+              <Filter className="h-4 w-4" aria-hidden="true" />
               Limpiar búsqueda
             </Button>
           ) : null}
@@ -352,7 +582,9 @@ const ConversationsPage: React.FC = () => {
                         {conversation.contactName ?? conversation.contactPhone}
                       </p>
                       <p className="text-xs text-slate-500">
-                        {conversation.contactName ? conversation.contactPhone : "Sin nombre registrado"}
+                        {conversation.contactName
+                          ? conversation.contactPhone
+                          : "Sin nombre registrado"}
                       </p>
                     </div>
                     <span className="text-xs text-slate-400">{lastActivityLabel}</span>
@@ -403,9 +635,56 @@ const ConversationsPage: React.FC = () => {
         }
       />
 
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+            Conversaciones totales
+          </p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900">
+            {conversations.length}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            Incluyendo conversaciones históricas y activas.
+          </p>
+        </div>
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+            Mensajes sin leer
+          </p>
+          <p className="mt-2 text-2xl font-semibold text-[#04102D]">
+            {totalUnreadCount}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            Revisa primero los contactos con actividad reciente.
+          </p>
+        </div>
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+            Flujos involucrados
+          </p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900">
+            {distinctFlowCount}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            Identifica qué flujos generan más conversaciones.
+          </p>
+        </div>
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+            Promedio de mensajes
+          </p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900">
+            {averageMessagesPerConversation}
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            Mensajes promedio por conversación.
+          </p>
+        </div>
+      </div>
+
       <div className="grid h-[calc(100vh-13rem)] gap-6 lg:grid-cols-[380px_1fr]">
         <div className="flex flex-col overflow-hidden rounded-3xl border border-slate-200 bg-slate-50">
-          <div className="border-b border-slate-200 p-4">
+          <div className="space-y-3 border-b border-slate-200 p-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <Input
@@ -414,6 +693,57 @@ const ConversationsPage: React.FC = () => {
                 placeholder="Buscar por nombre, teléfono o flujo"
                 className="h-11 rounded-2xl border-slate-200 pl-10"
               />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs">
+                <Switch
+                  id="unread-switch"
+                  checked={showUnreadOnly}
+                  onCheckedChange={(checked) => setShowUnreadOnly(Boolean(checked))}
+                />
+                <Label htmlFor="unread-switch" className="cursor-pointer text-xs font-medium text-slate-600">
+                  Solo no leídos
+                </Label>
+              </div>
+              <FilterMultiSelect
+                label="Flujos"
+                options={flowOptions}
+                selectedValues={selectedFlowIds}
+                onSelectionChange={setSelectedFlowIds}
+                disabled={!flowOptions.length}
+                className="rounded-2xl"
+              />
+              <Select
+                value={sortOption}
+                onValueChange={(value) => setSortOption(value as typeof sortOption)}
+              >
+                <SelectTrigger className="rounded-2xl border-slate-200 bg-white text-xs">
+                  <SelectValue>
+                    <span className="flex items-center gap-2">
+                      <SortDesc className="h-4 w-4" aria-hidden="true" />
+                      Orden: {sortOption === "recent"
+                        ? "Más recientes"
+                        : sortOption === "oldest"
+                          ? "Más antiguos"
+                          : "Alfabético"}
+                    </span>
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="recent">Más recientes primero</SelectItem>
+                  <SelectItem value="oldest">Más antiguos primero</SelectItem>
+                  <SelectItem value="alphabetical">Orden alfabético</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleClearFilters}
+                className="ml-auto gap-2 text-xs"
+              >
+                <Filter className="h-4 w-4" aria-hidden="true" />
+                Limpiar filtros
+              </Button>
             </div>
           </div>
           <div className="flex-1 overflow-y-auto p-4">
@@ -460,9 +790,29 @@ const ConversationsPage: React.FC = () => {
                     </div>
                   </div>
                 </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={handleCopyPhone}
+                  >
+                    <Copy className="h-4 w-4" aria-hidden="true" />
+                    Copiar número
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={handleExportConversation}
+                  >
+                    <Download className="h-4 w-4" aria-hidden="true" />
+                    Exportar JSON
+                  </Button>
+                </div>
               </div>
               <div className="flex-1 space-y-6 overflow-y-auto bg-slate-50 p-6">
-                {selectedConversation.messages.map((message) => renderMessage(message))}
+                {renderMessages(selectedConversation.messages)}
               </div>
             </>
           ) : (
@@ -502,7 +852,25 @@ const ConversationsPage: React.FC = () => {
                 </div>
               </div>
               <div className="flex-1 space-y-6 overflow-y-auto bg-slate-50 p-4">
-                {selectedConversation.messages.map((message) => renderMessage(message))}
+                {renderMessages(selectedConversation.messages)}
+              </div>
+              <div className="flex flex-col gap-2 border-t border-slate-200 p-4">
+                <Button
+                  variant="outline"
+                  onClick={handleCopyPhone}
+                  className="gap-2"
+                >
+                  <Copy className="h-4 w-4" aria-hidden="true" />
+                  Copiar número
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleExportConversation}
+                  className="gap-2"
+                >
+                  <Download className="h-4 w-4" aria-hidden="true" />
+                  Exportar historial
+                </Button>
               </div>
             </>
           ) : (
