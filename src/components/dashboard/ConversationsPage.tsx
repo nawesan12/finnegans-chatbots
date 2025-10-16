@@ -6,6 +6,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Clock3,
@@ -24,6 +25,7 @@ import { toast } from "sonner";
 
 import PageHeader from "@/components/dashboard/PageHeader";
 import FilterMultiSelect from "@/components/dashboard/FilterMultiSelect";
+import ConversationTimeline from "@/components/dashboard/conversations/ConversationTimeline";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,76 +44,8 @@ import {
   UnauthorizedError,
   authenticatedFetch,
 } from "@/lib/api-client";
-
-interface ConversationMessage {
-  id: string;
-  direction: "in" | "out" | "system";
-  type: string;
-  text: string;
-  timestamp: string;
-  metadata: string[];
-}
-
-interface ConversationSummary {
-  contactId: string;
-  contactName: string | null;
-  contactPhone: string;
-  flows: Array<{ id: string; name: string }>;
-  lastActivity: string;
-  lastMessage: string;
-  unreadCount: number;
-  messages: ConversationMessage[];
-}
-
-const relativeTimeFormatter = new Intl.RelativeTimeFormat("es-AR", {
-  numeric: "auto",
-});
-
-const absoluteTimeFormatter = new Intl.DateTimeFormat("es-AR", {
-  dateStyle: "medium",
-  timeStyle: "short",
-});
-
-const messageDayFormatter = new Intl.DateTimeFormat("es-AR", {
-  dateStyle: "full",
-});
-
-function formatRelativeTime(value: string): string {
-  const target = new Date(value);
-  const now = new Date();
-  if (Number.isNaN(target.getTime())) {
-    return "hace un momento";
-  }
-  const diffMs = target.getTime() - now.getTime();
-  const diffSeconds = Math.round(diffMs / 1000);
-  const ranges: Array<[number, Intl.RelativeTimeFormatUnit]> = [
-    [60, "second"],
-    [60, "minute"],
-    [24, "hour"],
-    [7, "day"],
-    [4.34524, "week"],
-    [12, "month"],
-    [Number.POSITIVE_INFINITY, "year"],
-  ];
-
-  let unit: Intl.RelativeTimeFormatUnit = "second";
-  let valueToFormat = diffSeconds;
-
-  for (const [step, nextUnit] of ranges) {
-    if (Math.abs(valueToFormat) < step) {
-      unit = nextUnit;
-      break;
-    }
-    valueToFormat /= step;
-  }
-
-  const rounded = Math.round(valueToFormat);
-  if (!Number.isFinite(rounded)) {
-    return "hace un momento";
-  }
-
-  return relativeTimeFormatter.format(rounded, unit);
-}
+import { formatRelativeTime } from "@/lib/conversations/formatters";
+import type { ConversationSummary } from "@/lib/conversations/types";
 
 const ConversationsPage: React.FC = () => {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -127,6 +61,7 @@ const ConversationsPage: React.FC = () => {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(
     null,
   );
+  const router = useRouter();
 
   const fetchConversations = useCallback(
     async (mode: "initial" | "refresh" = "initial") => {
@@ -345,108 +280,6 @@ const ConversationsPage: React.FC = () => {
     setSelectedFlowIds([]);
   };
 
-  const renderMessage = (message: ConversationMessage) => {
-    const dateValue = new Date(message.timestamp);
-    const timestamp = Number.isNaN(dateValue.getTime())
-      ? "Fecha desconocida"
-      : absoluteTimeFormatter.format(dateValue);
-    const metadata = Array.from(new Set(message.metadata)).filter(Boolean);
-
-    return (
-      <div
-        key={message.id}
-        className={cn(
-          "flex",
-          message.direction === "out" && "justify-end",
-          message.direction === "system" && "justify-center",
-        )}
-      >
-        <div
-          className={cn(
-            "group relative max-w-[80%] rounded-2xl border px-4 py-3 text-sm shadow-sm transition-colors",
-            message.direction === "in" &&
-              "border-slate-200 bg-white text-slate-900",
-            message.direction === "out" &&
-              "border-transparent bg-[#04102D] text-white",
-            message.direction === "system" &&
-              "border-slate-200 bg-slate-100 text-slate-700",
-          )}
-        >
-          <p className="whitespace-pre-wrap break-words leading-relaxed">
-            {message.text}
-          </p>
-          {metadata.length > 0 ? (
-            <ul className="mt-2 space-y-1 text-xs text-slate-500">
-              {metadata.map((entry) => (
-                <li key={entry} className="flex items-center gap-2">
-                  <span className="inline-flex h-1.5 w-1.5 rounded-full bg-slate-400" />
-                  <span className="break-words text-left">{entry}</span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <span
-            className={cn(
-              "mt-2 block text-[0.65rem] uppercase tracking-wider",
-              message.direction === "out" ? "text-white/70" : "text-slate-400",
-            )}
-          >
-            {timestamp}
-          </span>
-        </div>
-      </div>
-    );
-  };
-
-  const renderMessages = (messages: ConversationMessage[]) => {
-    if (!messages.length) {
-      return (
-        <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-slate-500">
-          <MessageCircle className="h-8 w-8 text-slate-400" aria-hidden="true" />
-          <p className="text-sm">
-            Aún no hay mensajes registrados en esta conversación.
-          </p>
-        </div>
-      );
-    }
-
-    const sortedMessages = [...messages].sort((first, second) => {
-      const firstTime = new Date(first.timestamp).getTime();
-      const secondTime = new Date(second.timestamp).getTime();
-      if (Number.isNaN(firstTime) || Number.isNaN(secondTime)) {
-        return 0;
-      }
-      return firstTime - secondTime;
-    });
-
-    const groups = sortedMessages.reduce(
-      (accumulator, message) => {
-        const dateValue = new Date(message.timestamp);
-        const key = Number.isNaN(dateValue.getTime())
-          ? "Fecha desconocida"
-          : messageDayFormatter.format(dateValue);
-        const current = accumulator.get(key) ?? [];
-        current.push(message);
-        accumulator.set(key, current);
-        return accumulator;
-      },
-      new Map<string, ConversationMessage[]>(),
-    );
-
-    return Array.from(groups.entries()).map(([label, entries]) => (
-      <div key={label} className="space-y-3">
-        <div className="sticky top-0 z-10 flex items-center justify-center">
-          <span className="inline-flex items-center rounded-full bg-white/80 px-4 py-1 text-xs font-semibold uppercase tracking-wide text-slate-500 shadow-sm">
-            {label}
-          </span>
-        </div>
-        <div className="space-y-4">
-          {entries.map((message) => renderMessage(message))}
-        </div>
-      </div>
-    ));
-  };
-
   useEffect(() => {
     if (!selectedConversationId) {
       return;
@@ -560,12 +393,19 @@ const ConversationsPage: React.FC = () => {
           const lastActivityLabel = formatRelativeTime(conversation.lastActivity);
 
           return (
-            <button
+            <div
               key={conversation.contactId}
-              type="button"
+              role="button"
+              tabIndex={0}
               onClick={() => setSelectedConversationId(conversation.contactId)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setSelectedConversationId(conversation.contactId);
+                }
+              }}
               className={cn(
-                "w-full rounded-2xl border p-4 text-left transition-all",
+                "w-full rounded-2xl border p-4 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4bc3fe]",
                 isActive
                   ? "border-[#4bc3fe] bg-[#e9f7ff] shadow-sm"
                   : "border-transparent bg-white hover:border-slate-200 hover:shadow-sm",
@@ -576,7 +416,7 @@ const ConversationsPage: React.FC = () => {
                   <MessageCircle className="h-5 w-5" aria-hidden="true" />
                 </div>
                 <div className="flex-1 space-y-1">
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="text-sm font-semibold text-slate-900">
                         {conversation.contactName ?? conversation.contactPhone}
@@ -592,21 +432,36 @@ const ConversationsPage: React.FC = () => {
                   <p className="line-clamp-2 text-sm text-slate-600">
                     {conversation.lastMessage || "Sin mensajes disponibles"}
                   </p>
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    {conversation.flows.map((flow) => (
-                      <Badge key={flow.id} variant="outline">
-                        {flow.name}
-                      </Badge>
-                    ))}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-3 text-xs text-slate-500">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {conversation.unreadCount > 0 ? (
+                        <Badge variant="secondary">
+                          {conversation.unreadCount} sin leer
+                        </Badge>
+                      ) : null}
+                      {conversation.flows.map((flow) => (
+                        <Badge key={flow.id} variant="outline">
+                          {flow.name}
+                        </Badge>
+                      ))}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        router.push(
+                          `/dashboard/conversations/${conversation.contactId}`,
+                        );
+                      }}
+                      className="ml-auto whitespace-nowrap"
+                    >
+                      Abrir conversación
+                    </Button>
                   </div>
                 </div>
-                {conversation.unreadCount > 0 ? (
-                  <span className="flex h-6 min-w-[1.5rem] items-center justify-center rounded-full bg-[#04102D] px-2 text-xs font-semibold text-white">
-                    {conversation.unreadCount}
-                  </span>
-                ) : null}
               </div>
-            </button>
+            </div>
           );
         })}
       </div>
@@ -812,7 +667,9 @@ const ConversationsPage: React.FC = () => {
                 </div>
               </div>
               <div className="flex-1 space-y-6 overflow-y-auto bg-slate-50 p-6">
-                {renderMessages(selectedConversation.messages)}
+                <ConversationTimeline
+                  messages={selectedConversation.messages}
+                />
               </div>
             </>
           ) : (
@@ -852,7 +709,9 @@ const ConversationsPage: React.FC = () => {
                 </div>
               </div>
               <div className="flex-1 space-y-6 overflow-y-auto bg-slate-50 p-4">
-                {renderMessages(selectedConversation.messages)}
+                <ConversationTimeline
+                  messages={selectedConversation.messages}
+                />
               </div>
               <div className="flex flex-col gap-2 border-t border-slate-200 p-4">
                 <Button
