@@ -4,6 +4,30 @@ import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { getAuthPayload } from "@/lib/auth";
 import { sanitizeFlowDefinition } from "@/lib/flow-schema";
+
+type FlowMetaFields = {
+  metaFlowId?: string | null;
+  metaFlowToken?: string | null;
+  metaFlowVersion?: string | null;
+  metaFlowRevisionId?: string | null;
+  metaFlowStatus?: string | null;
+  metaFlowMetadata?: Prisma.JsonValue | null;
+};
+
+const stripMetaFields = <T extends FlowMetaFields>(
+  flow: T,
+): Omit<T, keyof FlowMetaFields> => {
+  const {
+    metaFlowId: _metaFlowId,
+    metaFlowToken: _metaFlowToken,
+    metaFlowVersion: _metaFlowVersion,
+    metaFlowRevisionId: _metaFlowRevisionId,
+    metaFlowStatus: _metaFlowStatus,
+    metaFlowMetadata: _metaFlowMetadata,
+    ...rest
+  } = flow;
+  return rest;
+};
 const FlowPayloadSchema = z.object({
   name: z.string().min(1),
   trigger: z.string().optional(),
@@ -40,7 +64,7 @@ export async function GET(request: Request) {
         },
       },
     });
-    return NextResponse.json(flows);
+    return NextResponse.json(flows.map(stripMetaFields));
   } catch (error) {
     console.error("Error fetching flows:", error);
     return NextResponse.json(
@@ -88,12 +112,6 @@ export async function POST(request: Request) {
         status: normalizedStatus,
         definition: definitionJson,
         user: { connect: { id: auth.userId } },
-        metaFlowId: null,
-        metaFlowToken: null,
-        metaFlowVersion: null,
-        metaFlowRevisionId: null,
-        metaFlowStatus: null,
-        metaFlowMetadata: Prisma.JsonNull,
       },
       include: {
         _count: {
@@ -105,7 +123,7 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json(newFlow, { status: 201 });
+    return NextResponse.json(stripMetaFields(newFlow), { status: 201 });
   } catch (error) {
     console.error("Error creating flow:", error);
     return NextResponse.json(
