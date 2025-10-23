@@ -45,6 +45,7 @@ const EMPTY_SETTINGS = {
   metaAccessToken: "",
   metaPhoneNumberId: "",
   metaBusinessAccountId: "",
+  metaPhonePin: "",
 };
 
 type SettingsState = typeof EMPTY_SETTINGS;
@@ -55,6 +56,7 @@ const normalizeSettings = (input: Partial<SettingsState> | null | undefined) => 
   metaAccessToken: input?.metaAccessToken ?? "",
   metaPhoneNumberId: input?.metaPhoneNumberId ?? "",
   metaBusinessAccountId: input?.metaBusinessAccountId ?? "",
+  metaPhonePin: input?.metaPhonePin ?? "",
 });
 
 const SettingsPage = () => {
@@ -69,10 +71,11 @@ const SettingsPage = () => {
   const hasHydrated = useAuthStore((state) => state.hasHydrated);
   const copyResetTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [visibleSecrets, setVisibleSecrets] = useState<
-    Record<"metaAppSecret" | "metaAccessToken", boolean>
+    Record<"metaAppSecret" | "metaAccessToken" | "metaPhonePin", boolean>
   >({
     metaAppSecret: false,
     metaAccessToken: false,
+    metaPhonePin: false,
   });
 
   const fetchSettings = useCallback(async () => {
@@ -194,6 +197,13 @@ const SettingsPage = () => {
         isFilled: Boolean(settings.metaPhoneNumberId?.trim()),
       },
       {
+        key: "metaPhonePin",
+        label: "PIN de registro",
+        description:
+          "Permite registrar automáticamente tu número si Meta lo solicita.",
+        isFilled: Boolean(settings.metaPhonePin?.trim()),
+      },
+      {
         key: "metaBusinessAccountId",
         label: "Business Account ID",
         description:
@@ -205,6 +215,7 @@ const SettingsPage = () => {
       settings.metaAccessToken,
       settings.metaAppSecret,
       settings.metaBusinessAccountId,
+      settings.metaPhonePin,
       settings.metaPhoneNumberId,
       settings.metaVerifyToken,
     ],
@@ -229,7 +240,9 @@ const SettingsPage = () => {
     return `${baseUrl}/api/webhook`;
   }, []);
 
-  const toggleSecretVisibility = (field: "metaAppSecret" | "metaAccessToken") => {
+  const toggleSecretVisibility = (
+    field: "metaAppSecret" | "metaAccessToken" | "metaPhonePin",
+  ) => {
     setVisibleSecrets((prev) => ({ ...prev, [field]: !prev[field] }));
   };
 
@@ -546,6 +559,60 @@ const SettingsPage = () => {
                     <p className="text-xs text-gray-500">
                       Identificador único del número de WhatsApp que enviará los
                       mensajes. Puedes consultarlo en el panel de Meta Business.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="metaPhonePin">PIN de registro</Label>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => toggleSecretVisibility("metaPhonePin")}
+                        >
+                          {visibleSecrets.metaPhonePin ? (
+                            <>
+                              <EyeOff className="size-4" />
+                              Ocultar
+                            </>
+                          ) : (
+                            <>
+                              <Eye className="size-4" />
+                              Mostrar
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            handleCopy(
+                              settings.metaPhonePin,
+                              "PIN de registro",
+                              "metaPhonePin",
+                            )
+                          }
+                        >
+                          <Copy className="size-4" />
+                          {copiedField === "metaPhonePin" ? "Copiado" : "Copiar"}
+                        </Button>
+                      </div>
+                    </div>
+                    <Input
+                      id="metaPhonePin"
+                      type={visibleSecrets.metaPhonePin ? "text" : "password"}
+                      inputMode="numeric"
+                      value={settings.metaPhonePin}
+                      onChange={(event) =>
+                        handleChange("metaPhonePin", event.target.value)
+                      }
+                      placeholder="PIN de 6 dígitos configurado en Meta"
+                    />
+                    <p className="text-xs text-gray-500">
+                      Necesario para registrar automáticamente tu número si la API
+                      lo exige (por ejemplo, al enviar campañas masivas).
                     </p>
                   </div>
                   <div className="space-y-2">

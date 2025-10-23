@@ -343,6 +343,117 @@ async function registerRecipientInSandbox(
   }
 }
 
+const phoneRegistrationPromises = new Map<string, Promise<boolean>>();
+
+async function registerWhatsAppPhoneNumber(
+  userId: string,
+  accessToken: string,
+  phoneNumberId: string,
+  phoneNumberPin: string | null | undefined,
+): Promise<boolean> {
+  const pin = phoneNumberPin?.trim();
+  if (!pin) {
+    logger.warn(
+      "Cannot register WhatsApp phone number because the PIN is missing",
+      {
+        userId,
+        phoneNumberId,
+      },
+    );
+    return false;
+  }
+
+  const cacheKey = `${userId}:${phoneNumberId}`;
+  const inFlight = phoneRegistrationPromises.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const url = `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/register`;
+
+  const promise = (async () => {
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), META_API_TIMEOUT_MS);
+
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          pin,
+        }),
+        signal: ctrl.signal,
+      });
+
+      const raw = await res.text().catch(() => "");
+      let json: unknown;
+      if (raw) {
+        try {
+          json = JSON.parse(raw);
+        } catch {
+          json = undefined;
+        }
+      }
+
+      if (res.ok) {
+        logger.info("Registered WhatsApp phone number via Graph API", {
+          userId,
+          phoneNumberId,
+        });
+        return true;
+      }
+
+      const metaError = extractMetaErrorDetails(json);
+      const message =
+        metaError?.message?.trim()?.length
+          ? metaError.message.trim()
+          : raw || res.statusText || "Failed to register WhatsApp phone number";
+      const lower = message.toLowerCase();
+
+      if (res.status === 409 || lower.includes("already registered")) {
+        logger.warn("WhatsApp phone number already registered", {
+          userId,
+          phoneNumberId,
+        });
+        return true;
+      }
+
+      logger.error("Failed to register WhatsApp phone number", {
+        userId,
+        phoneNumberId,
+        status: res.status,
+        message,
+        details: json,
+      });
+      return false;
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        logger.warn("Timed out while registering WhatsApp phone number", {
+          userId,
+          phoneNumberId,
+        });
+      } else {
+        logger.error("Unexpected error while registering WhatsApp phone number", {
+          userId,
+          phoneNumberId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      return false;
+    } finally {
+      clearTimeout(timeout);
+      phoneRegistrationPromises.delete(cacheKey);
+    }
+  })();
+
+  phoneRegistrationPromises.set(cacheKey, promise);
+  return promise;
+}
+
 async function attemptSendMessage(
   options: {
     userId: string;
@@ -350,10 +461,18 @@ async function attemptSendMessage(
     phoneNumberId: string;
     messageBody: Record<string, unknown>;
     normalizedTo: string;
+    phoneNumberPin?: string | null;
   },
   attempt = 1,
 ): Promise<SendMessageResult> {
-  const { userId, accessToken, phoneNumberId, messageBody, normalizedTo } = options;
+  const {
+    userId,
+    accessToken,
+    phoneNumberId,
+    messageBody,
+    normalizedTo,
+    phoneNumberPin,
+  } = options;
   const body = { ...messageBody, messaging_product: "whatsapp" };
   const url = `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`;
 
@@ -374,6 +493,29 @@ async function attemptSendMessage(
     const json = (await res.json()) as unknown;
     if (!res.ok) {
       const metaError = extractMetaErrorDetails(json);
+      let attemptedPhoneRegistration = false;
+
+      if (
+        attempt === 1 &&
+        res.status === 400 &&
+        metaError?.code === 133010
+      ) {
+        attemptedPhoneRegistration = true;
+        if (
+          await registerWhatsAppPhoneNumber(
+            userId,
+            accessToken,
+            phoneNumberId,
+            phoneNumberPin,
+          )
+        ) {
+          logger.warn(
+            "WhatsApp phone number was not registered. Retrying after automatic registration.",
+            { userId, phoneNumberId },
+          );
+          return attemptSendMessage(options, attempt + 1);
+        }
+      }
 
       if (
         attempt === 1 &&
@@ -389,17 +531,30 @@ async function attemptSendMessage(
         return attemptSendMessage(options, attempt + 1);
       }
 
+      const baseError =
+        metaError?.message ?? "Failed to send message via Meta API";
+      let normalizedError = baseError;
+
+      if (metaError?.code === 133010) {
+        if (!phoneNumberPin?.trim()) {
+          normalizedError =
+            "Tu número de WhatsApp no está registrado. Añade el PIN de registro en Ajustes → WhatsApp Cloud para habilitar el envío.";
+        } else if (attemptedPhoneRegistration) {
+          normalizedError =
+            "No se pudo registrar automáticamente el número de WhatsApp con el PIN configurado. Verifica el PIN o realiza el registro manual desde Meta.";
+        }
+      }
+
       logger.error("Error sending message to Meta API", {
         status: res.status,
         details: json,
         userId,
+        message: normalizedError,
       });
-      const errorMessage =
-        metaError?.message ?? "Failed to send message via Meta API";
       return {
         success: false,
         status: res.status,
-        error: errorMessage,
+        error: normalizedError,
         details: json,
       };
     }
@@ -458,11 +613,13 @@ export async function sendMessage(
     select: {
       metaAccessToken: true,
       metaPhoneNumberId: true,
+      metaPhonePin: true,
     },
   });
 
   const accessToken = user?.metaAccessToken?.trim();
   const phoneNumberId = user?.metaPhoneNumberId?.trim();
+  const phoneNumberPin = user?.metaPhonePin?.trim();
 
   if (!accessToken || !phoneNumberId) {
     const error = "Missing Meta API credentials for user";
@@ -482,6 +639,7 @@ export async function sendMessage(
       phoneNumberId,
       messageBody: buildResult.body,
       normalizedTo,
+      phoneNumberPin,
     },
     1,
   );
