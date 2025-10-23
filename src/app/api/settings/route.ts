@@ -8,6 +8,7 @@ const formatSettingsResponse = (input: {
   metaAccessToken: string | null;
   metaPhoneNumberId: string | null;
   metaBusinessAccountId: string | null;
+  metaPhonePin: string | null;
 }) => {
   return {
     metaVerifyToken: input.metaVerifyToken ?? "",
@@ -15,6 +16,7 @@ const formatSettingsResponse = (input: {
     metaAccessToken: input.metaAccessToken ?? "",
     metaPhoneNumberId: input.metaPhoneNumberId ?? "",
     metaBusinessAccountId: input.metaBusinessAccountId ?? "",
+    metaPhonePin: input.metaPhonePin ?? "",
   };
 };
 
@@ -37,6 +39,7 @@ export async function GET(request: Request) {
       metaAccessToken: true,
       metaPhoneNumberId: true,
       metaBusinessAccountId: true,
+      metaPhonePin: true,
     },
   });
 
@@ -79,6 +82,8 @@ export async function POST(request: Request) {
     typeof body?.metaBusinessAccountId === "string"
       ? body.metaBusinessAccountId.trim()
       : undefined;
+  const metaPhonePin =
+    typeof body?.metaPhonePin === "string" ? body.metaPhonePin.trim() : undefined;
 
   const updatedUser = await prisma.user.update({
     where: { id: userPayload.userId },
@@ -88,6 +93,7 @@ export async function POST(request: Request) {
       metaAccessToken: metaAccessToken ?? null,
       metaPhoneNumberId: metaPhoneNumberId ?? null,
       metaBusinessAccountId: metaBusinessAccountId ?? null,
+      metaPhonePin: metaPhonePin ?? null,
     },
     select: {
       metaVerifyToken: true,
@@ -95,6 +101,7 @@ export async function POST(request: Request) {
       metaAccessToken: true,
       metaPhoneNumberId: true,
       metaBusinessAccountId: true,
+      metaPhonePin: true,
     },
   });
 
@@ -120,6 +127,7 @@ export async function DELETE(request: Request) {
       metaAccessToken: null,
       metaPhoneNumberId: null,
       metaBusinessAccountId: null,
+      metaPhonePin: null,
     },
     select: {
       metaVerifyToken: true,
@@ -127,6 +135,7 @@ export async function DELETE(request: Request) {
       metaAccessToken: true,
       metaPhoneNumberId: true,
       metaBusinessAccountId: true,
+      metaPhonePin: true,
     },
   });
 

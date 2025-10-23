@@ -16,6 +16,7 @@ const mockUser = {
   id: "user-1",
   metaPhoneNumberId: "123456789",
   metaAccessToken: "test-token",
+  metaPhonePin: "654321",
 };
 
 describe("sendMessage", () => {
@@ -177,6 +178,58 @@ describe("sendMessage", () => {
     const result = await sendMessage("user-1", "invalid-phone", { type: "text", text: "test" });
     expect(result.success).toBe(false);
     expect(result.error).toContain("Invalid destination phone number");
+  });
+
+  it("should register the phone number automatically when Meta reports it is not registered", async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        json: () =>
+          Promise.resolve({
+            error: { code: 133010, message: "Account not registered" },
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: () => Promise.resolve("{}"),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ messages: [{ id: "recovered-id" }] }),
+      });
+
+    const result = await sendMessage("user-1", "1122334455", { type: "text", text: "Hola" });
+
+    expect(result.success).toBe(true);
+    const registerCall = (global.fetch as jest.Mock).mock.calls[1];
+    expect(registerCall[0]).toContain("/register");
+    expect(JSON.parse(registerCall[1].body)).toEqual({
+      messaging_product: "whatsapp",
+      pin: "654321",
+    });
+    expect((global.fetch as jest.Mock).mock.calls[2][0]).toContain("/messages");
+  });
+
+  it("should surface a clear error when the PIN is missing for registration", async () => {
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+      ...mockUser,
+      metaPhonePin: null,
+    });
+
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      json: () =>
+        Promise.resolve({
+          error: { code: 133010, message: "Account not registered" },
+        }),
+    });
+
+    const result = await sendMessage("user-1", "1122334455", { type: "text", text: "Hola" });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("PIN de registro");
   });
 
   it("should handle API errors gracefully", async () => {

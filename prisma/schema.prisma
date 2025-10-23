@@ -21,6 +21,7 @@ model User {
   metaAccessToken   String?
   metaPhoneNumberId String?
   metaBusinessAccountId String?
+  metaPhonePin      String?
 
   contacts   Contact[]
   flows      Flow[]
