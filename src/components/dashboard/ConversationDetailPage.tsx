@@ -98,6 +98,10 @@ const ConversationDetailPage: React.FC<{ contactId: string }> = ({ contactId }) 
     void fetchConversation("initial");
   }, [fetchConversation]);
 
+  useEffect(() => {
+    setComposerValue("");
+  }, [contactId]);
+
   const handleRefresh = () => {
     void fetchConversation("refresh");
   };
@@ -147,6 +151,19 @@ const ConversationDetailPage: React.FC<{ contactId: string }> = ({ contactId }) 
     }
   }, [conversation]);
 
+  const lastInboundMessage = useMemo(() => {
+    if (!conversation) {
+      return null;
+    }
+
+    return (
+      conversation.messages
+        .slice()
+        .reverse()
+        .find((message) => message.direction === "in") ?? null
+    );
+  }, [conversation]);
+
   const quickReplies = useMemo(() => {
     if (!conversation) {
       return [] as string[];
@@ -168,18 +185,45 @@ const ConversationDetailPage: React.FC<{ contactId: string }> = ({ contactId }) 
       );
     });
 
-    const lastMessage = conversation.messages
-      .slice()
-      .reverse()
-      .find((message) => message.direction === "in");
-
-    if (lastMessage) {
+    if (lastInboundMessage) {
       suggestions.add(
-        `Recibimos tu último mensaje: "${lastMessage.text.slice(0, 80)}". ¿Podrías brindarme más detalles?`,
+        `Recibimos tu último mensaje: "${lastInboundMessage.text.slice(0, 80)}". ¿Podrías brindarme más detalles?`,
+      );
+    }
+
+    const firstInteraction = conversation.messages[0];
+    if (firstInteraction) {
+      suggestions.add(
+        `Vimos que la conversación inició el ${formatAbsoluteTime(firstInteraction.timestamp)}. ¿Seguimos en contacto?`,
       );
     }
 
     return Array.from(suggestions);
+  }, [conversation, lastInboundMessage]);
+
+  const inboundMessagesCount = useMemo(() => {
+    return conversation
+      ? conversation.messages.filter((message) => message.direction === "in").length
+      : 0;
+  }, [conversation]);
+
+  const outboundMessagesCount = useMemo(() => {
+    return conversation
+      ? conversation.messages.filter((message) => message.direction === "out").length
+      : 0;
+  }, [conversation]);
+
+  const lastOutboundMessage = useMemo(() => {
+    if (!conversation) {
+      return null;
+    }
+
+    return (
+      conversation.messages
+        .slice()
+        .reverse()
+        .find((message) => message.direction === "out") ?? null
+    );
   }, [conversation]);
 
   const handleApplyQuickReply = (value: string) => {
@@ -421,11 +465,35 @@ const ConversationDetailPage: React.FC<{ contactId: string }> = ({ contactId }) 
                     Último mensaje del contacto
                   </p>
                   <p className="mt-1 text-sm text-slate-700">
-                    {conversation.messages
-                      .slice()
-                      .reverse()
-                      .find((message) => message.direction === "in")?.text ??
+                    {lastInboundMessage?.text ??
                       "El contacto no envió mensajes todavía."}
+                  </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-2xl bg-slate-50 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+                      Mensajes del contacto
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">
+                      {inboundMessagesCount}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+                      Respuestas del equipo
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">
+                      {outboundMessagesCount}
+                    </p>
+                  </div>
+                </div>
+                <div className="rounded-2xl bg-slate-50 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+                    Último mensaje enviado por el equipo
+                  </p>
+                  <p className="mt-1 text-sm text-slate-700">
+                    {lastOutboundMessage?.text ??
+                      "Aún no respondiste esta conversación desde el panel."}
                   </p>
                 </div>
                 <div className="rounded-2xl bg-slate-50 p-3">
