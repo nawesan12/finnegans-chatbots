@@ -65,6 +65,7 @@ const ConversationsPage: React.FC = () => {
   );
   const [isAutoRefreshEnabled, setIsAutoRefreshEnabled] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -394,9 +395,32 @@ const ConversationsPage: React.FC = () => {
     return Number((totalMessages / conversations.length).toFixed(1));
   }, [conversations]);
 
-  const handleRefresh = () => {
+  const handleSelectConversationByOffset = useCallback(
+    (offset: number) => {
+      if (!filteredConversations.length) {
+        return;
+      }
+
+      const currentIndex = filteredConversations.findIndex(
+        (item) => item.contactId === selectedConversationId,
+      );
+
+      const nextIndex = Math.min(
+        filteredConversations.length - 1,
+        Math.max(0, currentIndex === -1 ? 0 : currentIndex + offset),
+      );
+
+      const nextConversation = filteredConversations[nextIndex];
+      if (nextConversation) {
+        setSelectedConversationId(nextConversation.contactId);
+      }
+    },
+    [filteredConversations, selectedConversationId],
+  );
+
+  const handleRefresh = useCallback(() => {
     void fetchConversations("refresh");
-  };
+  }, [fetchConversations]);
 
   const handleClearFilters = () => {
     setSearchTerm("");
@@ -477,6 +501,92 @@ const ConversationsPage: React.FC = () => {
     }
     return `Actualizado ${formatRelativeTime(lastUpdatedAt.toISOString())}`;
   }, [isRefreshing, lastUpdatedAt, loading]);
+
+  const keyboardShortcuts = useMemo(
+    () => [
+      {
+        keys: ["/"],
+        description: "Buscar conversaciones",
+      },
+      {
+        keys: ["Alt", "Flecha ↓"],
+        description: "Seleccionar la siguiente conversación",
+      },
+      {
+        keys: ["Alt", "Flecha ↑"],
+        description: "Seleccionar la conversación anterior",
+      },
+      {
+        keys: ["Alt", "R"],
+        description: "Actualizar listado",
+      },
+      {
+        keys: ["Alt", "U"],
+        description: "Alternar filtro de no leídos",
+      },
+      {
+        keys: ["Alt", "A"],
+        description: "Alternar auto actualización",
+      },
+    ],
+    [],
+  );
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName ?? "";
+      const isTypingElement =
+        target?.isContentEditable ||
+        tagName === "INPUT" ||
+        tagName === "TEXTAREA" ||
+        tagName === "SELECT";
+
+      if (event.key === "/" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        if (isTypingElement) {
+          return;
+        }
+        event.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+        return;
+      }
+
+      if ((event.key === "ArrowDown" || event.key === "ArrowUp") && event.altKey) {
+        if (isTypingElement) {
+          return;
+        }
+        event.preventDefault();
+        handleSelectConversationByOffset(event.key === "ArrowDown" ? 1 : -1);
+        return;
+      }
+
+      const normalizedKey = event.key.toLowerCase();
+
+      if (normalizedKey === "r" && event.altKey) {
+        event.preventDefault();
+        handleRefresh();
+        return;
+      }
+
+      if (normalizedKey === "u" && event.altKey) {
+        event.preventDefault();
+        setShowUnreadOnly((previous) => !previous);
+        return;
+      }
+
+      if (normalizedKey === "a" && event.altKey) {
+        event.preventDefault();
+        setIsAutoRefreshEnabled((previous) => !previous);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [handleRefresh, handleSelectConversationByOffset]);
 
   const renderConversationList = () => {
     if (loading) {
@@ -582,19 +692,43 @@ const ConversationsPage: React.FC = () => {
                         </Badge>
                       ))}
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        router.push(
-                          `/dashboard/conversations/${conversation.contactId}`,
-                        );
-                      }}
-                      className="ml-auto whitespace-nowrap text-xs"
-                    >
-                      Abrir conversación
-                    </Button>
+                    <div className="ml-auto flex flex-wrap items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void (async () => {
+                            try {
+                              await navigator.clipboard.writeText(
+                                conversation.contactPhone,
+                              );
+                              toast.success("Número copiado al portapapeles");
+                            } catch (error) {
+                              toast.error("No pudimos copiar el número");
+                              console.error(error);
+                            }
+                          })();
+                        }}
+                      >
+                        <Copy className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                        Copiar
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          router.push(
+                            `/dashboard/conversations/${conversation.contactId}`,
+                          );
+                        }}
+                        className="whitespace-nowrap text-xs"
+                      >
+                        Abrir conversación
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -674,12 +808,44 @@ const ConversationsPage: React.FC = () => {
         </div>
       </div>
 
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+          Atajos de teclado
+        </p>
+        <p className="mt-2 text-sm text-slate-500">
+          Usa combinaciones rápidas para moverte más rápido entre conversaciones.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {keyboardShortcuts.map((shortcut) => (
+            <div
+              key={shortcut.description}
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600"
+            >
+              <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-700">
+                {shortcut.keys.map((key, index) => (
+                  <React.Fragment key={`${shortcut.description}-${key}-${index}`}>
+                    <kbd className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium uppercase text-slate-700">
+                      {key}
+                    </kbd>
+                    {index < shortcut.keys.length - 1 ? (
+                      <span className="text-slate-400">+</span>
+                    ) : null}
+                  </React.Fragment>
+                ))}
+              </span>
+              <span>{shortcut.description}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="grid h-[calc(100vh-13rem)] gap-6 lg:grid-cols-[380px_1fr]">
         <div className="flex flex-col overflow-hidden rounded-3xl border border-slate-200 bg-slate-50">
           <div className="space-y-3 border-b border-slate-200 p-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <Input
+                ref={searchInputRef}
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
                 placeholder="Buscar por nombre, teléfono o flujo"
