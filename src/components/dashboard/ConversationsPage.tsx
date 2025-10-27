@@ -4,6 +4,7 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
@@ -48,6 +49,7 @@ import { formatRelativeTime } from "@/lib/conversations/formatters";
 import type { ConversationSummary } from "@/lib/conversations/types";
 
 const ConversationsPage: React.FC = () => {
+  const hasLoadedPreferencesRef = useRef(false);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -64,6 +66,74 @@ const ConversationsPage: React.FC = () => {
   const [isAutoRefreshEnabled, setIsAutoRefreshEnabled] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    if (hasLoadedPreferencesRef.current) {
+      return;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(
+        "finnegans.conversations.preferences",
+      );
+
+      if (!raw) {
+        hasLoadedPreferencesRef.current = true;
+        return;
+      }
+
+      const parsed = JSON.parse(raw) as Partial<{
+        searchTerm: string;
+        showUnreadOnly: boolean;
+        selectedFlowIds: string[];
+        sortOption: "recent" | "oldest" | "alphabetical";
+        isAutoRefreshEnabled: boolean;
+        selectedConversationId: string | null;
+      }>;
+
+      if (typeof parsed.searchTerm === "string") {
+        setSearchTerm(parsed.searchTerm);
+      }
+
+      if (typeof parsed.showUnreadOnly === "boolean") {
+        setShowUnreadOnly(parsed.showUnreadOnly);
+      }
+
+      if (Array.isArray(parsed.selectedFlowIds)) {
+        setSelectedFlowIds(
+          parsed.selectedFlowIds.filter((value): value is string =>
+            typeof value === "string",
+          ),
+        );
+      }
+
+      if (
+        parsed.sortOption === "recent" ||
+        parsed.sortOption === "oldest" ||
+        parsed.sortOption === "alphabetical"
+      ) {
+        setSortOption(parsed.sortOption);
+      }
+
+      if (typeof parsed.isAutoRefreshEnabled === "boolean") {
+        setIsAutoRefreshEnabled(parsed.isAutoRefreshEnabled);
+      }
+
+      if (
+        parsed.selectedConversationId === null ||
+        typeof parsed.selectedConversationId === "string"
+      ) {
+        setSelectedConversationId(parsed.selectedConversationId ?? null);
+      }
+    } catch (error) {
+      console.error(
+        "No se pudieron cargar las preferencias de conversaciones",
+        error,
+      );
+    } finally {
+      hasLoadedPreferencesRef.current = true;
+    }
+  }, []);
 
   const fetchConversations = useCallback(
     async (mode: "initial" | "refresh" = "initial") => {
@@ -108,6 +178,40 @@ const ConversationsPage: React.FC = () => {
     },
     [],
   );
+
+  useEffect(() => {
+    if (!hasLoadedPreferencesRef.current) {
+      return;
+    }
+
+    const payload = {
+      searchTerm,
+      showUnreadOnly,
+      selectedFlowIds,
+      sortOption,
+      isAutoRefreshEnabled,
+      selectedConversationId,
+    };
+
+    try {
+      window.localStorage.setItem(
+        "finnegans.conversations.preferences",
+        JSON.stringify(payload),
+      );
+    } catch (error) {
+      console.error(
+        "No se pudieron guardar las preferencias de conversaciones",
+        error,
+      );
+    }
+  }, [
+    isAutoRefreshEnabled,
+    searchTerm,
+    selectedConversationId,
+    selectedFlowIds,
+    showUnreadOnly,
+    sortOption,
+  ]);
 
   useEffect(() => {
     void fetchConversations("initial");

@@ -1,7 +1,9 @@
 "use client";
 
-import React from "react";
-import { MessageCircle } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Check, Copy, MessageCircle } from "lucide-react";
+
+import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
 import {
@@ -9,6 +11,7 @@ import {
   formatMessageDay,
 } from "@/lib/conversations/formatters";
 import type { ConversationMessage } from "@/lib/conversations/types";
+import { Button } from "@/components/ui/button";
 
 interface ConversationTimelineProps {
   messages: ConversationMessage[];
@@ -17,7 +20,68 @@ interface ConversationTimelineProps {
 const ConversationTimeline: React.FC<ConversationTimelineProps> = ({
   messages,
 }) => {
-  if (!messages.length) {
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const isFirstRenderRef = useRef(true);
+
+  useEffect(() => {
+    if (!bottomRef.current) {
+      return;
+    }
+
+    const behavior = isFirstRenderRef.current ? "auto" : "smooth";
+    bottomRef.current.scrollIntoView({ behavior, block: "end" });
+    isFirstRenderRef.current = false;
+  }, [messages]);
+
+  useEffect(() => {
+    if (!copiedMessageId) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setCopiedMessageId(null);
+    }, 2000);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [copiedMessageId]);
+
+  useEffect(() => {
+    if (!copiedMessageId) {
+      return;
+    }
+
+    const exists = messages.some((message) => message.id === copiedMessageId);
+    if (!exists) {
+      setCopiedMessageId(null);
+    }
+  }, [copiedMessageId, messages]);
+
+  const sortedMessages = useMemo(() => {
+    return [...messages].sort((first, second) => {
+      const firstTime = new Date(first.timestamp).getTime();
+      const secondTime = new Date(second.timestamp).getTime();
+      if (Number.isNaN(firstTime) || Number.isNaN(secondTime)) {
+        return 0;
+      }
+      return firstTime - secondTime;
+    });
+  }, [messages]);
+
+  const handleCopyMessage = useCallback(async (message: ConversationMessage) => {
+    try {
+      await navigator.clipboard.writeText(message.text);
+      setCopiedMessageId(message.id);
+      toast.success("Mensaje copiado");
+    } catch (error) {
+      toast.error("No pudimos copiar el mensaje");
+      console.error(error);
+    }
+  }, []);
+
+  if (!sortedMessages.length) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-slate-500">
         <MessageCircle className="h-8 w-8 text-slate-400" aria-hidden="true" />
@@ -27,15 +91,6 @@ const ConversationTimeline: React.FC<ConversationTimelineProps> = ({
       </div>
     );
   }
-
-  const sortedMessages = [...messages].sort((first, second) => {
-    const firstTime = new Date(first.timestamp).getTime();
-    const secondTime = new Date(second.timestamp).getTime();
-    if (Number.isNaN(firstTime) || Number.isNaN(secondTime)) {
-      return 0;
-    }
-    return firstTime - secondTime;
-  });
 
   const groups = sortedMessages.reduce(
     (accumulator, message) => {
@@ -51,6 +106,7 @@ const ConversationTimeline: React.FC<ConversationTimelineProps> = ({
   const renderMessage = (message: ConversationMessage) => {
     const timestamp = formatAbsoluteTime(message.timestamp);
     const metadata = Array.from(new Set(message.metadata)).filter(Boolean);
+    const isCopied = copiedMessageId === message.id;
 
     return (
       <div
@@ -72,6 +128,32 @@ const ConversationTimeline: React.FC<ConversationTimelineProps> = ({
               "border-slate-200 bg-slate-100 text-slate-700",
           )}
         >
+          <div
+            className={cn(
+              "absolute -top-3 right-2 hidden gap-2 rounded-full border border-slate-200 bg-white/90 p-1 text-xs text-slate-500 shadow-sm transition-opacity group-hover:flex",
+              message.direction === "out" && "border-[#04102D]/40 bg-[#04102D]/90 text-white",
+              "group-focus-within:flex",
+            )}
+          >
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-7 w-7 rounded-full text-current",
+                message.direction === "out"
+                  ? "hover:bg-white/10 focus-visible:bg-white/20"
+                  : "hover:bg-slate-100 focus-visible:bg-slate-100",
+              )}
+              onClick={() => handleCopyMessage(message)}
+              aria-label={isCopied ? "Mensaje copiado" : "Copiar mensaje"}
+            >
+              {isCopied ? (
+                <Check className="h-3.5 w-3.5" aria-hidden="true" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+            </Button>
+          </div>
           <p className="whitespace-pre-wrap break-words leading-relaxed">
             {message.text}
           </p>
@@ -112,6 +194,7 @@ const ConversationTimeline: React.FC<ConversationTimelineProps> = ({
           </div>
         </div>
       ))}
+      <div ref={bottomRef} />
     </div>
   );
 };
