@@ -25,6 +25,10 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { authenticatedFetch } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/store";
+import type {
+  MetaVerificationResult,
+  MetaVerificationStepStatus,
+} from "@/lib/whatsapp/verification-types";
 import {
   CheckCircle2,
   CircleDashed,
@@ -37,6 +41,10 @@ import {
   ShieldCheck,
   Loader2,
   Trash2,
+  AlertTriangle,
+  Clock,
+  MinusCircle,
+  XCircle,
 } from "lucide-react";
 
 const EMPTY_SETTINGS = {
@@ -77,11 +85,15 @@ const SettingsPage = () => {
     metaAccessToken: false,
     metaPhonePin: false,
   });
+  const [verificationResult, setVerificationResult] =
+    useState<MetaVerificationResult | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   const fetchSettings = useCallback(async () => {
     if (!token) {
       setSettings(EMPTY_SETTINGS);
       setInitialSettings(EMPTY_SETTINGS);
+      setVerificationResult(null);
       setLoading(false);
       return;
     }
@@ -98,11 +110,13 @@ const SettingsPage = () => {
       const normalized = normalizeSettings(data);
       setSettings(normalized);
       setInitialSettings(normalized);
+      setVerificationResult(null);
     } catch (error) {
       toast.error(
         (error as Error)?.message ?? "Error al recuperar la configuración",
       );
       setSettings(EMPTY_SETTINGS);
+      setVerificationResult(null);
     } finally {
       setLoading(false);
     }
@@ -145,6 +159,7 @@ const SettingsPage = () => {
       const normalized = normalizeSettings(data);
       setSettings(normalized);
       setInitialSettings(normalized);
+      setVerificationResult(null);
       setCopiedField(null);
       toast.success(
         "Credenciales personales eliminadas. Se aplicarán los valores globales.",
@@ -246,6 +261,125 @@ const SettingsPage = () => {
     setVisibleSecrets((prev) => ({ ...prev, [field]: !prev[field] }));
   };
 
+  const verificationSummary = useMemo(() => {
+    if (!verificationResult) {
+      return null;
+    }
+
+    if (!verificationResult.success) {
+      return "Revisa los pasos marcados en rojo para completar la configuración.";
+    }
+
+    if (verificationResult.hasWarnings) {
+      return "La conexión responde, pero aún quedan tareas por finalizar.";
+    }
+
+    return "Todo listo: las credenciales respondieron correctamente.";
+  }, [verificationResult]);
+
+  const verificationBadge = useMemo(() => {
+    if (!verificationResult) {
+      return null;
+    }
+
+    if (!verificationResult.success) {
+      return { label: "Acción requerida", variant: "destructive" as const };
+    }
+
+    if (verificationResult.hasWarnings) {
+      return { label: "Con observaciones", variant: "outline" as const };
+    }
+
+    return { label: "Verificación exitosa", variant: "secondary" as const };
+  }, [verificationResult]);
+
+  const lastCheckedAt = useMemo(() => {
+    if (!verificationResult) {
+      return null;
+    }
+
+    const parsedDate = new Date(verificationResult.checkedAt);
+    if (Number.isNaN(parsedDate.getTime())) {
+      return verificationResult.checkedAt;
+    }
+
+    return parsedDate.toLocaleString();
+  }, [verificationResult]);
+
+  const getStatusIcon = (status: MetaVerificationStepStatus) => {
+    switch (status) {
+      case "success":
+        return <CheckCircle2 className="size-5 text-emerald-500" />;
+      case "warning":
+        return <AlertTriangle className="size-5 text-amber-500" />;
+      case "skipped":
+        return <MinusCircle className="size-5 text-gray-300" />;
+      default:
+        return <XCircle className="size-5 text-red-500" />;
+    }
+  };
+
+  const handleVerifyAccount = useCallback(async () => {
+    if (!token) {
+      toast.error("No se pudo autenticar la sesión actual");
+      return;
+    }
+
+    try {
+      setIsVerifying(true);
+      const response = await authenticatedFetch("/v1/account/verify", {
+        method: "POST",
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | MetaVerificationResult
+        | { error?: string }
+        | null;
+
+      if (!response.ok) {
+        const message =
+          payload &&
+          typeof payload === "object" &&
+          payload !== null &&
+          "error" in payload &&
+          typeof (payload as { error?: unknown }).error === "string"
+            ? ((payload as { error?: string }).error as string)
+            : "No se pudo ejecutar la verificación";
+        throw new Error(message);
+      }
+
+      if (
+        !payload ||
+        typeof payload !== "object" ||
+        !("steps" in payload) ||
+        !Array.isArray((payload as { steps?: unknown }).steps)
+      ) {
+        throw new Error("Respuesta inválida de la verificación");
+      }
+
+      const result = payload as MetaVerificationResult;
+      setVerificationResult(result);
+
+      if (result.success && !result.hasWarnings) {
+        toast.success("Configuración verificada correctamente.");
+      } else if (result.success) {
+        toast.message(
+          "Verificación completada con observaciones. Revisa los detalles resaltados.",
+        );
+      } else {
+        toast.error(
+          "Detectamos problemas en la verificación. Revisa el detalle para corregirlos.",
+        );
+      }
+    } catch (error) {
+      toast.error(
+        (error as Error)?.message ??
+          "No se pudo ejecutar la verificación de la cuenta",
+      );
+    } finally {
+      setIsVerifying(false);
+    }
+  }, [token]);
+
   const handleCopy = useCallback(
     async (value: string, label: string, key: string) => {
       if (!value) {
@@ -308,6 +442,7 @@ const SettingsPage = () => {
       const normalized = normalizeSettings(settings);
       setInitialSettings(normalized);
       setSettings(normalized);
+      setVerificationResult(null);
     } catch (error) {
       toast.error((error as Error)?.message ?? "Error al guardar la configuración");
     } finally {
@@ -794,6 +929,99 @@ const SettingsPage = () => {
               </CardContent>
             </Card>
           )}
+          <Card>
+            <CardHeader>
+              <CardTitle>Verificación rápida</CardTitle>
+              <CardDescription>
+                Ejecuta comprobaciones automáticas sobre tu número y credenciales.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex w-full items-center justify-center gap-2"
+                onClick={() => {
+                  void handleVerifyAccount();
+                }}
+                disabled={loading || isSaving || isClearing || isVerifying}
+              >
+                {isVerifying ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Verificando...
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="size-4" />
+                    Ejecutar verificación
+                  </>
+                )}
+              </Button>
+              {verificationResult ? (
+                <>
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      {verificationBadge ? (
+                        <Badge variant={verificationBadge.variant}>
+                          {verificationBadge.label}
+                        </Badge>
+                      ) : null}
+                      {lastCheckedAt ? (
+                        <div className="flex items-center gap-1 text-xs text-gray-500">
+                          <Clock className="size-3.5" />
+                          <span>Última comprobación: {lastCheckedAt}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                    {verificationSummary ? (
+                      <p className="mt-2 text-sm text-gray-700">
+                        {verificationSummary}
+                      </p>
+                    ) : null}
+                  </div>
+                  <ul className="space-y-3">
+                    {verificationResult.steps.map((step) => (
+                      <li
+                        key={step.key}
+                        className="flex gap-3 rounded-lg border border-gray-200 bg-white/80 p-3"
+                      >
+                        <div className="mt-0.5">{getStatusIcon(step.status)}</div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-700">
+                            {step.label}
+                          </p>
+                          <p className="text-xs text-gray-500">{step.message}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <p className="text-xs text-gray-500">
+                  Ejecuta la verificación para confirmar que Meta reconoce tus credenciales y el número configurado.
+                </p>
+              )}
+              <div className="rounded-lg border border-dashed border-gray-200 bg-white/70 p-3 text-xs text-gray-500">
+                <p>
+                  El botón anterior invoca
+                  <code className="mx-1 rounded bg-gray-200 px-1 py-0.5 text-[11px] font-mono">
+                    POST /v1/account/verify
+                  </code>
+                  con tus credenciales almacenadas.
+                </p>
+                <p className="mt-2">
+                  Después de validar, apunta el webhook a
+                  <code className="mx-1 rounded bg-gray-200 px-1 py-0.5 text-[11px] font-mono">
+                    {webhookUrl}
+                  </code>
+                  y suscríbete a los eventos <span className="font-medium">messages</span>,
+                  <span className="font-medium"> message_status_update</span> y
+                  <span className="font-medium"> message_template_status_update</span> en Meta.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader>
               <CardTitle>Buenas prácticas de seguridad</CardTitle>
