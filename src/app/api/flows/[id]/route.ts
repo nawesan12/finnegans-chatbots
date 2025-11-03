@@ -4,30 +4,7 @@ import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { getAuthPayload } from "@/lib/auth";
 import { sanitizeFlowDefinition } from "@/lib/flow-schema";
-
-type FlowMetaFields = {
-  metaFlowId?: string | null;
-  metaFlowToken?: string | null;
-  metaFlowVersion?: string | null;
-  metaFlowRevisionId?: string | null;
-  metaFlowStatus?: string | null;
-  metaFlowMetadata?: Prisma.JsonValue | null;
-};
-
-const stripMetaFields = <T extends FlowMetaFields>(
-  flow: T,
-): Omit<T, keyof FlowMetaFields> => {
-  const {
-    metaFlowId: _metaFlowId,
-    metaFlowToken: _metaFlowToken,
-    metaFlowVersion: _metaFlowVersion,
-    metaFlowRevisionId: _metaFlowRevisionId,
-    metaFlowStatus: _metaFlowStatus,
-    metaFlowMetadata: _metaFlowMetadata,
-    ...rest
-  } = flow;
-  return rest;
-};
+import { stripFlowMetaFields } from "@/lib/flows/meta-fields";
 const FlowUpdateSchema = z.object({
   name: z.string().min(1),
   trigger: z.string().optional(),
@@ -54,7 +31,7 @@ export async function GET(
       return NextResponse.json({ error: "Flow not found" }, { status: 404 });
     }
 
-    return NextResponse.json(stripMetaFields(flow));
+    return NextResponse.json(stripFlowMetaFields(flow));
   } catch (error) {
     console.error(`Error fetching flow ${params.id}:`, error);
     return NextResponse.json(
@@ -124,7 +101,7 @@ export async function PUT(
       },
     });
 
-    return NextResponse.json(stripMetaFields(updatedFlow));
+    return NextResponse.json(stripFlowMetaFields(updatedFlow));
   } catch (error) {
     console.error(`Error updating flow ${params.id}:`, error);
     return NextResponse.json(

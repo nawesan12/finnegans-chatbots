@@ -254,7 +254,7 @@ describe("WhatsApp Integration", () => {
       await processWebhookEvent(webhookEvent);
 
       expect(executeFlow).toHaveBeenCalled();
-      const [_, message, __, incomingMeta] = (executeFlow as jest.Mock).mock.calls[0];
+      const [, message,, incomingMeta] = (executeFlow as jest.Mock).mock.calls[0];
       expect(message).toBe("Help");
       expect(incomingMeta).toEqual({
         type: "interactive",
