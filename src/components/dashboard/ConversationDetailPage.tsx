@@ -13,6 +13,7 @@ import {
   Clock3,
   Copy,
   Download,
+  Loader2,
   MessageCircle,
   Phone,
   RefreshCw,
@@ -36,6 +37,7 @@ import {
   formatAbsoluteTime,
   formatRelativeTime,
 } from "@/lib/conversations/formatters";
+import { generateQuickReplies } from "@/lib/conversations/quick-replies";
 import type { ConversationSummary } from "@/lib/conversations/types";
 
 const MAX_MANUAL_REPLY_LENGTH = 1000;
@@ -47,6 +49,7 @@ const ConversationDetailPage: React.FC<{ contactId: string }> = ({ contactId }) 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [composerValue, setComposerValue] = useState("");
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
 
   const fetchConversation = useCallback(
     async (mode: "initial" | "refresh" = "initial") => {
@@ -100,6 +103,7 @@ const ConversationDetailPage: React.FC<{ contactId: string }> = ({ contactId }) 
 
   useEffect(() => {
     setComposerValue("");
+    setIsSendingMessage(false);
   }, [contactId]);
 
   const handleRefresh = () => {
@@ -164,42 +168,10 @@ const ConversationDetailPage: React.FC<{ contactId: string }> = ({ contactId }) 
     );
   }, [conversation]);
 
-  const quickReplies = useMemo(() => {
-    if (!conversation) {
-      return [] as string[];
-    }
-
-    const baseGreetings = conversation.contactName
-      ? `Hola ${conversation.contactName}, soy parte del equipo de Finnegans.`
-      : `Hola ${conversation.contactPhone}, soy parte del equipo de Finnegans.`;
-
-    const suggestions = new Set<string>([
-      baseGreetings,
-      "Gracias por tu mensaje, estoy revisando tu consulta y te respondo enseguida.",
-      "¿Hay algo más en lo que pueda ayudarte?",
-    ]);
-
-    conversation.flows.forEach((flow) => {
-      suggestions.add(
-        `Gracias por seguir el flujo "${flow.name}". Si necesitás asistencia adicional, estoy disponible para ayudarte.`,
-      );
-    });
-
-    if (lastInboundMessage) {
-      suggestions.add(
-        `Recibimos tu último mensaje: "${lastInboundMessage.text.slice(0, 80)}". ¿Podrías brindarme más detalles?`,
-      );
-    }
-
-    const firstInteraction = conversation.messages[0];
-    if (firstInteraction) {
-      suggestions.add(
-        `Vimos que la conversación inició el ${formatAbsoluteTime(firstInteraction.timestamp)}. ¿Seguimos en contacto?`,
-      );
-    }
-
-    return Array.from(suggestions);
-  }, [conversation, lastInboundMessage]);
+  const quickReplies = useMemo(
+    () => (conversation ? generateQuickReplies(conversation) : []),
+    [conversation],
+  );
 
   const inboundMessagesCount = useMemo(() => {
     return conversation
@@ -249,15 +221,87 @@ const ConversationDetailPage: React.FC<{ contactId: string }> = ({ contactId }) 
     }
   };
 
-  const handleOpenWhatsApp = () => {
-    if (!conversation || !composerValue.trim()) {
+  const handleSendMessage = useCallback(async () => {
+    const message = composerValue.trim();
+
+    if (!message) {
       toast.info("Escribe un mensaje para enviarlo");
       return;
     }
-    const encoded = encodeURIComponent(composerValue);
-    const phone = conversation.contactPhone.replace(/[^0-9]/g, "");
-    const url = `https://wa.me/${phone}?text=${encoded}`;
-    window.open(url, "_blank", "noopener,noreferrer");
+
+    setIsSendingMessage(true);
+
+    try {
+      const response = await authenticatedFetch(
+        `/api/contacts/${contactId}/message`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message }),
+        },
+      );
+
+      const payload = (await response.json().catch(() => null)) as
+        | { success?: boolean; messageId?: string; error?: string }
+        | null;
+
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error ?? "No se pudo enviar el mensaje.");
+      }
+
+      const messageId =
+        payload.messageId ||
+        (typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `temp-${Date.now()}`);
+
+      const timestamp = new Date().toISOString();
+
+      setConversation((previous) => {
+        if (!previous) {
+          return previous;
+        }
+
+        return {
+          ...previous,
+          lastActivity: timestamp,
+          lastMessage: message,
+          unreadCount: 0,
+          messages: [
+            ...previous.messages,
+            {
+              id: messageId,
+              direction: "out" as const,
+              type: "text",
+              text: message,
+              timestamp,
+              metadata: [],
+            },
+          ],
+        };
+      });
+
+      setComposerValue("");
+      toast.success("Mensaje enviado correctamente");
+    } catch (error) {
+      if (error instanceof UnauthorizedError) {
+        router.push("/login");
+        return;
+      }
+
+      toast.error((error as Error)?.message ?? "Error al enviar el mensaje");
+    } finally {
+      setIsSendingMessage(false);
+    }
+  }, [composerValue, contactId, router]);
+
+  const handleComposerKeyDown = (
+    event: React.KeyboardEvent<HTMLTextAreaElement>,
+  ) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      void handleSendMessage();
+    }
   };
 
   const charactersRemaining = MAX_MANUAL_REPLY_LENGTH - composerValue.length;
@@ -397,6 +441,7 @@ const ConversationDetailPage: React.FC<{ contactId: string }> = ({ contactId }) 
               <Textarea
                 value={composerValue}
                 onChange={(event) => setComposerValue(event.target.value)}
+                onKeyDown={handleComposerKeyDown}
                 placeholder="Escribe una respuesta personalizada..."
                 maxLength={MAX_MANUAL_REPLY_LENGTH + 200}
                 className="min-h-[180px] resize-y rounded-2xl border-slate-200"
@@ -417,12 +462,18 @@ const ConversationDetailPage: React.FC<{ contactId: string }> = ({ contactId }) 
                   Copiar respuesta
                 </Button>
                 <Button
-                  onClick={handleOpenWhatsApp}
+                  onClick={() => void handleSendMessage()}
                   className="gap-2 bg-[#04102D] text-white hover:bg-[#030b1f]"
-                  disabled={!composerValue.trim() || isComposerTooLong}
+                  disabled={
+                    !composerValue.trim() || isComposerTooLong || isSendingMessage
+                  }
                 >
-                  <Send className="h-4 w-4" aria-hidden="true" />
-                  Abrir en WhatsApp
+                  {isSendingMessage ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Send className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  {isSendingMessage ? "Enviando..." : "Enviar mensaje"}
                 </Button>
                 <Button
                   variant="ghost"

@@ -19,7 +19,9 @@ import {
   Phone,
   RefreshCw,
   Search,
+  Send,
   SortDesc,
+  Sparkles,
   UserRound,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -31,6 +33,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -46,7 +49,10 @@ import {
   authenticatedFetch,
 } from "@/lib/api-client";
 import { formatRelativeTime } from "@/lib/conversations/formatters";
+import { generateQuickReplies } from "@/lib/conversations/quick-replies";
 import type { ConversationSummary } from "@/lib/conversations/types";
+
+const MAX_MANUAL_REPLY_LENGTH = 1000;
 
 const ConversationsPage: React.FC = () => {
   const hasLoadedPreferencesRef = useRef(false);
@@ -65,6 +71,8 @@ const ConversationsPage: React.FC = () => {
   );
   const [isAutoRefreshEnabled, setIsAutoRefreshEnabled] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+  const [composerValue, setComposerValue] = useState("");
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const router = useRouter();
 
@@ -350,6 +358,23 @@ const ConversationsPage: React.FC = () => {
   }, [filteredConversations, selectedConversationId]);
 
   useEffect(() => {
+    setComposerValue("");
+    setIsSendingMessage(false);
+  }, [selectedConversationId]);
+
+  const quickReplies = useMemo(
+    () => (selectedConversation ? generateQuickReplies(selectedConversation) : []),
+    [selectedConversation],
+  );
+
+  const charactersRemaining = MAX_MANUAL_REPLY_LENGTH - composerValue.length;
+  const isComposerTooLong = charactersRemaining < 0;
+
+  const activeConversationId = selectedConversation?.contactId ?? null;
+  const isSendDisabled =
+    !activeConversationId || !composerValue.trim() || isComposerTooLong || isSendingMessage;
+
+  useEffect(() => {
     if (!filteredConversations.length) {
       return;
     }
@@ -489,6 +514,120 @@ const ConversationsPage: React.FC = () => {
     }
   }, [selectedConversation, selectedConversationLabel]);
 
+  const handleApplyQuickReply = useCallback((value: string) => {
+    setComposerValue((previous) => {
+      if (!previous.trim()) {
+        return value;
+      }
+      return `${previous}\n\n${value}`;
+    });
+  }, []);
+
+  const handleCopyReply = useCallback(async () => {
+    if (!composerValue.trim()) {
+      toast.info("Escribe un mensaje para copiarlo");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(composerValue);
+      toast.success("Respuesta copiada");
+    } catch (error) {
+      toast.error("No pudimos copiar la respuesta");
+      console.error(error);
+    }
+  }, [composerValue]);
+
+  const handleSendMessage = useCallback(async () => {
+    const message = composerValue.trim();
+
+    if (!activeConversationId) {
+      toast.info("Selecciona una conversación para responder");
+      return;
+    }
+
+    if (!message) {
+      toast.info("Escribe un mensaje para enviarlo");
+      return;
+    }
+
+    setIsSendingMessage(true);
+
+    try {
+      const response = await authenticatedFetch(
+        `/api/contacts/${activeConversationId}/message`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message }),
+        },
+      );
+
+      const payload = (await response.json().catch(() => null)) as
+        | { success?: boolean; messageId?: string; error?: string }
+        | null;
+
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error ?? "No se pudo enviar el mensaje.");
+      }
+
+      const messageId =
+        payload.messageId ||
+        (typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `temp-${Date.now()}`);
+
+      const timestamp = new Date().toISOString();
+
+      setConversations((previous) =>
+        previous.map((conversation) => {
+          if (conversation.contactId !== activeConversationId) {
+            return conversation;
+          }
+
+          return {
+            ...conversation,
+            lastActivity: timestamp,
+            lastMessage: message,
+            unreadCount: 0,
+            messages: [
+              ...conversation.messages,
+              {
+                id: messageId,
+                direction: "out" as const,
+                type: "text",
+                text: message,
+                timestamp,
+                metadata: [],
+              },
+            ],
+          };
+        }),
+      );
+
+      setLastUpdatedAt(new Date());
+      setComposerValue("");
+      toast.success("Mensaje enviado correctamente");
+    } catch (error) {
+      if (error instanceof UnauthorizedError) {
+        return;
+      }
+      console.error("Error al enviar respuesta manual", error);
+      toast.error((error as Error)?.message ?? "Error al enviar el mensaje");
+    } finally {
+      setIsSendingMessage(false);
+    }
+  }, [activeConversationId, composerValue, setConversations]);
+
+  const handleComposerKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+        event.preventDefault();
+        void handleSendMessage();
+      }
+    },
+    [handleSendMessage],
+  );
+
   const autoRefreshStatusLabel = useMemo(() => {
     if (loading) {
       return "Cargando...";
@@ -507,6 +646,10 @@ const ConversationsPage: React.FC = () => {
       {
         keys: ["/"],
         description: "Buscar conversaciones",
+      },
+      {
+        keys: ["Ctrl/⌘", "Enter"],
+        description: "Enviar respuesta manual",
       },
       {
         keys: ["Alt", "Flecha ↓"],
@@ -991,10 +1134,88 @@ const ConversationsPage: React.FC = () => {
                   </Button>
                 </div>
               </div>
-              <div className="flex-1 space-y-6 overflow-y-auto bg-slate-50 p-6">
-                <ConversationTimeline
-                  messages={selectedConversation.messages}
-                />
+              <div className="flex flex-1 flex-col bg-slate-50">
+                <div className="flex-1 space-y-6 overflow-y-auto p-6">
+                  <ConversationTimeline
+                    messages={selectedConversation.messages}
+                  />
+                </div>
+                <div className="space-y-4 border-t border-slate-200 bg-white p-6">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h3 className="text-base font-semibold text-slate-900">
+                        Responder desde el panel
+                      </h3>
+                      <p className="text-sm text-slate-500">
+                        Envía un mensaje directo sin salir de esta pantalla.
+                      </p>
+                    </div>
+                    <Sparkles className="h-5 w-5 text-[#04102D]" aria-hidden="true" />
+                  </div>
+                  <Textarea
+                    value={composerValue}
+                    onChange={(event) => setComposerValue(event.target.value)}
+                    onKeyDown={handleComposerKeyDown}
+                    placeholder="Escribe una respuesta personalizada..."
+                    maxLength={MAX_MANUAL_REPLY_LENGTH + 200}
+                    className="min-h-[180px] resize-y rounded-2xl border-slate-200"
+                  />
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                    <span>
+                      {isComposerTooLong
+                        ? `Te pasaste por ${Math.abs(charactersRemaining)} caracteres`
+                        : `${Math.max(charactersRemaining, 0)} caracteres disponibles`}
+                    </span>
+                    {isComposerTooLong ? (
+                      <Badge variant="destructive">Mensaje demasiado largo</Badge>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button variant="outline" onClick={handleCopyReply} className="gap-2">
+                      <Copy className="h-4 w-4" aria-hidden="true" />
+                      Copiar respuesta
+                    </Button>
+                    <Button
+                      onClick={() => void handleSendMessage()}
+                      className="gap-2 bg-[#04102D] text-white hover:bg-[#030b1f]"
+                      disabled={isSendDisabled}
+                    >
+                      {isSendingMessage ? (
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <Send className="h-4 w-4" aria-hidden="true" />
+                      )}
+                      {isSendingMessage ? "Enviando..." : "Enviar mensaje"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => setComposerValue("")}
+                      disabled={!composerValue}
+                    >
+                      Limpiar
+                    </Button>
+                  </div>
+                  {quickReplies.length ? (
+                    <div className="space-y-3">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+                        Sugerencias rápidas
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {quickReplies.map((reply) => (
+                          <Button
+                            key={reply}
+                            variant="secondary"
+                            size="sm"
+                            className="whitespace-normal rounded-2xl px-3 py-2 text-left text-xs"
+                            onClick={() => handleApplyQuickReply(reply)}
+                          >
+                            {reply}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </>
           ) : (
@@ -1033,28 +1254,105 @@ const ConversationsPage: React.FC = () => {
                   </p>
                 </div>
               </div>
-              <div className="flex-1 space-y-6 overflow-y-auto bg-slate-50 p-4">
-                <ConversationTimeline
-                  messages={selectedConversation.messages}
-                />
-              </div>
-              <div className="flex flex-col gap-2 border-t border-slate-200 p-4">
-                <Button
-                  variant="outline"
-                  onClick={handleCopyPhone}
-                  className="gap-2"
-                >
-                  <Copy className="h-4 w-4" aria-hidden="true" />
-                  Copiar número
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleExportConversation}
-                  className="gap-2"
-                >
-                  <Download className="h-4 w-4" aria-hidden="true" />
-                  Exportar historial
-                </Button>
+              <div className="flex flex-1 flex-col bg-slate-50">
+                <div className="flex-1 space-y-6 overflow-y-auto p-4">
+                  <ConversationTimeline
+                    messages={selectedConversation.messages}
+                  />
+                </div>
+                <div className="space-y-4 border-t border-slate-200 bg-white p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-slate-900">
+                      Responder desde el panel
+                    </p>
+                    <Sparkles className="h-4 w-4 text-[#04102D]" aria-hidden="true" />
+                  </div>
+                  <Textarea
+                    value={composerValue}
+                    onChange={(event) => setComposerValue(event.target.value)}
+                    onKeyDown={handleComposerKeyDown}
+                    placeholder="Escribe una respuesta personalizada..."
+                    maxLength={MAX_MANUAL_REPLY_LENGTH + 200}
+                    className="min-h-[140px] resize-y rounded-2xl border-slate-200"
+                  />
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                    <span>
+                      {isComposerTooLong
+                        ? `Te pasaste por ${Math.abs(charactersRemaining)} caracteres`
+                        : `${Math.max(charactersRemaining, 0)} caracteres disponibles`}
+                    </span>
+                    {isComposerTooLong ? (
+                      <Badge variant="destructive">Mensaje demasiado largo</Badge>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    <Button
+                      variant="outline"
+                      onClick={handleCopyReply}
+                      className="gap-2 sm:flex-1"
+                    >
+                      <Copy className="h-4 w-4" aria-hidden="true" />
+                      Copiar respuesta
+                    </Button>
+                    <Button
+                      onClick={() => void handleSendMessage()}
+                      className="gap-2 bg-[#04102D] text-white hover:bg-[#030b1f] sm:flex-1"
+                      disabled={isSendDisabled}
+                    >
+                      {isSendingMessage ? (
+                        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <Send className="h-4 w-4" aria-hidden="true" />
+                      )}
+                      {isSendingMessage ? "Enviando..." : "Enviar mensaje"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => setComposerValue("")}
+                      disabled={!composerValue}
+                    >
+                      Limpiar
+                    </Button>
+                  </div>
+                  {quickReplies.length ? (
+                    <div className="space-y-3">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+                        Sugerencias rápidas
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {quickReplies.map((reply) => (
+                          <Button
+                            key={reply}
+                            variant="secondary"
+                            size="sm"
+                            className="whitespace-normal rounded-2xl px-3 py-2 text-left text-xs"
+                            onClick={() => handleApplyQuickReply(reply)}
+                          >
+                            {reply}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="grid gap-2 border-t border-slate-200 pt-4">
+                    <Button
+                      variant="outline"
+                      onClick={handleCopyPhone}
+                      className="gap-2"
+                    >
+                      <Copy className="h-4 w-4" aria-hidden="true" />
+                      Copiar número
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handleExportConversation}
+                      className="gap-2"
+                    >
+                      <Download className="h-4 w-4" aria-hidden="true" />
+                      Exportar historial
+                    </Button>
+                  </div>
+                </div>
               </div>
             </>
           ) : (
