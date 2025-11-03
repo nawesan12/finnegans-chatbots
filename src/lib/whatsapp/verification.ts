@@ -90,7 +90,7 @@ async function graphRequest(
 
     const errorMessage = response.ok
       ? undefined
-      : extractGraphErrorMessage(json) ?? text || response.statusText || undefined;
+      : (extractGraphErrorMessage(json) ?? text) || response.statusText || undefined;
 
     return {
       ok: response.ok,
