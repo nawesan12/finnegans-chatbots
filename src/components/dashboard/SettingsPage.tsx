@@ -22,6 +22,13 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { authenticatedFetch } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/store";
@@ -88,6 +95,12 @@ const SettingsPage = () => {
   const [verificationResult, setVerificationResult] =
     useState<MetaVerificationResult | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [isRequestingCode, setIsRequestingCode] = useState(false);
+  const [isSubmittingCode, setIsSubmittingCode] = useState(false);
+  const [verificationMethod, setVerificationMethod] =
+    useState<"sms" | "voice">("sms");
+  const [verificationLocale, setVerificationLocale] = useState("es_AR");
+  const [verificationCodeInput, setVerificationCodeInput] = useState("");
 
   const fetchSettings = useCallback(async () => {
     if (!token) {
@@ -379,6 +392,154 @@ const SettingsPage = () => {
       setIsVerifying(false);
     }
   }, [token]);
+
+  const handleRequestVerificationCode = useCallback(async () => {
+    if (!token) {
+      toast.error("No se pudo autenticar la sesión actual");
+      return;
+    }
+
+    if (!settings.metaAccessToken.trim() || !settings.metaPhoneNumberId.trim()) {
+      toast.error(
+        "Completa el Access Token y el Phone Number ID antes de solicitar el código.",
+      );
+      return;
+    }
+
+    try {
+      setIsRequestingCode(true);
+      const response = await authenticatedFetch("/api/meta/phone/request-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          method: verificationMethod,
+          locale: verificationLocale.trim() || undefined,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | { message?: string; expiresInMinutes?: number | null; error?: string }
+        | null;
+
+      if (!response.ok) {
+        const message =
+          payload &&
+          typeof payload === "object" &&
+          payload !== null &&
+          typeof payload.error === "string"
+            ? payload.error
+            : "No se pudo solicitar el código de verificación.";
+        throw new Error(message);
+      }
+
+      let successMessage =
+        payload?.message ??
+        (verificationMethod === "voice"
+          ? "Meta realizará una llamada con el código de verificación."
+          : "Meta enviará un SMS con el código de verificación.");
+
+      if (
+        payload &&
+        typeof payload === "object" &&
+        typeof payload.expiresInMinutes === "number" &&
+        payload.expiresInMinutes > 0
+      ) {
+        successMessage += ` El código vence en ${payload.expiresInMinutes} minuto${
+          payload.expiresInMinutes === 1 ? "" : "s"
+        }.`;
+      }
+
+      toast.success(successMessage);
+    } catch (error) {
+      toast.error(
+        (error as Error)?.message ??
+          "No se pudo solicitar el código de verificación en Meta.",
+      );
+    } finally {
+      setIsRequestingCode(false);
+    }
+  }, [
+    token,
+    settings.metaAccessToken,
+    settings.metaPhoneNumberId,
+    verificationMethod,
+    verificationLocale,
+  ]);
+
+  const handleConfirmVerificationCode = useCallback(async () => {
+    if (!token) {
+      toast.error("No se pudo autenticar la sesión actual");
+      return;
+    }
+
+    const normalizedCode = verificationCodeInput.trim();
+    if (!normalizedCode) {
+      toast.error("Ingresa el código de verificación recibido por Meta.");
+      return;
+    }
+
+    try {
+      setIsSubmittingCode(true);
+      const response = await authenticatedFetch("/api/meta/phone/verify-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: normalizedCode }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            message?: string;
+            verification?: MetaVerificationResult | null;
+            verificationError?: { message?: string } | null;
+            error?: string;
+          }
+        | null;
+
+      if (!response.ok) {
+        const message =
+          payload &&
+          typeof payload === "object" &&
+          payload !== null &&
+          typeof payload.error === "string"
+            ? payload.error
+            : "No se pudo validar el código de Meta.";
+        throw new Error(message);
+      }
+
+      const successMessage =
+        payload?.message ?? "Código validado correctamente en Meta Cloud.";
+      toast.success(successMessage);
+      setVerificationCodeInput("");
+
+      if (
+        payload &&
+        typeof payload === "object" &&
+        payload.verification &&
+        typeof payload.verification === "object"
+      ) {
+        setVerificationResult(payload.verification as MetaVerificationResult);
+      } else {
+        await handleVerifyAccount();
+      }
+
+      if (
+        payload &&
+        typeof payload === "object" &&
+        payload.verificationError &&
+        typeof payload.verificationError === "object" &&
+        typeof payload.verificationError.message === "string"
+      ) {
+        toast.message(payload.verificationError.message);
+      }
+    } catch (error) {
+      toast.error(
+        (error as Error)?.message ??
+          "No se pudo validar el código de verificación en Meta.",
+      );
+    } finally {
+      setIsSubmittingCode(false);
+    }
+  }, [token, verificationCodeInput, handleVerifyAccount]);
 
   const handleCopy = useCallback(
     async (value: string, label: string, key: string) => {
@@ -929,6 +1090,120 @@ const SettingsPage = () => {
               </CardContent>
             </Card>
           )}
+          <Card>
+            <CardHeader>
+              <CardTitle>Verificar número con Meta Cloud</CardTitle>
+              <CardDescription>
+                Solicita y valida el código de verificación sin salir del dashboard.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="verificationMethod">Canal del código</Label>
+                  <Select
+                    value={verificationMethod}
+                    onValueChange={(value) =>
+                      setVerificationMethod(value as "sms" | "voice")
+                    }
+                  >
+                    <SelectTrigger id="verificationMethod">
+                      <SelectValue placeholder="Selecciona un método" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sms">SMS</SelectItem>
+                      <SelectItem value="voice">Llamada de voz</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500">
+                    Meta enviará el código mediante SMS o una llamada según tu
+                    selección.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="verificationLocale">Idioma/localización</Label>
+                  <Input
+                    id="verificationLocale"
+                    value={verificationLocale}
+                    onChange={(event) => setVerificationLocale(event.target.value)}
+                    placeholder="es_AR"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Usa el formato idioma_país (por ejemplo, es_AR o en_US). Déjalo
+                    vacío para que Meta elija el idioma automáticamente.
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="flex w-full items-center justify-center gap-2"
+                onClick={() => {
+                  void handleRequestVerificationCode();
+                }}
+                disabled={
+                  loading ||
+                  isSaving ||
+                  isClearing ||
+                  isRequestingCode ||
+                  !token
+                }
+              >
+                {isRequestingCode ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Solicitando código...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCcw className="size-4" />
+                    Solicitar código a Meta
+                  </>
+                )}
+              </Button>
+              <div className="space-y-2">
+                <Label htmlFor="verificationCode">Código recibido</Label>
+                <Input
+                  id="verificationCode"
+                  value={verificationCodeInput}
+                  onChange={(event) => setVerificationCodeInput(event.target.value)}
+                  placeholder="123456"
+                  inputMode="numeric"
+                />
+                <p className="text-xs text-gray-500">
+                  Una vez validado intentaremos registrar el número usando el PIN
+                  configurado.
+                </p>
+              </div>
+              <Button
+                type="button"
+                className="flex w-full items-center justify-center gap-2 bg-[#8694ff] text-white hover:bg-indigo-700"
+                onClick={() => {
+                  void handleConfirmVerificationCode();
+                }}
+                disabled={
+                  loading ||
+                  isSaving ||
+                  isClearing ||
+                  isSubmittingCode ||
+                  !token ||
+                  !verificationCodeInput.trim()
+                }
+              >
+                {isSubmittingCode ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Validando código...
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="size-4" />
+                    Validar código y registrar número
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader>
               <CardTitle>Verificación rápida</CardTitle>
