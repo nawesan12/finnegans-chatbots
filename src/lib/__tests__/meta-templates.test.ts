@@ -58,7 +58,7 @@ describe("Meta templates client", () => {
     const result = await createMetaTemplate(userId, {
       name: "welcome_message",
       category: "marketing",
-      language: "en_US",
+      language: " es-ar ",
       components: [
         {
           type: "body",
@@ -83,7 +83,7 @@ describe("Meta templates client", () => {
     expect(JSON.parse(String(init?.body))).toEqual({
       name: "welcome_message",
       category: "MARKETING",
-      language: "en_US",
+      language: "es_AR",
       components: [
         { type: "BODY", text: "Hello {{1}}", example: { body_text: [["Hi there"]] } },
         {

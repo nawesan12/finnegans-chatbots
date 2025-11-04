@@ -33,7 +33,7 @@ const TemplateComponentSchema = z.object({
 const TemplateCreateSchema = z.object({
   name: z.string().min(1),
   category: z.string().min(1),
-  language: z.string().min(1),
+  language: z.string().trim().min(1),
   allowCategoryChange: z.boolean().optional(),
   components: z.array(TemplateComponentSchema).optional(),
 });
