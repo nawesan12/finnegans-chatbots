@@ -221,6 +221,28 @@ const normalizeUpper = (value?: string | null) => {
   return trimmed ? trimmed.toUpperCase() : "";
 };
 
+const normalizeTemplateLanguage = (value?: string | null) => {
+  const trimmed = (value ?? "").trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const sanitized = trimmed.replace(/-/g, "_");
+  const parts = sanitized.split("_").filter((part) => part.trim().length > 0);
+  if (!parts.length) {
+    return "";
+  }
+
+  const [language, ...rest] = parts;
+  const normalizedLanguage = language.toLowerCase();
+  if (!rest.length) {
+    return normalizedLanguage;
+  }
+
+  const normalizedRest = rest.map((segment) => segment.toUpperCase());
+  return [normalizedLanguage, ...normalizedRest].join("_");
+};
+
 const sanitizeCreateButton = (
   input: CreateMetaTemplateButton | null | undefined,
 ): Record<string, unknown> | null => {
@@ -304,7 +326,7 @@ const buildCreateTemplateBody = (
     throw new MetaTemplateError("Template name is required", { status: 400 });
   }
 
-  const language = (payload.language ?? "").trim();
+  const language = normalizeTemplateLanguage(payload.language ?? "");
   if (!language) {
     throw new MetaTemplateError("Template language is required", { status: 400 });
   }
