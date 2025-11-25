@@ -1,7 +1,9 @@
+import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import {
   SendMessagePayload,
   SendMessageResult,
+  SendMessageContext,
 } from "@/lib/whatsapp/types";
 import {
   GRAPH_VERSION,
@@ -596,10 +598,30 @@ async function attemptSendMessage(
   }
 }
 
+function extractMessageContent(message: SendMessagePayload): string | null {
+  switch (message.type) {
+    case "text":
+      return message.text;
+    case "media":
+      return message.caption ?? null;
+    case "options":
+      return message.text;
+    case "list":
+      return message.text;
+    case "flow":
+      return message.flow.body;
+    case "template":
+      return `Template: ${message.template.name}`;
+    default:
+      return null;
+  }
+}
+
 export async function sendMessage(
   userId: string,
   to: string,
   message: SendMessagePayload,
+  context?: SendMessageContext,
 ): Promise<SendMessageResult> {
   const normalizedTo = normalizePhone(to);
   if (!normalizedTo) {
@@ -632,7 +654,7 @@ export async function sendMessage(
     return buildResult.result;
   }
 
-  return attemptSendMessage(
+  const result = await attemptSendMessage(
     {
       userId,
       accessToken,
@@ -643,4 +665,36 @@ export async function sendMessage(
     },
     1,
   );
+
+  // Store outgoing message if context is provided or if we should store by default
+  const shouldStore = context?.storeMessage !== false;
+  if (shouldStore && context?.contactId) {
+    const messageContent = extractMessageContent(message);
+    const messagePayload = { ...message } as unknown as Prisma.InputJsonValue;
+
+    try {
+      await prisma.message.create({
+        data: {
+          waMessageId: result.success ? result.messageId ?? null : null,
+          direction: "outbound",
+          type: message.type,
+          content: messageContent,
+          payload: messagePayload,
+          status: result.success ? "Sent" : "Failed",
+          error: result.success ? null : ("error" in result ? result.error : null),
+          statusUpdatedAt: new Date(),
+          contactId: context.contactId,
+          userId,
+          sessionId: context.sessionId ?? null,
+        },
+      });
+    } catch (err) {
+      logger.warn("Failed to store outgoing message", {
+        waMessageId: result.success ? result.messageId : null,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  return result;
 }

@@ -26,6 +26,7 @@ model User {
   contacts   Contact[]
   flows      Flow[]
   broadcasts Broadcast[]
+  messages   Message[]
 }
 
 model Contact {
@@ -43,6 +44,7 @@ model Contact {
   logs                Log[]
   sessions            Session[]
   broadcastRecipients BroadcastRecipient[]
+  messages            Message[]
 }
 
 model Tag {
@@ -112,6 +114,7 @@ model Session {
   contact   Contact @relation(fields: [contactId], references: [id])
   flowId    String
   flow      Flow    @relation(fields: [flowId], references: [id])
+  messages  Message[]
 
   @@unique([contactId, flowId])
 }
@@ -166,4 +169,30 @@ model Lead {
   notes     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model Message {
+  id              String    @id @default(cuid())
+  waMessageId     String?   @unique // WhatsApp's message ID for status tracking
+  direction       String    // "inbound" or "outbound"
+  type            String    @default("text") // text, media, interactive, template, etc.
+  content         String?   // Message text or caption
+  payload         Json?     // Full message payload for complex types
+  status          String    @default("Pending") // Pending, Sent, Delivered, Read, Failed
+  error           String?   // Error message if failed
+  statusUpdatedAt DateTime?
+  createdAt       DateTime  @default(now())
+
+  contactId String
+  contact   Contact @relation(fields: [contactId], references: [id])
+
+  userId String
+  user   User @relation(fields: [userId], references: [id])
+
+  sessionId String?
+  session   Session? @relation(fields: [sessionId], references: [id])
+
+  @@index([contactId, createdAt])
+  @@index([waMessageId])
+  @@index([userId, createdAt])
 }

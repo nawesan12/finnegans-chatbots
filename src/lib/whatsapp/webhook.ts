@@ -70,31 +70,69 @@ async function adjustBroadcastAggregates(
   }
 }
 
-async function processBroadcastStatuses(userId: string, statuses: WAStatus[]) {
+async function processMessageStatuses(userId: string, statuses: WAStatus[]) {
   for (const status of statuses) {
     if (!status?.id) continue;
-    const recipient = await prisma.broadcastRecipient.findFirst({
-      where: { messageId: status.id, broadcast: { userId } },
-    });
-    if (!recipient) continue;
 
     const nextStatus = mapWhatsappStatus(status.status);
     if (!nextStatus) continue;
 
-    const updateData: Prisma.BroadcastRecipientUpdateInput = {
-      status: nextStatus,
-      statusUpdatedAt: parseStatusTimestamp(status.timestamp) ?? new Date(),
-    };
-    if (BROADCAST_FAILURE_STATUSES.has(nextStatus)) {
-      updateData.error = extractStatusError(status.errors) ?? "Delivery failed";
-    }
+    const statusTimestamp = parseStatusTimestamp(status.timestamp) ?? new Date();
+    const errorMessage = BROADCAST_FAILURE_STATUSES.has(nextStatus)
+      ? extractStatusError(status.errors) ?? "Delivery failed"
+      : null;
 
-    await prisma.broadcastRecipient.update({
-      where: { id: recipient.id },
-      data: updateData,
+    // Update Message record (for all message types)
+    const message = await prisma.message.findUnique({
+      where: { waMessageId: status.id },
     });
 
-    await adjustBroadcastAggregates(recipient.broadcastId, recipient.status, nextStatus);
+    if (message) {
+      await prisma.message.update({
+        where: { id: message.id },
+        data: {
+          status: nextStatus,
+          statusUpdatedAt: statusTimestamp,
+          ...(errorMessage && { error: errorMessage }),
+        },
+      });
+      logger.info("Updated message status", {
+        waMessageId: status.id,
+        status: nextStatus,
+        userId,
+      });
+    }
+
+    // Also update BroadcastRecipient if this is a broadcast message
+    const recipient = await prisma.broadcastRecipient.findFirst({
+      where: { messageId: status.id, broadcast: { userId } },
+    });
+
+    if (recipient) {
+      const updateData: Prisma.BroadcastRecipientUpdateInput = {
+        status: nextStatus,
+        statusUpdatedAt: statusTimestamp,
+      };
+      if (errorMessage) {
+        updateData.error = errorMessage;
+      }
+
+      await prisma.broadcastRecipient.update({
+        where: { id: recipient.id },
+        data: updateData,
+      });
+
+      await adjustBroadcastAggregates(recipient.broadcastId, recipient.status, nextStatus);
+    }
+
+    // Log if message wasn't found anywhere (could be from external source)
+    if (!message && !recipient) {
+      logger.info("Status update for unknown message (may be external)", {
+        waMessageId: status.id,
+        status: status.status,
+        userId,
+      });
+    }
   }
 }
 
@@ -256,6 +294,36 @@ async function handleIncomingMessage(
     update: {
       ...(contactName && { name: contactName }),
     },
+  });
+
+  // Store incoming message with WhatsApp message ID for tracking
+  const messageType = msg.type ?? "text";
+  const messageContent = userText;
+  const messagePayload = {
+    type: messageType,
+    text: msg.text?.body ?? null,
+    interactive: msg.interactive ?? null,
+    media: msg.image ?? msg.video ?? msg.audio ?? msg.document ?? null,
+  } as Prisma.InputJsonValue;
+
+  await prisma.message.create({
+    data: {
+      waMessageId: msg.id,
+      direction: "inbound",
+      type: messageType,
+      content: messageContent,
+      payload: messagePayload,
+      status: "Delivered", // Inbound messages are already delivered to us
+      statusUpdatedAt: new Date(),
+      contactId: contact.id,
+      userId: user.id,
+    },
+  }).catch((err) => {
+    // Log but don't fail the flow if message storage fails (e.g., duplicate waMessageId)
+    logger.warn("Failed to store incoming message", {
+      waMessageId: msg.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
   });
 
   const existingSession = (await prisma.session.findFirst({
@@ -436,7 +504,7 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
       }
 
       if (Array.isArray(val.statuses) && val.statuses.length) {
-        await processBroadcastStatuses(user.id, val.statuses);
+        await processMessageStatuses(user.id, val.statuses);
       }
 
       if (Array.isArray(val.messages) && val.messages.length) {

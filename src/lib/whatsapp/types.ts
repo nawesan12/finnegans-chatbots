@@ -186,6 +186,12 @@ export type SendMessageResult =
   | { success: true; messageId?: string | null }
   | { success: false; error?: string; status?: number; details?: unknown };
 
+export type SendMessageContext = {
+  contactId?: string;
+  sessionId?: string;
+  storeMessage?: boolean; // Whether to persist message to database (default: true)
+};
+
 export type ManualFlowTriggerOptions = {
   flowId: string;
   from: string;

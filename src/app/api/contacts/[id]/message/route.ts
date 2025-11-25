@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { getAuthPayload } from "@/lib/auth";
 import prisma from "@/lib/prisma";
-import { sendMessage } from "@/lib/meta";
+import { sendMessage } from "@/lib/whatsapp/client";
 
 const messagePayloadSchema = z.object({
   message: z.string().min(1, "El mensaje no puede estar vacío."),
@@ -46,10 +46,19 @@ export async function POST(
       );
     }
 
-    const result = await sendMessage(auth.userId, contact.phone, {
-      type: "text",
-      text: payload.data.message,
-    });
+    // Send message with context to enable message tracking
+    const result = await sendMessage(
+      auth.userId,
+      contact.phone,
+      {
+        type: "text",
+        text: payload.data.message,
+      },
+      {
+        contactId: contact.id,
+        storeMessage: true,
+      },
+    );
 
     if (!result.success) {
       return NextResponse.json(
