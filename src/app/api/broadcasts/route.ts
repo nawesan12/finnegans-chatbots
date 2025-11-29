@@ -3,37 +3,8 @@ import { Prisma } from "@prisma/client";
 import { sendMessage } from "@/lib/meta";
 import prisma from "@/lib/prisma";
 import { getAuthPayload } from "@/lib/auth";
+import { executeFlow } from "@/lib/flow-executor";
 
-const DEFAULT_CONTACT_NAME_FALLBACK = "Cliente";
-const DEFAULT_FLOW_NAME_FALLBACK = "Flujo activo";
-const DEFAULT_FLOW_KEYWORD_FALLBACK = "palabra clave";
-
-type PlaceholderContext = {
-  contact: { name: string | null; phone: string | null };
-  flow: { name: string | null; trigger: string | null };
-};
-
-function applyBroadcastPlaceholders(
-  template: string,
-  context: PlaceholderContext,
-) {
-  const safeName =
-    context.contact.name?.trim() ||
-    context.contact.phone?.trim() ||
-    DEFAULT_CONTACT_NAME_FALLBACK;
-
-  const replacements: Record<string, string> = {
-    "{{name}}": safeName,
-    "{{phone}}": context.contact.phone ?? "",
-    "{{flow}}": context.flow.name ?? DEFAULT_FLOW_NAME_FALLBACK,
-    "{{keyword}}": context.flow.trigger ?? DEFAULT_FLOW_KEYWORD_FALLBACK,
-  };
-
-  return Object.entries(replacements).reduce((output, [token, value]) => {
-    if (!output.includes(token)) return output;
-    return output.split(token).join(value);
-  }, template);
-}
 
 export async function GET(request: Request) {
   const auth = getAuthPayload(request);
@@ -263,65 +234,96 @@ export async function POST(request: Request) {
       }
 
       try {
-        const personalizedMessage = applyBroadcastPlaceholders(
-          normalizedMessage,
-          {
-            contact: { name: contact.name, phone: contact.phone },
-            flow,
+        // Fetch the session with flow definition for execution
+        const session = await prisma.session.findUnique({
+          where: {
+            contactId_flowId: { contactId: contact.id, flowId: flow.id },
           },
-        );
-
-        const sendResult = await sendMessage(auth.userId, contact.phone, {
-          type: "text",
-          text: personalizedMessage,
+          include: {
+            flow: {
+              select: {
+                definition: true,
+                userId: true,
+                name: true,
+              },
+            },
+            contact: {
+              select: { phone: true },
+            },
+          },
         });
 
-        if (sendResult.success) {
-          successCount += 1;
-          await prisma.broadcastRecipient.update({
-            where: { id: recipient.id },
-            data: {
-              status: "Sent",
-              sentAt: new Date(),
-              statusUpdatedAt: new Date(),
-              messageId: sendResult.messageId ?? null,
-              error: null,
-            },
-          });
-        } else {
-          failureCount += 1;
-          await prisma.broadcastRecipient.update({
-            where: { id: recipient.id },
-            data: {
-              status: "Failed",
-              error: sendResult.error ?? "Meta API request failed",
-              statusUpdatedAt: new Date(),
-            },
-          });
+        if (!session) {
+          throw new Error("Session not found for contact");
+        }
 
-          if (
-            (sendResult.status === 401 ||
-              sendResult.error?.toLowerCase().includes("access token")) &&
-            !tokenError
-          ) {
+        // Execute the flow with the trigger keyword to start the conversation
+        await executeFlow(
+          session,
+          flow.trigger, // Send the trigger keyword to start the flow
+          sendMessage,
+          null,
+        );
+
+        // Check if flow execution succeeded by checking session status
+        const updatedSession = await prisma.session.findUnique({
+          where: { id: session.id },
+          select: { status: true },
+        });
+
+        if (updatedSession?.status === "Errored") {
+          throw new Error("Flow execution failed");
+        }
+
+        // Get the latest message sent to track in broadcast recipient
+        const latestMessage = await prisma.message.findFirst({
+          where: {
+            sessionId: session.id,
+            direction: "outbound",
+          },
+          orderBy: { createdAt: "desc" },
+          select: { waMessageId: true, id: true },
+        });
+
+        successCount += 1;
+        await prisma.broadcastRecipient.update({
+          where: { id: recipient.id },
+          data: {
+            status: "Sent",
+            sentAt: new Date(),
+            statusUpdatedAt: new Date(),
+            messageId: latestMessage?.waMessageId ?? null,
+            conversationId: latestMessage?.id ?? null,
+            error: null,
+          },
+        });
+      } catch (error) {
+        console.error("Error executing flow for broadcast:", error);
+        failureCount += 1;
+        const errorMessage =
+          error instanceof Error ? error.message : "Unexpected error";
+
+        await prisma.broadcastRecipient.update({
+          where: { id: recipient.id },
+          data: {
+            status: "Failed",
+            error: errorMessage,
+            statusUpdatedAt: new Date(),
+          },
+        });
+
+        // Check if it's a token error
+        if (
+          errorMessage.toLowerCase().includes("access token") ||
+          errorMessage.toLowerCase().includes("unauthorized")
+        ) {
+          if (!tokenError) {
             tokenError =
-              sendResult.error ??
               "Meta access token expired. Please reconnect WhatsApp in Settings.";
             forcedStopIndex = index;
             break;
           }
         }
-      } catch (error) {
-        console.error("Error sending broadcast message:", error);
-        failureCount += 1;
-        await prisma.broadcastRecipient.update({
-          where: { id: recipient.id },
-          data: {
-            status: "Failed",
-            error: "Unexpected error",
-            statusUpdatedAt: new Date(),
-          },
-        });
       }
     }
 

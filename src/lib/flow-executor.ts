@@ -758,22 +758,33 @@ export async function executeFlow(
   }
 
   // --- Main loop ---
-  const visited = new Set<string>();
+  // Track execution path for better loop detection
+  const executionPath: string[] = [];
   let steps = 0;
 
   try {
     while (currentNode) {
       if (steps++ > SAFE_MAX_STEPS) {
         await updateSession({ status: "Errored", context });
-        console.error("Guard limit reached");
+        console.error("Guard limit reached - possible infinite loop");
         return;
       }
-      if (visited.has(currentNode.id)) {
-        await updateSession({ status: "Errored", context });
-        console.error("Loop detected at", currentNode.id);
-        return;
+
+      // Check for tight loops: same node visited 3+ times in last 10 steps
+      const currentNodeId = currentNode.id;
+      executionPath.push(currentNodeId);
+      if (executionPath.length > 10) {
+        const recentPath = executionPath.slice(-10);
+        const nodeCount = recentPath.filter((id) => id === currentNodeId).length;
+        if (nodeCount >= 3) {
+          await updateSession({ status: "Errored", context });
+          console.error(
+            `Tight loop detected at node ${currentNodeId} - visited ${nodeCount} times in last 10 steps`,
+          );
+          return;
+        }
       }
-      visited.add(currentNode.id);
+
       await updateSession({ currentNodeId: currentNode.id, context });
 
       let nextNodeId: string | undefined;
@@ -829,6 +840,24 @@ export async function executeFlow(
               throw new FlowSendMessageError(message, sendResult?.status);
             }
 
+            // Persist message to database
+            await prisma.message.create({
+              data: {
+                waMessageId: sendResult.messageId ?? null,
+                direction: "outbound",
+                type: "template",
+                content: templateName,
+                payload: {
+                  template: { name: templateName, language: templateLanguage },
+                  components,
+                } as Prisma.InputJsonValue,
+                status: "Sent",
+                contactId: session.contactId,
+                userId: session.flow.userId,
+                sessionId: session.id,
+              },
+            });
+
             recordOutbound("template", {
               template: {
                 name: templateName,
@@ -878,6 +907,20 @@ export async function executeFlow(
             throw new FlowSendMessageError(message, sendResult?.status);
           }
 
+          // Persist message to database
+          await prisma.message.create({
+            data: {
+              waMessageId: sendResult.messageId ?? null,
+              direction: "outbound",
+              type: "text",
+              content: text,
+              status: "Sent",
+              contactId: session.contactId,
+              userId: session.flow.userId,
+              sessionId: session.id,
+            },
+          });
+
           recordOutbound("text", { text });
           break;
         }
@@ -907,6 +950,21 @@ export async function executeFlow(
                 : "Failed to send WhatsApp options message";
             throw new FlowSendMessageError(message, sendResult?.status);
           }
+
+          // Persist message to database
+          await prisma.message.create({
+            data: {
+              waMessageId: sendResult.messageId ?? null,
+              direction: "outbound",
+              type: "interactive",
+              content: text,
+              payload: { text, options } as Prisma.InputJsonValue,
+              status: "Sent",
+              contactId: session.contactId,
+              userId: session.flow.userId,
+              sessionId: session.id,
+            },
+          });
 
           recordOutbound("options", { text, options });
           await updateSession({ status: "Paused", context });
@@ -997,6 +1055,21 @@ export async function executeFlow(
                 : "Failed to send WhatsApp media message";
             throw new FlowSendMessageError(message, sendResult?.status);
           }
+
+          // Persist message to database
+          await prisma.message.create({
+            data: {
+              waMessageId: sendResult.messageId ?? null,
+              direction: "outbound",
+              type: "media",
+              content: mediaPayload.caption ?? null,
+              payload: mediaPayload as Prisma.InputJsonValue,
+              status: "Sent",
+              contactId: session.contactId,
+              userId: session.flow.userId,
+              sessionId: session.id,
+            },
+          });
 
           recordOutbound("media", mediaPayload);
           break;

@@ -53,6 +53,7 @@ export const MessageDataSchema = BaseDataSchema.extend({
 });
 
 export const OptionsDataSchema = BaseDataSchema.extend({
+  text: z.string().max(waTextLimit).optional(),
   options: z.array(z.string().min(1).max(30)).min(2).max(10),
 });
 

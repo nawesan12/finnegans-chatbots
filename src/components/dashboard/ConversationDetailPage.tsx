@@ -39,6 +39,7 @@ import {
 } from "@/lib/conversations/formatters";
 import { generateQuickReplies } from "@/lib/conversations/quick-replies";
 import type { ConversationSummary } from "@/lib/conversations/types";
+import { useConversationSocket } from "@/hooks/useConversationSocket";
 
 const MAX_MANUAL_REPLY_LENGTH = 1000;
 
@@ -50,6 +51,67 @@ const ConversationDetailPage: React.FC<{ contactId: string }> = ({ contactId }) 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [composerValue, setComposerValue] = useState("");
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+
+  // WebSocket connection for real-time updates
+  const { isConnected: wsConnected } = useConversationSocket({
+    contactId,
+    enabled: true,
+    onMessageNew: useCallback((message: any) => {
+      setConversation((prev) => {
+        if (!prev) return prev;
+
+        // Check if message already exists
+        const exists = prev.messages.some((m) => m.id === message.id);
+        if (exists) return prev;
+
+        // Add new message
+        return {
+          ...prev,
+          lastActivity: message.createdAt,
+          lastMessage: message.content ?? "",
+          messages: [
+            ...prev.messages,
+            {
+              id: message.id,
+              direction: message.direction === "inbound" ? "in" : "out",
+              type: message.type,
+              text: message.content ?? "",
+              timestamp: message.createdAt,
+              metadata: [],
+            },
+          ],
+        };
+      });
+    }, []),
+    onMessageStatus: useCallback((event: any) => {
+      setConversation((prev: any) => {
+        if (!prev) return prev;
+
+        // Update message status
+        const updatedMessages = prev.messages.map((msg: any) => {
+          if (msg.id === event.messageId) {
+            return {
+              ...msg,
+              metadata: [
+                ...msg.metadata,
+                { key: "status", value: event.status },
+              ],
+            };
+          }
+          return msg;
+        });
+
+        return { ...prev, messages: updatedMessages };
+      });
+    }, []),
+    onTypingStart: useCallback(() => {
+      setIsTyping(true);
+    }, []),
+    onTypingStop: useCallback(() => {
+      setIsTyping(false);
+    }, []),
+  });
 
   const fetchConversation = useCallback(
     async (mode: "initial" | "refresh" = "initial") => {
@@ -105,6 +167,19 @@ const ConversationDetailPage: React.FC<{ contactId: string }> = ({ contactId }) 
     setComposerValue("");
     setIsSendingMessage(false);
   }, [contactId]);
+
+  // Polling fallback (slower when WebSocket connected)
+  useEffect(() => {
+    if (!conversation) return;
+
+    // If WebSocket is connected, poll less frequently (30s) as fallback
+    // If not connected, poll every 5 seconds
+    const pollInterval = setInterval(() => {
+      void fetchConversation("refresh");
+    }, wsConnected ? 30000 : 5000);
+
+    return () => clearInterval(pollInterval);
+  }, [conversation, fetchConversation, wsConnected]);
 
   const handleRefresh = () => {
     void fetchConversation("refresh");
@@ -222,9 +297,9 @@ const ConversationDetailPage: React.FC<{ contactId: string }> = ({ contactId }) 
   };
 
   const handleSendMessage = useCallback(async () => {
-    const message = composerValue.trim();
+    const text = composerValue.trim();
 
-    if (!message) {
+    if (!text) {
       toast.info("Escribe un mensaje para enviarlo");
       return;
     }
@@ -233,29 +308,23 @@ const ConversationDetailPage: React.FC<{ contactId: string }> = ({ contactId }) 
 
     try {
       const response = await authenticatedFetch(
-        `/api/contacts/${contactId}/message`,
+        `/api/conversations/${contactId}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message }),
+          body: JSON.stringify({ text, type: "text" }),
         },
       );
 
       const payload = (await response.json().catch(() => null)) as
-        | { success?: boolean; messageId?: string; error?: string }
+        | { message?: { id: string; content: string; createdAt: string }; error?: string }
         | null;
 
-      if (!response.ok || !payload?.success) {
+      if (!response.ok || !payload?.message) {
         throw new Error(payload?.error ?? "No se pudo enviar el mensaje.");
       }
 
-      const messageId =
-        payload.messageId ||
-        (typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? crypto.randomUUID()
-          : `temp-${Date.now()}`);
-
-      const timestamp = new Date().toISOString();
+      const newMessage = payload.message;
 
       setConversation((previous) => {
         if (!previous) {
@@ -264,17 +333,17 @@ const ConversationDetailPage: React.FC<{ contactId: string }> = ({ contactId }) 
 
         return {
           ...previous,
-          lastActivity: timestamp,
-          lastMessage: message,
+          lastActivity: newMessage.createdAt,
+          lastMessage: newMessage.content,
           unreadCount: 0,
           messages: [
             ...previous.messages,
             {
-              id: messageId,
+              id: newMessage.id,
               direction: "out" as const,
               type: "text",
-              text: message,
-              timestamp,
+              text: newMessage.content,
+              timestamp: newMessage.createdAt,
               metadata: [],
             },
           ],
@@ -283,6 +352,9 @@ const ConversationDetailPage: React.FC<{ contactId: string }> = ({ contactId }) 
 
       setComposerValue("");
       toast.success("Mensaje enviado correctamente");
+
+      // Refresh to get any automated responses
+      setTimeout(() => void fetchConversation("refresh"), 1000);
     } catch (error) {
       if (error instanceof UnauthorizedError) {
         router.push("/login");
@@ -293,7 +365,7 @@ const ConversationDetailPage: React.FC<{ contactId: string }> = ({ contactId }) 
     } finally {
       setIsSendingMessage(false);
     }
-  }, [composerValue, contactId, router]);
+  }, [composerValue, contactId, router, fetchConversation]);
 
   const handleComposerKeyDown = (
     event: React.KeyboardEvent<HTMLTextAreaElement>,
@@ -384,6 +456,18 @@ const ConversationDetailPage: React.FC<{ contactId: string }> = ({ contactId }) 
                       <Phone className="h-3.5 w-3.5" aria-hidden="true" />
                       {conversation.contactPhone}
                     </span>
+                    {wsConnected && (
+                      <Badge variant="outline" className="gap-1 text-xs">
+                        <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                        Tiempo real
+                      </Badge>
+                    )}
+                    {isTyping && (
+                      <Badge variant="secondary" className="gap-1 text-xs">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Escribiendo...
+                      </Badge>
+                    )}
                     <span className="inline-flex items-center gap-1">
                       <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
                       {formatRelativeTime(conversation.lastActivity)}
@@ -443,7 +527,7 @@ const ConversationDetailPage: React.FC<{ contactId: string }> = ({ contactId }) 
                 onChange={(event) => setComposerValue(event.target.value)}
                 onKeyDown={handleComposerKeyDown}
                 placeholder="Escribe una respuesta personalizada..."
-                maxLength={MAX_MANUAL_REPLY_LENGTH + 200}
+                maxLength={MAX_MANUAL_REPLY_LENGTH + 50}
                 className="min-h-[180px] resize-y rounded-2xl border-slate-200"
               />
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">

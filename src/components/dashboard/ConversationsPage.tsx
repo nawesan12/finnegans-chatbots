@@ -554,29 +554,23 @@ const ConversationsPage: React.FC = () => {
 
     try {
       const response = await authenticatedFetch(
-        `/api/contacts/${activeConversationId}/message`,
+        `/api/conversations/${activeConversationId}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message }),
+          body: JSON.stringify({ text: message, type: "text" }),
         },
       );
 
       const payload = (await response.json().catch(() => null)) as
-        | { success?: boolean; messageId?: string; error?: string }
+        | { message?: { id: string; content: string; createdAt: string }; error?: string }
         | null;
 
-      if (!response.ok || !payload?.success) {
+      if (!response.ok || !payload?.message) {
         throw new Error(payload?.error ?? "No se pudo enviar el mensaje.");
       }
 
-      const messageId =
-        payload.messageId ||
-        (typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? crypto.randomUUID()
-          : `temp-${Date.now()}`);
-
-      const timestamp = new Date().toISOString();
+      const newMessage = payload.message;
 
       setConversations((previous) =>
         previous.map((conversation) => {
@@ -586,17 +580,17 @@ const ConversationsPage: React.FC = () => {
 
           return {
             ...conversation,
-            lastActivity: timestamp,
-            lastMessage: message,
+            lastActivity: newMessage.createdAt,
+            lastMessage: newMessage.content,
             unreadCount: 0,
             messages: [
               ...conversation.messages,
               {
-                id: messageId,
+                id: newMessage.id,
                 direction: "out" as const,
                 type: "text",
-                text: message,
-                timestamp,
+                text: newMessage.content,
+                timestamp: newMessage.createdAt,
                 metadata: [],
               },
             ],
@@ -607,6 +601,9 @@ const ConversationsPage: React.FC = () => {
       setLastUpdatedAt(new Date());
       setComposerValue("");
       toast.success("Mensaje enviado correctamente");
+
+      // Refresh to get any automated responses
+      setTimeout(() => void fetchConversations("refresh"), 1000);
     } catch (error) {
       if (error instanceof UnauthorizedError) {
         return;
@@ -616,7 +613,7 @@ const ConversationsPage: React.FC = () => {
     } finally {
       setIsSendingMessage(false);
     }
-  }, [activeConversationId, composerValue, setConversations]);
+  }, [activeConversationId, composerValue, setConversations, fetchConversations]);
 
   const handleComposerKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLTextAreaElement>) => {

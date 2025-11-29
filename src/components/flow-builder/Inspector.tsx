@@ -875,24 +875,35 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
 
         {/* OPTIONS */}
         {optionsData && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>Options</Label>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  const next = [...(optionsData.options ?? []), "New Option"];
-                  updateData("options", next);
-                }}
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                Add option
-              </Button>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Mensaje</Label>
+              <Textarea
+                className="min-h-[80px]"
+                value={optionsData.text ?? ""}
+                onChange={(e) => updateData("text", e.target.value)}
+                placeholder="Ej: Elegí una opción..."
+              />
             </div>
 
             <div className="space-y-2">
-              {(optionsData.options ?? []).map((opt, i) => (
+              <div className="flex items-center justify-between">
+                <Label>Options</Label>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    const next = [...(optionsData.options ?? []), "New Option"];
+                    updateData("options", next);
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add option
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                {(optionsData.options ?? []).map((opt, i) => (
                 <div key={i} className="flex gap-2">
                   <Input
                     value={opt}
@@ -924,22 +935,23 @@ export function Inspector({ selectedNode, onChange }: InspectorProps) {
                 </div>
               ))}
 
-              {/* pegado masivo: una opción por línea */}
-              <Textarea
-                placeholder="Pegar varias opciones (una por línea)…"
-                className="min-h-[80px] text-xs"
-                onPaste={(e) => {
-                  const txt = e.clipboardData.getData("text");
-                  if (!txt?.includes("\n")) return;
-                  e.preventDefault();
-                  const lines = txt
-                    .split("\n")
-                    .map((s) => s.trim())
-                    .filter(Boolean);
-                  const next = [...(optionsData.options ?? []), ...lines];
-                  updateData("options", next);
-                }}
-              />
+                {/* pegado masivo: una opción por línea */}
+                <Textarea
+                  placeholder="Pegar varias opciones (una por línea)…"
+                  className="min-h-[80px] text-xs"
+                  onPaste={(e) => {
+                    const txt = e.clipboardData.getData("text");
+                    if (!txt?.includes("\n")) return;
+                    e.preventDefault();
+                    const lines = txt
+                      .split("\n")
+                      .map((s) => s.trim())
+                      .filter(Boolean);
+                    const next = [...(optionsData.options ?? []), ...lines];
+                    updateData("options", next);
+                  }}
+                />
+              </div>
             </div>
           </div>
         )}

@@ -950,6 +950,29 @@ const FlowBuilder = React.forwardRef<FlowBuilderHandle, FlowBuilderProps>(
               nodeId: n.id,
             });
           }
+          if (targetId === n.id) {
+            issues.push({
+              message: `${n.id}: goto apunta a sí mismo (loop infinito)`,
+              nodeId: n.id,
+            });
+          }
+          if (!targetId) {
+            issues.push({
+              message: `${n.id}: goto sin destino configurado`,
+              nodeId: n.id,
+            });
+          }
+        }
+
+        // Validate options node has text
+        if (isNodeOfType(n, "options")) {
+          const text = n.data?.text?.trim();
+          if (!text) {
+            issues.push({
+              message: `${n.id}: options debe tener un mensaje de texto`,
+              nodeId: n.id,
+            });
+          }
         }
       });
 

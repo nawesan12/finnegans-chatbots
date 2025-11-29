@@ -159,7 +159,7 @@ export const getStarterData = <T extends FlowNodeType>(
       templateLanguage: "",
       templateParameters: [],
     },
-    options: { options: ["Opcion 1", "Opcion 2"] },
+    options: { text: "Elegí una opción:", options: ["Opcion 1", "Opcion 2"] },
     delay: { seconds: 1 },
     condition: {
       expression: "context.input?.toLowerCase?.().includes('ok')",
