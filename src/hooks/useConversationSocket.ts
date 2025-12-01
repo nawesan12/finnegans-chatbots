@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
 
-interface Message {
+export interface Message {
   id: string;
   waMessageId?: string | null;
   direction: string;
@@ -15,12 +15,12 @@ interface Message {
   contactId: string;
 }
 
-interface MessageNewEvent {
+export interface MessageNewEvent {
   message: Message;
   contactId: string;
 }
 
-interface MessageStatusEvent {
+export interface MessageStatusEvent {
   messageId: string;
   waMessageId: string;
   status: string;

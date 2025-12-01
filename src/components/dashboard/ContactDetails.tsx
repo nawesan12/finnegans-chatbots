@@ -41,7 +41,7 @@ type ContactActivity = {
   channel: string | null;
   flowName: string | null;
   messagePreview: string | null;
-  metadata: { label: string; value: string }[];
+  metadata: { key: string; value: string }[];
 };
 
 type ActivityResponse = {
@@ -677,11 +677,11 @@ const ContactDetails = ({ contactId }: { contactId: string }) => {
                           ) : null}
                           {item.metadata.map((meta) => (
                             <Badge
-                              key={`${item.id}-${meta.label}-${meta.value}`}
+                              key={`${item.id}-${meta.key}-${meta.value}`}
                               variant="outline"
                               className="border-slate-200 bg-white font-normal text-slate-600"
                             >
-                              <span className="mr-1 font-medium text-slate-500">{meta.label}:</span>
+                              <span className="mr-1 font-medium text-slate-500">{meta.key}:</span>
                               {meta.value}
                             </Badge>
                           ))}

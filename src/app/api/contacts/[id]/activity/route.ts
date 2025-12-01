@@ -167,7 +167,7 @@ function normalizeDirection(value: string | null, status: string | null):
 }
 
 function extractMetadata(context: Prisma.JsonValue | null) {
-  const output: Array<{ label: string; value: string }> = [];
+  const output: Array<{ key: string; value: string }> = [];
   const record = toObject(context);
 
   if (!record) {
@@ -178,7 +178,7 @@ function extractMetadata(context: Prisma.JsonValue | null) {
     const raw = record[field.key];
     const value = sanitizeString(raw) ?? (typeof raw === "number" ? String(raw) : null);
     if (value) {
-      output.push({ label: field.label, value });
+      output.push({ key: field.label, value });
     }
   }
 

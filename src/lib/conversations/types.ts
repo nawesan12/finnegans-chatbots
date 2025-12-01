@@ -4,7 +4,7 @@ export interface ConversationMessage {
   type: string;
   text: string;
   timestamp: string;
-  metadata: string[];
+  metadata: Array<{ key: string; value: string }>;
 }
 
 export interface ConversationSummary {

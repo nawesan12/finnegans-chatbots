@@ -160,9 +160,9 @@ const ConversationTimeline: React.FC<ConversationTimelineProps> = ({
           {metadata.length > 0 ? (
             <ul className="mt-2 space-y-1 text-xs text-slate-500">
               {metadata.map((entry) => (
-                <li key={entry} className="flex items-center gap-2">
+                <li key={`${entry.key}-${entry.value}`} className="flex items-center gap-2">
                   <span className="inline-flex h-1.5 w-1.5 rounded-full bg-slate-400" />
-                  <span className="break-words text-left">{entry}</span>
+                  <span className="break-words text-left">{entry.key}: {entry.value}</span>
                 </li>
               ))}
             </ul>

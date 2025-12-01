@@ -38,8 +38,8 @@ import {
   formatRelativeTime,
 } from "@/lib/conversations/formatters";
 import { generateQuickReplies } from "@/lib/conversations/quick-replies";
-import type { ConversationSummary } from "@/lib/conversations/types";
-import { useConversationSocket } from "@/hooks/useConversationSocket";
+import type { ConversationMessage, ConversationSummary } from "@/lib/conversations/types";
+import { useConversationSocket, type Message, type MessageStatusEvent } from "@/hooks/useConversationSocket";
 
 const MAX_MANUAL_REPLY_LENGTH = 1000;
 
@@ -57,7 +57,7 @@ const ConversationDetailPage: React.FC<{ contactId: string }> = ({ contactId }) 
   const { isConnected: wsConnected } = useConversationSocket({
     contactId,
     enabled: true,
-    onMessageNew: useCallback((message: any) => {
+    onMessageNew: useCallback((message: Message) => {
       setConversation((prev) => {
         if (!prev) return prev;
 
@@ -84,12 +84,12 @@ const ConversationDetailPage: React.FC<{ contactId: string }> = ({ contactId }) 
         };
       });
     }, []),
-    onMessageStatus: useCallback((event: any) => {
-      setConversation((prev: any) => {
+    onMessageStatus: useCallback((event: MessageStatusEvent) => {
+      setConversation((prev: ConversationSummary | null) => {
         if (!prev) return prev;
 
         // Update message status
-        const updatedMessages = prev.messages.map((msg: any) => {
+        const updatedMessages = prev.messages.map((msg: ConversationMessage) => {
           if (msg.id === event.messageId) {
             return {
               ...msg,

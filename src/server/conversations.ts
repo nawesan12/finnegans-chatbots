@@ -50,32 +50,32 @@ function ensureTimestamp(value: unknown, fallback: Date): string {
   return fallback.toISOString();
 }
 
-function formatMetadata(payload: Record<string, unknown>): string[] {
-  const metadata: string[] = [];
+function formatMetadata(payload: Record<string, unknown>): Array<{ key: string; value: string }> {
+  const metadata: Array<{ key: string; value: string }> = [];
 
   if (typeof payload.interactiveType === "string") {
-    metadata.push(`Interacción: ${payload.interactiveType}`);
+    metadata.push({ key: "Interacción", value: payload.interactiveType });
   }
   if (typeof payload.interactiveTitle === "string") {
-    metadata.push(`Opción: ${payload.interactiveTitle}`);
+    metadata.push({ key: "Opción", value: payload.interactiveTitle });
   }
   if (typeof payload.interactiveId === "string") {
-    metadata.push(`ID: ${payload.interactiveId}`);
+    metadata.push({ key: "ID", value: payload.interactiveId });
   }
   if (payload.optionIndex !== undefined && payload.optionIndex !== null) {
-    metadata.push(`Índice seleccionado: ${payload.optionIndex}`);
+    metadata.push({ key: "Índice seleccionado", value: String(payload.optionIndex) });
   }
   if (typeof payload.mediaType === "string") {
-    metadata.push(`Contenido: ${payload.mediaType}`);
+    metadata.push({ key: "Contenido", value: payload.mediaType });
   }
   if (typeof payload.url === "string") {
-    metadata.push(payload.url);
+    metadata.push({ key: "URL", value: payload.url });
   }
   if (isRecord(payload.flow) && typeof payload.flow.name === "string") {
-    metadata.push(`Flujo: ${payload.flow.name}`);
+    metadata.push({ key: "Flujo", value: payload.flow.name });
   }
   if (isRecord(payload.template) && typeof payload.template.name === "string") {
-    metadata.push(`Plantilla: ${payload.template.name}`);
+    metadata.push({ key: "Plantilla", value: payload.template.name });
   }
 
   return metadata;
@@ -148,7 +148,7 @@ function extractHistoryMessages(
     const timestamp = ensureTimestamp(entry["timestamp"], fallbackDate);
 
     let text = "";
-    let metadata: string[] = [];
+    let metadata: Array<{ key: string; value: string }> = [];
 
     if (isRecord(payload)) {
       text = stringifyPayload(payload);
