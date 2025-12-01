@@ -815,7 +815,7 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
               where: { userId: user.id, status: "Active" },
               orderBy: { updatedAt: "desc" },
             });
-            const availableFlows = availableFlowsRaw.filter((candidate) =>
+            const availableFlows = availableFlowsRaw.filter((candidate: Flow) =>
               isWhatsappChannel(candidate.channel ?? null),
             );
 
@@ -905,11 +905,11 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
                       null,
                   }
                 : null,
-              image: msg.image ? (msg.image as Record<string, unknown>) : null,
-              video: msg.video ? (msg.video as Record<string, unknown>) : null,
-              audio: msg.audio ? (msg.audio as Record<string, unknown>) : null,
-              document: msg.document ? (msg.document as Record<string, unknown>) : null,
-              sticker: msg.sticker ? (msg.sticker as Record<string, unknown>) : null,
+              image: msg.image ? (msg.image as unknown as Record<string, unknown>) : null,
+              video: msg.video ? (msg.video as unknown as Record<string, unknown>) : null,
+              audio: msg.audio ? (msg.audio as unknown as Record<string, unknown>) : null,
+              document: msg.document ? (msg.document as unknown as Record<string, unknown>) : null,
+              sticker: msg.sticker ? (msg.sticker as unknown as Record<string, unknown>) : null,
             };
 
             if (!session) {
