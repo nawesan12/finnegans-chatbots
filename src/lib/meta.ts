@@ -905,11 +905,11 @@ export async function processWebhookEvent(data: MetaWebhookEvent) {
                       null,
                   }
                 : null,
-              image: msg.image ?? null,
-              video: msg.video ?? null,
-              audio: msg.audio ?? null,
-              document: msg.document ?? null,
-              sticker: msg.sticker ?? null,
+              image: msg.image ? (msg.image as Record<string, unknown>) : null,
+              video: msg.video ? (msg.video as Record<string, unknown>) : null,
+              audio: msg.audio ? (msg.audio as Record<string, unknown>) : null,
+              document: msg.document ? (msg.document as Record<string, unknown>) : null,
+              sticker: msg.sticker ? (msg.sticker as Record<string, unknown>) : null,
             };
 
             if (!session) {
