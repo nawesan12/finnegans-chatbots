@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+export class FlowSanitizationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FlowSanitizationError";
+  }
+}
+
 export const waTextLimit = 4096;
 
 export const BaseDataSchema = z.object({
@@ -53,7 +60,6 @@ export const MessageDataSchema = BaseDataSchema.extend({
 });
 
 export const OptionsDataSchema = BaseDataSchema.extend({
-  text: z.string().max(waTextLimit).optional(),
   options: z.array(z.string().min(1).max(30)).min(2).max(10),
 });
 
@@ -171,7 +177,7 @@ export type FlowDefinition = z.infer<typeof FlowDefinitionSchema>;
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const deepClone = <T,>(value: T): T => {
+const deepClone = <T>(value: T): T => {
   if (typeof globalThis.structuredClone === "function") {
     try {
       return globalThis.structuredClone(value);
@@ -196,10 +202,29 @@ const ensureCoordinate = (value: unknown): number => {
   return Number.isFinite(coerced) ? coerced : 0;
 };
 
+const parseFlowInput = (input: unknown): unknown => {
+  if (typeof input === "string") {
+    const trimmed = input.trim();
+    if (!trimmed) {
+      return {};
+    }
+
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      throw new FlowSanitizationError(
+        "Flow definition string must be valid JSON.",
+      );
+    }
+  }
+
+  return input ?? {};
+};
+
 export const sanitizeFlowDefinition = (
   input: unknown,
 ): FlowDefinition => {
-  const parsed = FlowDefinitionSchema.parse(input ?? {});
+  const parsed = FlowDefinitionSchema.parse(parseFlowInput(input));
   const nodes = parsed.nodes.map((node) => {
     const clone = deepClone(node);
     const position = isPlainObject(clone.position) ? clone.position : {};
